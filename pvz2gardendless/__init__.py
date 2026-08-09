@@ -248,12 +248,29 @@ class SkipTutorial(Toggle):
     display_name = "Skip Tutorial"
 
 
+class TrapPercentage(Range):
+    """
+    Percentage of the filler item pool (coins and gems) to replace with traps.
+
+    Lawn Mower Trap removes every lawn mower currently on the field, taking
+    away the last line of defence for the rest of that level. Traps received
+    outside a level are held and applied when the next level starts.
+
+    0 disables traps entirely.
+    """
+    display_name = "Trap Percentage"
+    range_start  = 0
+    range_end    = 100
+    default      = 5
+
+
 @dataclasses.dataclass
 class PvZ2Options(PerGameCommonOptions):
-    goal_type:       GoalType
-    worlds_required: WorldsRequired
-    skip_tutorial:   SkipTutorial
-    death_link:      DeathLink
+    goal_type:        GoalType
+    worlds_required:  WorldsRequired
+    skip_tutorial:    SkipTutorial
+    trap_percentage:  TrapPercentage
+    death_link:       DeathLink
 
 
 # ── Items ─────────────────────────────────────────────────────────────────────
@@ -435,7 +452,16 @@ _filler_base = _key_base + len(KEY_ITEMS)
 for i, name in enumerate(_filler_names):
     FILLER_ITEMS.append(PvZ2Item(name, ItemClassification.filler, _filler_base + i))
 
-ALL_ITEMS: List[PvZ2Item] = PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS
+# Trap items. Appended after the filler block so every existing item keeps the
+# ID it already had.
+LAWN_MOWER_TRAP = "Lawn Mower Trap"
+TRAP_ITEMS: List[PvZ2Item] = []
+_trap_names = [LAWN_MOWER_TRAP]
+_trap_base = _filler_base + len(FILLER_ITEMS)
+for i, name in enumerate(_trap_names):
+    TRAP_ITEMS.append(PvZ2Item(name, ItemClassification.trap, _trap_base + i))
+
+ALL_ITEMS: List[PvZ2Item] = PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS + TRAP_ITEMS
 ITEM_NAME_TO_ITEM: Dict[str, PvZ2Item] = {item.name: item for item in ALL_ITEMS}
 ITEM_NAME_TO_ID: Dict[str, int]        = {item.name: item.code for item in ALL_ITEMS}
 
@@ -1233,6 +1259,7 @@ class PvZ2GardendlessWorld(World):
     item_name_groups: Dict[str, set] = {
         "Plants":     {i.name for i in PLANT_ITEMS},
         "World Keys": {i.name for i in KEY_ITEMS},
+        "Traps":      {i.name for i in TRAP_ITEMS},
     }
 
     def generate_early(self) -> None:
@@ -1276,8 +1303,14 @@ class PvZ2GardendlessWorld(World):
                                         ItemClassification.useful):
                 pool.append(self.create_item(plant.name))
 
-        # Fill remaining with coins and gems
+        # Everything left over is filler, of which trap_percentage becomes
+        # traps. Traps only ever displace filler, never a plant or a key.
         remaining = pool_size - len(pool)
+        trap_count = remaining * self.options.trap_percentage.value // 100
+        for _ in range(trap_count):
+            pool.append(self.create_item(LAWN_MOWER_TRAP))
+        remaining -= trap_count
+
         filler_cycle = ["100 Coins", "500 Coins", "10 Gems",
                         "1000 Coins", "20 Gems", "50 Gems"]
         fi = 0

@@ -175,11 +175,17 @@ window.electron = electron;
     'UIInGame': function(v) { window._AP_UI = v; installUILoseHook(v); },
     'CoinCount': function(v) { window._AP_CoinCount = v; },
     'GemCount':  function(v) { window._AP_GemCount  = v; },
+    // Square.getLane(0..4) is how the Lawn Mower Trap reaches each lane's
+    // mower; LevelPlay owns the currentMowerLanes bookkeeping that has to be
+    // updated alongside removing one.
+    'Square':    function(v) { window._AP_Square    = v; },
+    'LevelPlay': function(v) { window._AP_LevelPlay = v; },
   };
 
   const _origRegister = System.register.bind(System);
   System.register = function(name, deps, declare) {
-    if (typeof name === 'string' && /(?:PlayerProperties|UI|CoinCount|GemCount)\.ts/.test(name)) {
+    if (typeof name === 'string' &&
+        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|levelController)\.ts/.test(name)) {
       const _origDeclare = declare;
       declare = function(_export, _context) {
         return _origDeclare(function(exportName, value) {
@@ -1515,6 +1521,15 @@ window.electron = electron;
       toast((isCoin ? '🪙 ' : '💎 ') + name, '#fbbf24');
       return;
     }
+    if(name === LAWN_MOWER_TRAP){
+      // Queue rather than fire-and-forget: traps replayed during the
+      // post-connect Sync (or received on the world map) would otherwise be
+      // wasted, since there are no mowers to remove outside a level.
+      st.pendingMowerTraps = (st.pendingMowerTraps||0) + 1;
+      svSt();
+      applyPendingTraps();
+      return;
+    }
     toast('📦 '+name,'#4af');
   }
 
@@ -1581,6 +1596,52 @@ window.electron = electron;
     send([{cmd:'Get', keys:[k.coin, k.gem]}]);
   }
 
+  // ── Traps ─────────────────────────────────────────────────────────────────
+  // Lawn Mower Trap: strips every mower currently on the field. Uses
+  // fade() + onMowerLose() rather than the mower's own launch(), because
+  // launch() sends the mower rolling and wipes out that lane's zombies --
+  // which in a losing position would rescue the player instead of punishing
+  // them. fade() just removes it, which is the intent.
+  const LAWN_MOWER_TRAP = 'Lawn Mower Trap';
+
+  function applyLawnMowerTrap(){
+    const Square = window._AP_Square;
+    // Square.getLane() dereferences Square.component, so bail out when no
+    // level is running rather than throwing.
+    if(!Square || typeof Square.getLane !== 'function' || !Square.component) return false;
+    const levelPlay = window._AP_LevelPlay;
+    let removed = 0;
+    for(let i = 0; i < 5; i++){
+      let lane;
+      try { lane = Square.getLane(i); } catch(e) { continue; }
+      const mower = lane && lane.mower;
+      if(!mower) continue;
+      try {
+        if(typeof mower.fade === 'function') mower.fade();
+        lane.mower = null;
+        if(levelPlay && levelPlay.component &&
+           typeof levelPlay.component.onMowerLose === 'function'){
+          levelPlay.component.onMowerLose(i);
+        }
+        removed++;
+      } catch(e) { /* leave this lane alone, try the rest */ }
+    }
+    return removed > 0;
+  }
+
+  function applyPendingTraps(){
+    let pending = st.pendingMowerTraps || 0;
+    if(pending <= 0) return;
+    // Every queued trap collapses into one sweep -- once the mowers are gone
+    // there is nothing left for the extras to take, so they are consumed
+    // rather than held for the next level.
+    if(applyLawnMowerTrap()){
+      st.pendingMowerTraps = 0;
+      svSt();
+      toast('🚜 Lawn Mower Trap — mowers lost!', '#f66');
+    }
+  }
+
   // ── Location polling (every 2s) ───────────────────────────────────────────
   function canAccessModernDay(){
     if(!st.receivedKeys || !st.receivedKeys.includes('Modern Day Key')) return false;
@@ -1605,6 +1666,9 @@ window.electron = electron;
       }
     }
     rebuildAPSave();
+    // Fires once a level is actually running, for traps banked while the
+    // player was on the world map or reconnecting.
+    applyPendingTraps();
   }
 
   function fireCheck(loc){
