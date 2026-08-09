@@ -2,8 +2,8 @@
 PvZ2 Gardendless — Archipelago World
 
 Each world (except Ancient Egypt) is unlocked by finding its unique Key item.
-Modern Day requires the Modern Day Key plus a configurable number of world
-completions (beat the final level) or world trophies (mid-world milestone).
+Modern Day unlocks once a configurable number of world goals are met:
+world keys, world completions (beat the final level), or world trophies.
 Victory = defeat the Modern Day Zomboss.
 """
 
@@ -208,7 +208,7 @@ SIDE_PATH_REGIONS = [
 
 class GoalType(Choice):
     """
-    Condition that must be met (along with the Modern Day Key) before Modern Day unlocks.
+    Condition that must be met before Modern Day unlocks.
 
     world_trophies: Earn N world trophies (the mid-world milestone check in each world).
       Note: Kongfu Temple has no world trophy in the game data and is always excluded,
@@ -439,7 +439,11 @@ for i, (name, cls) in enumerate(_plants):
         cls = ItemClassification.progression
     PLANT_ITEMS.append(PvZ2Item(name, cls, BASE_ID + i))
 
-# World Key items — one per keyed world
+# World Key items — one per keyed world.
+# Modern Day no longer uses a key (it unlocks purely on the world-goal
+# requirement), but its entry is kept so every later item ID stays put.
+# It is filtered out of the pool in create_items() instead.
+MODERN_DAY_KEY = "Modern Day Key"
 KEY_ITEMS: List[PvZ2Item] = []
 _key_base = BASE_ID + len(PLANT_ITEMS)
 for i, world in enumerate(KEYED_WORLDS):
@@ -1242,8 +1246,8 @@ class PvZ2GardendlessWorld(World):
     """
     PvZ2 Gardendless — A web-based reimagining of Plants vs. Zombies 2.
     Each world requires its unique Key item to access. Modern Day unlocks
-    after collecting the Modern Day Key AND defeating a configurable number
-    of Zomboss fights. Victory = defeat the Modern Day Zomboss.
+    once a configurable number of world goals are met. Victory = defeat the
+    Modern Day Zomboss.
     """
     game         = GAME_NAME
     settings_key = "pvz2gardendless"
@@ -1293,8 +1297,12 @@ class PvZ2GardendlessWorld(World):
         # and leave this world short by exactly that many items.
         pool: List[Item] = []
 
-        # One unique key per keyed world (12 keys, all progression)
+        # One unique key per keyed world, minus Modern Day -- that world is
+        # gated on the world-goal count alone, so shipping a key nobody needs
+        # would just waste a location.
         for key_item in KEY_ITEMS:
+            if key_item.name == MODERN_DAY_KEY:
+                continue
             pool.append(self.create_item(key_item.name))
 
         # All progression + useful plants
@@ -1365,7 +1373,8 @@ class PvZ2GardendlessWorld(World):
                 lambda state, k=key_name: state.has(k, self.player)
             )
 
-        # Modern Day — requires its key AND N world goals.
+        # Modern Day — unlocked purely by meeting the world-goal requirement;
+        # there is no Modern Day Key (see MODERN_DAY_KEY).
         # This rule calls state.can_reach() on locations in OTHER regions
         # (e.g. Pirate Seas' trophy) from an entrance rooted at Tutorial. AP's
         # sweep doesn't know "Enter Modern Day" structurally depends on those
@@ -1379,11 +1388,8 @@ class PvZ2GardendlessWorld(World):
         # has no trophy), so the option's nominal 1-11 range can request more
         # goals than are reachable, making Modern Day permanently locked.
         req    = min(self.options.worlds_required.value, len(goal_locs))
-        md_key = "Modern Day Key"
 
-        def modern_day_rule(state, key=md_key, n=req, locs=goal_locs):
-            if not state.has(key, self.player):
-                return False
+        def modern_day_rule(state, n=req, locs=goal_locs):
             completed = sum(
                 1 for loc_name in locs
                 if state.can_reach(loc_name, "Location", self.player)

@@ -1273,20 +1273,21 @@ window.electron = electron;
     }
 
     // 4. Unlock worlds for received keys.
-    // Modern Day additionally requires the worlds-required goal condition --
-    // without this it unlocks (and becomes enterable/playable) the instant
-    // the key is received, even though fireCheck() won't send its location
-    // checks until canAccessModernDay() is also true, so progress made
-    // there before qualifying would silently not count.
     if(!cp.worldProps) cp.worldProps = {};
+    const unlockWorld = (wid) => {
+      if(!cp.worldProps[wid]) cp.worldProps[wid] = {};
+      cp.worldProps[wid].unlocked = true;
+    };
     (st.receivedKeys||[]).forEach(keyName => {
       const worldIds = WORLD_KEY_MAP[keyName];
-      if(worldIds) worldIds.forEach(wid => {
-        if(wid === W.modern && !canAccessModernDay()) return;
-        if(!cp.worldProps[wid]) cp.worldProps[wid] = {};
-        cp.worldProps[wid].unlocked = true;
-      });
+      // Modern Day is never key-driven; it is handled below. Older seeds can
+      // still deliver a Modern Day Key, and honouring it here would open the
+      // world before the goal is met -- fireCheck() would then withhold its
+      // location checks, so any progress made there would silently not count.
+      if(worldIds) worldIds.forEach(wid => { if(wid !== W.modern) unlockWorld(wid); });
     });
+    // Modern Day unlocks on the world-goal requirement alone.
+    if(canAccessModernDay()) unlockWorld(W.modern);
 
     // 5. Set forceLevel based on tutorial progress
     const tutSteps = ['tutorial1','tutorial2','tutorial3','tutorial4'];
@@ -1477,7 +1478,12 @@ window.electron = electron;
     const now = Date.now();
     if(now - lastDeathLinkSentAt < 3000) return; // debounce: loseDarken can
     lastDeathLinkSentAt = now;                   // fire more than once per loss
-    send([{cmd:'Bounced', games:[GAME_NAME], tags:['DeathLink'],
+    // 'Bounce' is the client->server command; 'Bounced' is what the server
+    // sends back out (see the onPkt case). Sending 'Bounced' here is not a
+    // command the server recognises, so nothing gets broadcast.
+    // No 'games' filter: DeathLink should reach every slot carrying the tag,
+    // not just other players of this game.
+    send([{cmd:'Bounce', tags:['DeathLink'],
            data:{time: now/1000, source: cfg.slot, cause: cfg.slot+' lost a level'}}]);
   };
 
@@ -1643,10 +1649,13 @@ window.electron = electron;
   }
 
   // ── Location polling (every 2s) ───────────────────────────────────────────
+  // Modern Day has no key -- it unlocks purely on the world-goal count.
+  // (Older seeds may still hand out a "Modern Day Key" item; it is simply
+  // ignored rather than being required, so those seeds stay completable.)
   function canAccessModernDay(){
-    if(!st.receivedKeys || !st.receivedKeys.includes('Modern Day Key')) return false;
     const goalLocs  = st.goalLocs || [];
     const worldsReq = st.worldsReq || 7;
+    if(!goalLocs.length) return false; // slot_data not in yet; don't open early
     const completed = goalLocs.filter(l=>st.checked.includes(l)).length;
     return completed >= worldsReq;
   }
