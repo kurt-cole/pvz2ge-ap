@@ -9,7 +9,7 @@ Victory = defeat the Modern Day Zomboss.
 
 from worlds.AutoWorld import World, WebWorld
 from BaseClasses import Region, Location, Item, ItemClassification, Tutorial
-from Options import Choice, Range, Toggle, PerGameCommonOptions
+from Options import Choice, Range, Toggle, DeathLink, PerGameCommonOptions
 from settings import get_settings
 import settings
 from typing import Dict, List, Any
@@ -104,7 +104,12 @@ WORLD_TROPHY_LOCS = [
 ]  # 10 total (Kongfu excluded — no trophy in game data)
 
 # World Completion locations — the final regular level of each world.
-# Modern Day and Aerial Fortress are excluded.
+# Modern Day and Aerial Fortress are excluded. Neon Mixtape Tour has no
+# separate final-level location -- it's shorter than the other worlds and
+# its trophy check (eighties32) is also its last level, per the client's
+# level mapping (build_pvzge_ap.py's LOC_LEVELS), so it reuses the same
+# location name as WORLD_TROPHY_LOCS instead of a distinct "eighties32" name
+# that was never added to _make_locs().
 WORLD_COMPLETION_LOCS = [
     "egypt35",    # Ancient Egypt
     "pirate35",   # Pirate Seas
@@ -115,9 +120,73 @@ WORLD_COMPLETION_LOCS = [
     "iceage40",   # Frostbite Caves
     "lostcity42", # Lost City
     "kongfu48",   # Kongfu Temple
-    "eighties32", # Neon Mixtape Tour
+    "Worldtrophy Eighties Unlock", # Neon Mixtape Tour (eighties32; also its trophy)
     "dino42",     # Jurassic Marsh
 ]  # 11 total
+
+# World Key locations — the "World Key - X" check present in every world.
+# Not necessarily on the same stage per world, and not forced to contain
+# that world's own key item (fill is unconstrained). Modern Day and Aerial
+# Fortress are excluded (goal world / post-unlock), same set as WORLD_COMPLETION_LOCS.
+WORLD_KEY_LOCS = [
+    "World Key - Ancient Egypt",
+    "World Key - Pirate Seas",
+    "World Key - Wild West",
+    "World Key - Far Future",
+    "World Key - Dark Ages",
+    "World Key - Big Wave Beach",
+    "World Key - Frostbite Caves",
+    "World Key - Lost City",
+    "World Key - Kongfu Temple",
+    "World Key - Neon Mixtape Tour",
+    "World Key - Jurassic Marsh",
+]  # 11 total
+
+def goal_locations_for(goal_type: int) -> List[str]:
+    if goal_type == GoalType.option_world_trophies:
+        locs = WORLD_TROPHY_LOCS
+    elif goal_type == GoalType.option_world_keys:
+        locs = WORLD_KEY_LOCS
+    else:
+        locs = WORLD_COMPLETION_LOCS
+    # Drop names with no matching location. create_regions() looks each of
+    # these up in LOC_NAME_TO_DATA and calls state.can_reach() on it, so a
+    # stale name would raise KeyError during generation instead of just
+    # shrinking the goal pool.
+    return [n for n in locs if n in LOC_NAME_TO_ID]
+
+# Sequential sphere-1 gating for Ancient Egypt (see checkpoint split in
+# create_regions): each checkpoint requires at least one of these sun
+# producers and one of these cheap attackers to be held, so generation logic
+# doesn't treat the whole 35-level world as reachable with zero items.
+# Sourced from the game's own PlantProperties data (Family + SunCost).
+# Only genuine passive sun producers. The game's Family=="Sun" tag is wider
+# than that and would let the gate pass on a plant that generates no usable
+# sun: Magnifying Grass consumes sun to fire, Sun Bean / Moon Bean / Toadstool
+# only convert damage or eaten zombies into sun, Plantern just reveals fog,
+# and Gold Bloom is a 0-cost conveyor-only plant.
+SUN_PRODUCER_PLANTS = [
+    "Sunflower", "Sun-Shroom", "Twin Sunflower", "Primal Sunflower",
+    "Solar Tomato", "Solar Sage",
+]
+
+# SunCost <= 150 among damage-dealing Family types. Excludes a handful of
+# 0-cost/utility plants the game misclassifies as attackers (Iceberg
+# Lettuce, Hot Potato, Sea-shroom, Puff-shroom, Garlic, Grimrose) and
+# Tangle Kelp, which is water-only and unusable on Ancient Egypt's terrain.
+CHEAP_ATTACKER_PLANTS = [
+    "E.M. Peach", "Potato Mine", "Scaredy-shroom", "Celery Stalker",
+    "Chili Bean", "Escape Root", "Explode-O-Nut", "Moonflower",
+    "Primal Potato Mine", "Shadow-shroom", "Shrinking Violet", "Squash",
+    "Ghost Pepper", "Lava Guava", "Nightshade", "Cabbage-pult",
+    "Intensive Carrot", "Kernel-pult", "Peashooter", "Spikeweed",
+    "Vamporcini", "Fume-Shroom", "Gloom Vine", "Guacodile", "Hypno-shroom",
+    "Jalapeno", "Lightning Reed", "Pea Pod", "Pea Vine", "Split Pea",
+    "Blooming Heart", "Bonk Choy", "Cherry Bomb", "Chomper", "Dusk Lobber",
+    "Electric Blueberry", "Electric Currant", "Grapeshot", "Iceweed",
+    "Parsnip", "Phat Beet", "Red Stinger", "Skyshooter", "Snap Dragon",
+    "Snow Pea", "Spore-shroom", "Star Fruit",
+]
 
 SIDE_PATH_REGIONS = [
     "Aloe Sidepath", "Appease Sidepath", "Atombomb Sidepath", "Bank Sidepath",
@@ -147,18 +216,22 @@ class GoalType(Choice):
 
     world_completions: Beat the final regular level of N worlds (e.g. egypt35).
       All 11 non-Modern-Day worlds are eligible; maximum is 11.
+
+    world_keys: Check the "World Key - X" location in N worlds. All 11
+      non-Modern-Day worlds are eligible; maximum is 11.
     """
     display_name = "Modern Day Goal Type"
     option_world_trophies    = 0
     option_world_completions = 1
-    default = 0
+    option_world_keys        = 2
+    default = 2
 
 
 class WorldsRequired(Range):
     """
     How many worlds must satisfy the goal condition before Modern Day unlocks.
     For world_trophies the effective cap is 10 (Kongfu Temple excluded).
-    For world_completions the cap is 11.
+    For world_completions and world_keys the cap is 11.
     """
     display_name = "Worlds Required for Modern Day"
     range_start  = 1
@@ -180,6 +253,7 @@ class PvZ2Options(PerGameCommonOptions):
     goal_type:       GoalType
     worlds_required: WorldsRequired
     skip_tutorial:   SkipTutorial
+    death_link:      DeathLink
 
 
 # ── Items ─────────────────────────────────────────────────────────────────────
@@ -276,7 +350,7 @@ _plants = [
     ("Fire Peashooter",     ItemClassification.useful),
     ("Stunion",             ItemClassification.useful),
     ("Rotobaga",            ItemClassification.useful),
-    ("Jack O'Lantern",      ItemClassification.useful),
+    ("Jack O' Lantern",     ItemClassification.useful),
     ("Sweet Potato",        ItemClassification.useful),
     ("Hot Date",            ItemClassification.useful),
     ("Gatling Pea",         ItemClassification.useful),
@@ -320,6 +394,7 @@ _plants = [
     ("Explode-O-Nut",       ItemClassification.useful),
     ("Shrinking Violet",    ItemClassification.useful),
     ("Moonflower",          ItemClassification.useful),
+    ("Dragon Fruit",        ItemClassification.useful),
     ("Nightshade",          ItemClassification.useful),
     ("Shadow-shroom",       ItemClassification.useful),
     ("Dusk Lobber",         ItemClassification.useful),
@@ -333,7 +408,18 @@ _plants = [
     ("Cran-Jelly",          ItemClassification.useful),
 ]
 
+# Plants referenced by an access rule MUST be progression. AP only tracks
+# advancement items in CollectionState.prog_items, so state.has_any() is
+# always False for a "useful" item -- an access rule naming only useful items
+# can never be satisfied, and fill responds by treating everything behind it
+# as unreachable (verified in a spoiler log: zero progression items placed in
+# any gated Ancient Egypt region, and no sun producer anywhere in sphere 1).
+# Promoting them here keeps the item IDs below unchanged.
+_GATING_PLANTS = set(SUN_PRODUCER_PLANTS) | set(CHEAP_ATTACKER_PLANTS)
+
 for i, (name, cls) in enumerate(_plants):
+    if name in _GATING_PLANTS:
+        cls = ItemClassification.progression
     PLANT_ITEMS.append(PvZ2Item(name, cls, BASE_ID + i))
 
 # World Key items — one per keyed world
@@ -390,40 +476,40 @@ def _make_locs() -> List[PvZ2LocationData]:
     add("Note Egypt Unlock", "Ancient Egypt")
     add("World Key - Ancient Egypt", "Ancient Egypt")
     add("Gravebuster Unlock", "Ancient Egypt")
-    add("egypt10", "Ancient Egypt")
-    add("Branch Unlock Egypt 11", "Ancient Egypt")
-    add("Dangerroom Egypt Unlock", "Ancient Egypt")
-    add("Bonkchoy Unlock", "Ancient Egypt")
-    add("egypt14", "Ancient Egypt")
-    add("Branch Unlock Egypt 15", "Ancient Egypt")
-    add("egypt16", "Ancient Egypt")
-    add("Upgrade Pf Slots Lvl1 Unlock", "Ancient Egypt")
-    add("egypt18", "Ancient Egypt")
-    add("Repeater Unlock", "Ancient Egypt")
-    add("egypt20", "Ancient Egypt")
-    add("egypt20_1", "Ancient Egypt")
-    add("Upgrade Starting Sun Lvl1 Unlock", "Ancient Egypt")
-    add("egypt21_1", "Ancient Egypt")
-    add("Branch Unlock Egypt 22", "Ancient Egypt")
-    add("egypt22_1", "Ancient Egypt")
-    add("Dangerroom Egypt Minigame Unlock", "Ancient Egypt")
-    add("Twinsunflower Unlock", "Ancient Egypt")
-    add("egypt24_1", "Ancient Egypt")
-    add("Worldtrophy Egypt Unlock", "Ancient Egypt")
-    add("egypt26", "Ancient Egypt")
-    add("Branch Unlock Egypt 27", "Ancient Egypt")
-    add("egypt28", "Ancient Egypt")
-    add("egypt29", "Ancient Egypt")
-    add("Branch Unlock Egypt 30", "Ancient Egypt")
-    add("Dangerroom Egypt2 Unlock", "Ancient Egypt")
-    add("egypt32", "Ancient Egypt")
-    add("egypt33", "Ancient Egypt")
-    add("Branch Unlock Egypt 34", "Ancient Egypt")
-    add("egypt35", "Ancient Egypt")
-    add("egypt_dangerroom", "Ancient Egypt")
-    add("egypt_dangerroom2", "Ancient Egypt")
-    add("egypt_dangerroom_minigame", "Ancient Egypt")
-    add("random_egypt", "Ancient Egypt")
+    add("egypt10", "Ancient Egypt Mid1")
+    add("Branch Unlock Egypt 11", "Ancient Egypt Mid1")
+    add("Dangerroom Egypt Unlock", "Ancient Egypt Mid1")
+    add("Bonkchoy Unlock", "Ancient Egypt Mid1")
+    add("egypt14", "Ancient Egypt Mid1")
+    add("Branch Unlock Egypt 15", "Ancient Egypt Mid1")
+    add("egypt16", "Ancient Egypt Mid1")
+    add("Upgrade Pf Slots Lvl1 Unlock", "Ancient Egypt Mid1")
+    add("egypt18", "Ancient Egypt Mid1")
+    add("Repeater Unlock", "Ancient Egypt Mid1")
+    add("egypt20", "Ancient Egypt Mid2")
+    add("egypt20_1", "Ancient Egypt Mid2")
+    add("Upgrade Starting Sun Lvl1 Unlock", "Ancient Egypt Mid2")
+    add("egypt21_1", "Ancient Egypt Mid2")
+    add("Branch Unlock Egypt 22", "Ancient Egypt Mid2")
+    add("egypt22_1", "Ancient Egypt Mid2")
+    add("Dangerroom Egypt Minigame Unlock", "Ancient Egypt Mid2")
+    add("Twinsunflower Unlock", "Ancient Egypt Mid2")
+    add("egypt24_1", "Ancient Egypt Mid2")
+    add("Worldtrophy Egypt Unlock", "Ancient Egypt Mid2")
+    add("egypt26", "Ancient Egypt Mid2")
+    add("Branch Unlock Egypt 27", "Ancient Egypt Mid2")
+    add("egypt28", "Ancient Egypt Mid2")
+    add("egypt29", "Ancient Egypt Mid2")
+    add("Branch Unlock Egypt 30", "Ancient Egypt Late")
+    add("Dangerroom Egypt2 Unlock", "Ancient Egypt Late")
+    add("egypt32", "Ancient Egypt Late")
+    add("egypt33", "Ancient Egypt Late")
+    add("Branch Unlock Egypt 34", "Ancient Egypt Late")
+    add("egypt35", "Ancient Egypt Late")
+    add("egypt_dangerroom", "Ancient Egypt Late")
+    add("egypt_dangerroom2", "Ancient Egypt Late")
+    add("egypt_dangerroom_minigame", "Ancient Egypt Late")
+    add("random_egypt", "Ancient Egypt Late")
 
     # ── Pirate Seas ──
     add("random_zomboss_pirate", "Pirate Seas", victory=True)
@@ -1149,37 +1235,61 @@ class PvZ2GardendlessWorld(World):
         "World Keys": {i.name for i in KEY_ITEMS},
     }
 
+    def generate_early(self) -> None:
+        # The base game normally grants Peashooter/Sunflower/etc. via its own
+        # BASEUNLOCKLIST, but the AP client's plantProps guard blocks any
+        # AP-managed plant until it's actually been received as an item --
+        # so without a guaranteed starting plant, a player can be left with
+        # zero usable plants until the multiworld happens to send one.
+        starter = self.random.choice(CHEAP_ATTACKER_PLANTS)
+        self.multiworld.push_precollected(self.create_item(starter))
+
     def create_item(self, name: str) -> Item:
         data = ITEM_NAME_TO_ITEM.get(name)
         if data:
             return Item(name, data.classification, data.code, self.player)
         return Item(name, ItemClassification.filler, None, self.player)
 
+    def get_filler_item_name(self) -> str:
+        # Backfills pool slots emptied by mechanisms outside create_items()
+        # (e.g. start_inventory_from_pool) -- without this, AP has nothing to
+        # call to replace a removed item, leaving that pool slot permanently
+        # short and causing "more locations than items" fill failures.
+        return self.random.choice(FILLER_ITEMS).name
+
     def create_items(self) -> None:
         pool_size = len(ALL_LOCATIONS)
 
-        # One unique key per keyed world (11 keys, all progression)
+        # Build into a local list, NOT straight into multiworld.itempool --
+        # that pool is shared by every player, so measuring it to size the
+        # filler batch would subtract other players' items from our budget
+        # and leave this world short by exactly that many items.
+        pool: List[Item] = []
+
+        # One unique key per keyed world (12 keys, all progression)
         for key_item in KEY_ITEMS:
-            self.multiworld.itempool.append(self.create_item(key_item.name))
+            pool.append(self.create_item(key_item.name))
 
         # All progression + useful plants
         for plant in PLANT_ITEMS:
             if plant.classification in (ItemClassification.progression,
                                         ItemClassification.useful):
-                self.multiworld.itempool.append(self.create_item(plant.name))
+                pool.append(self.create_item(plant.name))
 
         # Fill remaining with coins and gems
-        remaining = pool_size - len(self.multiworld.itempool)
+        remaining = pool_size - len(pool)
         filler_cycle = ["100 Coins", "500 Coins", "10 Gems",
                         "1000 Coins", "20 Gems", "50 Gems"]
         fi = 0
         while remaining > 0:
             n = filler_cycle[fi % len(filler_cycle)]
-            self.multiworld.itempool.append(
+            pool.append(
                 Item(n, ItemClassification.filler,
                      ITEM_NAME_TO_ID.get(n), self.player))
             fi += 1
             remaining -= 1
+
+        self.multiworld.itempool += pool
 
     def create_regions(self) -> None:
         menu     = Region("Menu",     self.player, self.multiworld)
@@ -1196,6 +1306,21 @@ class PvZ2GardendlessWorld(World):
         # Ancient Egypt — always accessible from Tutorial
         tutorial.connect(regions["Ancient Egypt"])
 
+        # Ancient Egypt is split into sequential checkpoints (roughly every
+        # 10 levels) so generation logic doesn't treat the whole 35-level
+        # world as flatly reachable with zero items. Each checkpoint requires
+        # holding at least one sun-producing plant and one cheap attacking
+        # plant, mirroring what's actually needed to survive further in.
+        def has_sun_and_attacker(state):
+            return (state.has_any(SUN_PRODUCER_PLANTS, self.player) and
+                    state.has_any(CHEAP_ATTACKER_PLANTS, self.player))
+
+        prev_egypt_region = regions["Ancient Egypt"]
+        for checkpoint_name in ("Ancient Egypt Mid1", "Ancient Egypt Mid2", "Ancient Egypt Late"):
+            prev_egypt_region.connect(
+                regions[checkpoint_name], f"Enter {checkpoint_name}", has_sun_and_attacker)
+            prev_egypt_region = regions[checkpoint_name]
+
         # Keyed main worlds — accessible from Tutorial once key is held
         for world in KEYED_WORLDS:
             if world == "Modern Day":
@@ -1207,11 +1332,20 @@ class PvZ2GardendlessWorld(World):
                 lambda state, k=key_name: state.has(k, self.player)
             )
 
-        # Modern Day — requires its key AND N world goals
-        req       = self.options.worlds_required.value
-        goal_locs = (WORLD_TROPHY_LOCS
-                     if self.options.goal_type == GoalType.option_world_trophies
-                     else WORLD_COMPLETION_LOCS)
+        # Modern Day — requires its key AND N world goals.
+        # This rule calls state.can_reach() on locations in OTHER regions
+        # (e.g. Pirate Seas' trophy) from an entrance rooted at Tutorial. AP's
+        # sweep doesn't know "Enter Modern Day" structurally depends on those
+        # regions, so each dependency must be registered via
+        # register_indirect_condition -- otherwise the sweep can evaluate
+        # this rule before a dependency region has been marked reachable in
+        # the same pass (queue order for retried entrances is not guaranteed)
+        # and incorrectly read it as still locked.
+        goal_locs = goal_locations_for(self.options.goal_type.value)
+        # Clamp: world_trophies has only 10 eligible locations (Kongfu Temple
+        # has no trophy), so the option's nominal 1-11 range can request more
+        # goals than are reachable, making Modern Day permanently locked.
+        req    = min(self.options.worlds_required.value, len(goal_locs))
         md_key = "Modern Day Key"
 
         def modern_day_rule(state, key=md_key, n=req, locs=goal_locs):
@@ -1223,7 +1357,11 @@ class PvZ2GardendlessWorld(World):
             )
             return completed >= n
 
-        tutorial.connect(regions["Modern Day"], "Enter Modern Day", modern_day_rule)
+        modern_day_entrance = tutorial.connect(
+            regions["Modern Day"], "Enter Modern Day", modern_day_rule)
+        for loc_name in goal_locs:
+            dep_region = regions[LOC_NAME_TO_DATA[loc_name].region]
+            self.multiworld.register_indirect_condition(dep_region, modern_day_entrance)
 
         # Side paths — always accessible from Tutorial
         for sp in SIDE_PATH_REGIONS:
@@ -1269,14 +1407,16 @@ class PvZ2GardendlessWorld(World):
                 loc.access_rule = lambda state: state.has("Perfume-shroom", self.player)
 
     def fill_slot_data(self) -> Dict[str, Any]:
-        goal_locs = (WORLD_TROPHY_LOCS
-                     if self.options.goal_type == GoalType.option_world_trophies
-                     else WORLD_COMPLETION_LOCS)
+        goal_locs = goal_locations_for(self.options.goal_type.value)
+        # Must match the clamp in create_regions()'s modern_day_rule, or the
+        # client's canAccessModernDay() enforces a stricter (unreachable)
+        # threshold than the generation-time access rule actually requires.
+        req = min(self.options.worlds_required.value, len(goal_locs))
         return {
-            "death_link":      False,
+            "death_link":      bool(self.options.death_link),
             "game_version":    "0.8.x",
             "goal_type":       self.options.goal_type.current_key,
-            "worlds_required": self.options.worlds_required.value,
+            "worlds_required": req,
             "goal_locations":  goal_locs,
             "victory_locations": VICTORY_LOC_NAMES,
             "skip_tutorial":     bool(self.options.skip_tutorial),

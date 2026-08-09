@@ -144,20 +144,49 @@ window.electron = electron;
     app._ap_hooked = true;
   }
 
+  // DeathLink outgoing hook: the UI class's loseDarken() is the game's single
+  // entry point for ending a level as a loss (screen darken + lose music +
+  // gameLost flag), called from every death cause in the game (brain eaten,
+  // ship destroyed, TNT trigger, etc.) -- so hooking it here catches all of
+  // them without needing to special-case each cause site.
+  function installUILoseHook(UI) {
+    if (!UI || UI._ap_hooked_ui || !UI.prototype || !UI.prototype.loseDarken) return;
+    const _origLoseDarken = UI.prototype.loseDarken;
+    UI.prototype.loseDarken = function() {
+      if (window._AP_onGameLose) window._AP_onGameLose();
+      return _origLoseDarken.apply(this, arguments);
+    };
+    UI._ap_hooked_ui = true;
+  }
+
+  // Module export name -> what to do with the captured value. Note the
+  // exported symbol is not always the filename: UI.ts exports 'UIInGame'.
+  // CoinCount/GemCount are captured so currency can be granted through their
+  // addCoinCount/addGemCount methods rather than by writing currentPlayer
+  // directly -- those components snapshot currentPlayer.coin in start() and
+  // write their own cached value back on every change, so a direct write
+  // behind a live component's back gets stomped the next time it updates.
+  const _AP_CAPTURES = {
+    'AllPlayerProperties': function(v) {
+      window._AP_AllPlayerProperties = v;
+      // Install hooks immediately so BASEUNLOCKLIST calls are intercepted
+      installAPHooks(v);
+    },
+    'UIInGame': function(v) { window._AP_UI = v; installUILoseHook(v); },
+    'CoinCount': function(v) { window._AP_CoinCount = v; },
+    'GemCount':  function(v) { window._AP_GemCount  = v; },
+  };
+
   const _origRegister = System.register.bind(System);
   System.register = function(name, deps, declare) {
-    if (typeof name === 'string' && name.includes('PlayerProperties.ts')) {
+    if (typeof name === 'string' && /(?:PlayerProperties|UI|CoinCount|GemCount)\.ts/.test(name)) {
       const _origDeclare = declare;
       declare = function(_export, _context) {
-        const result = _origDeclare(function(exportName, value) {
-          if (exportName === 'AllPlayerProperties') {
-            window._AP_AllPlayerProperties = value;
-            // Install hooks immediately so BASEUNLOCKLIST calls are intercepted
-            installAPHooks(value);
-          }
+        return _origDeclare(function(exportName, value) {
+          const capture = _AP_CAPTURES[exportName];
+          if (capture) capture(value);
           return _export(exportName, value);
         }, _context);
-        return result;
       };
     }
     return _origRegister(name, deps, declare);
@@ -186,12 +215,14 @@ window.electron = electron;
   // Plant enum IDs (from PlantEnum in game source)
   const P = {
     Peashooter:0, Sunflower:1, Wallnut:2, PotatoMine:3, CabbagePult:4, Bloomerang:5,
-    IcebergLettuce:6, BonkChoy:7, Repeater:8, GraveBuster:12, Pumpkin:13, PeaVine:14,
+    IcebergLettuce:6, BonkChoy:7, Repeater:8, ScaredyShroom:10, FumeShroom:11,
+    GraveBuster:12, Pumpkin:13, PeaVine:14,
     FirePeashooter:16, ThreePeater:17, PrimalPea:18, Rotobaga:19, HomingThistle:20,
     StarFruit:21, ShootingStarfruit:22, LilyPad:23, SunShroom:24, TwinSunflower:25,
     Dragonbruit:26, Moonflower:27, SnowPea:28, LightningReed:29, KernelPult:30,
     MeteorFlower:31, SpringBean:32, UmbrellaLeaf:33, MelonPult:34, WinterMelon:35,
-    Blover:36, Spikeweed:37, Spikerock:38, Chomper:39, PrimalWallnut:41, Buttercup:42,
+    Blover:36, Spikeweed:37, Spikerock:38, Chomper:39, GlacierShroom:40,
+    PrimalWallnut:41, Buttercup:42,
     BananaLauncher:43, MissileToe:44, CherryBomb:45, DoomShroom:46, CranJelly:47,
     Torchwood:49, Jalapeno:50, PuffShroom:51, GloomVine:52, Vamporcini:53,
     PrimalPotatoMine:54, Cactus:55, PowerLily:56, CoconutCannon:57, PeaPod:58,
@@ -200,8 +231,8 @@ window.electron = electron;
     MagnifyingGrass:69, CeleryStalker:70, Sapfling:71, Parsnip:72, ExplodeONut:73,
     Grapeshot:74, Plantern:75, HeavenlyPeach:76, JackOLantern:77, Dandelion:78,
     ChardGuard:79, HypnoShroom:80, ElectricCurrant:81, EscapeRoot:82, Imitater:83,
-    ShadowShroom:84, MagnetShroom:85, EMPeach:87, Citron:88, LaserBean:89,
-    SolarTomato:90, TileTurnip:97, AppleMortar:106, RedStinger:107, Skyshooter:108,
+    ShadowShroom:84, MagnetShroom:85, Turnip:86, EMPeach:87, Citron:88, LaserBean:89,
+    SolarTomato:90, InfiNut:96, TileTurnip:97, AppleMortar:106, RedStinger:107, Skyshooter:108,
     SunBean:109, Peanut:110, TangleKelp:114, BowlingBulb:115, Guacodile:120,
     GhostPepper:127, SweetPotato:128, PepperPult:129, HotPotato:130, Stunion:131,
     GoldLeaf:132, AKEE:133, Endurian:134, Toadstool:135, LavaGuava:136, PhatBeet:137,
@@ -219,14 +250,16 @@ window.electron = electron;
   const ID_TO_CN = {
     0:'peashooter', 1:'sunflower', 2:'wallnut', 3:'potatomine',
     4:'cabbagepult', 5:'bloomerang', 6:'iceburg', 7:'bonkchoy',
-    8:'repeater', 12:'gravebuster', 13:'pumpkin', 14:'pvine',
+    8:'repeater', 10:'scaredyshroom', 11:'fumeshroom',
+    12:'gravebuster', 13:'pumpkin', 14:'pvine',
     16:'firepeashooter', 17:'threepeater', 18:'primalpeashooter',
     19:'rotobaga', 20:'homingthistle', 21:'starfruit', 22:'shootingstarfruit',
     23:'lilypad', 24:'sunshroom', 25:'twinsunflower', 26:'dragonbruit',
     27:'moonflower', 28:'snowpea', 29:'lightningreed', 30:'kernelpult',
     31:'meteorflower', 32:'springbean', 33:'umbrellaleaf',
     34:'melonpult', 35:'wintermelon', 36:'blover', 37:'spikeweed',
-    38:'spikerock', 39:'chomper', 41:'primalwallnut', 42:'buttercup',
+    38:'spikerock', 39:'chomper', 40:'glaciershroom',
+    41:'primalwallnut', 42:'buttercup',
     43:'banana', 44:'missiletoe', 45:'cherry_bomb', 46:'doomshroom',
     47:'cranjelly', 49:'torchwood', 50:'jalapeno', 51:'puffshroom',
     52:'gloomvine', 53:'vamporcini', 54:'primalpotatomine',
@@ -238,8 +271,8 @@ window.electron = electron;
     75:'plantern', 76:'peach', 77:'jackolantern', 78:'dandelion',
     79:'chardguard', 80:'hypnoshroom', 81:'electriccurrant',
     82:'escaperoot', 83:'imitater', 84:'shadowshroom', 85:'magnetshroom',
-    87:'empea', 88:'citron', 89:'laser_bean', 90:'solartomato',
-    97:'powerplant', 106:'applemortar', 107:'redstinger', 108:'skyshooter',
+    86:'turnip', 87:'empea', 88:'citron', 89:'laser_bean', 90:'solartomato',
+    96:'holonut', 97:'powerplant', 106:'applemortar', 107:'redstinger', 108:'skyshooter',
     109:'sunbean', 110:'peanut', 114:'tanglekelp', 115:'bowlingbulb',
     120:'guacodile', 127:'ghostpepper', 128:'sweetpotato', 129:'pepperpult',
     130:'hotpotato', 131:'stunion', 132:'goldleaf', 133:'akee',
@@ -260,6 +293,9 @@ window.electron = electron;
 
   // AP item name -> plant enum ID
   const ITEM_PLANT = {
+    'Primal Peashooter':P.PrimalPea,'Scaredy-shroom':P.ScaredyShroom,
+    'Fume-Shroom':P.FumeShroom,'Ice-shroom':P.GlacierShroom,
+    'Infi-nut':P.InfiNut,'Resistant Radish':P.Turnip,
     'Peashooter':P.Peashooter,'Sunflower':P.Sunflower,'Wall-nut':P.Wallnut,
     'Potato Mine':P.PotatoMine,'Cabbage-pult':P.CabbagePult,'Bloomerang':P.Bloomerang,
     'Iceberg Lettuce':P.IcebergLettuce,'Bonk Choy':P.BonkChoy,'Repeater':P.Repeater,
@@ -1102,9 +1138,10 @@ window.electron = electron;
     return null;
   }
 
-  // Populated from slot_data on connect
-  let goalLocs = [];
-  let worldsReq = 7;
+  // Goal config (st.goalLocs / st.worldsReq) is populated from slot_data on
+  // connect and persisted on st so it survives a page reload -- rebuildAPSave
+  // runs on the poll timer even before the player reconnects this session,
+  // and canAccessModernDay() must see the real values then, not defaults.
 
   // ── State ─────────────────────────────────────────────────────────────────
   // Rebuild _AP_grantedPlantIds from persisted st.receivedItems.
@@ -1214,7 +1251,11 @@ window.electron = electron;
     }
     for(const pid of window._AP_grantedPlantIds) {
       const cn = ID_TO_CN[pid];
-      if(cn) cp.plantProps[cn] = {progress:1,medal:false,tutorialLevel:0,boost:0,costume:-1,costumes:[]};
+      // tutorialLevel>0 keeps the game's isTeacher flag false, suppressing
+      // the "first placement" description tip -- since this object is
+      // recreated from scratch every poll, tutorialLevel:0 here would make
+      // the game re-show the tip every time a plant is placed, not just once.
+      if(cn) cp.plantProps[cn] = {progress:1,medal:false,tutorialLevel:1,boost:0,costume:-1,costumes:[]};
     }
 
     // 3. Reset AP-tracked level progress, then restore checked locations
@@ -1225,11 +1266,17 @@ window.electron = electron;
       if(lvl) cp.levelProps[lvl] = { progress: 3 };
     }
 
-    // 4. Unlock worlds for received keys
+    // 4. Unlock worlds for received keys.
+    // Modern Day additionally requires the worlds-required goal condition --
+    // without this it unlocks (and becomes enterable/playable) the instant
+    // the key is received, even though fireCheck() won't send its location
+    // checks until canAccessModernDay() is also true, so progress made
+    // there before qualifying would silently not count.
     if(!cp.worldProps) cp.worldProps = {};
     (st.receivedKeys||[]).forEach(keyName => {
       const worldIds = WORLD_KEY_MAP[keyName];
       if(worldIds) worldIds.forEach(wid => {
+        if(wid === W.modern && !canAccessModernDay()) return;
         if(!cp.worldProps[wid]) cp.worldProps[wid] = {};
         cp.worldProps[wid].unlocked = true;
       });
@@ -1252,6 +1299,10 @@ window.electron = electron;
     }
 
     try { APP.savePP(); } catch(e) {}
+
+    // 6. Flush any currency that couldn't be applied earlier (no player slot
+    // loaded at the time, or the UI component wasn't up yet).
+    applyPendingCurrency();
   }
 
   // forceLevel order for tutorial progression
@@ -1286,6 +1337,7 @@ window.electron = electron;
   // ── WebSocket / AP Protocol ───────────────────────────────────────────────
   let ws=null, conn=false, rtimer=null, rdelay=5000;
   let locIds={}, itemNames={};
+  let apTeam=0, apSlotId=0; // set from Connected; namespaces DataStorage keys
 
   function connect() {
     if(!cfg.slot){setStatus('Enter slot name','#fa0');return;}
@@ -1327,6 +1379,8 @@ window.electron = electron;
         break;
       case 'Connected':
         conn=true;sessionActive=true;setStatus('✓ '+cfg.slot,'#4f4');
+        apTeam   = pkt.team || 0;
+        apSlotId = pkt.slot || 0;
         // Check if this is a different seed/slot from last session
         const runKey = cfg.slot + '@' + (window._AP_seedName||'');
         if(st.runKey !== runKey){
@@ -1336,14 +1390,21 @@ window.electron = electron;
           toast('New seed detected — state reset','#fa0');
         }
         if(pkt.slot_data){
-          goalLocs     = pkt.slot_data.goal_locations  || [];
-          worldsReq    = pkt.slot_data.worlds_required || 7;
+          st.goalLocs  = pkt.slot_data.goal_locations  || [];
+          st.worldsReq = pkt.slot_data.worlds_required || 7;
           skipTutorial = !!pkt.slot_data.skip_tutorial;
+          svSt();
+          // DeathLink isn't known until slot_data arrives (after the initial
+          // Connect), so it's applied via ConnectUpdate rather than being in
+          // the Connect packet's tags from the start.
+          deathLinkEnabled = !!pkt.slot_data.death_link;
+          if(deathLinkEnabled) send([{cmd:'ConnectUpdate', tags:['AP','DeathLink']}]);
         }
         rebuildAPSave();
         const ids=st.checked.map(n=>locIds[n]).filter(Boolean);
         if(ids.length) send([{cmd:'LocationChecks',locations:ids}]);
         send([{cmd:'Sync'}]);
+        fetchCurrencyFromServer();
         break;
       case 'ConnectionRefused':
         setStatus('Refused: '+(pkt.errors||[]).join(', '),'#f44');break;
@@ -1370,7 +1431,60 @@ window.electron = electron;
           for(const[n,id] of Object.entries(gd.item_name_to_id||{})) itemNames[id]=n;
         }
         break;
+      case 'Bounced':
+        if(deathLinkEnabled && pkt.tags && pkt.tags.includes('DeathLink') &&
+           pkt.data && pkt.data.source !== cfg.slot) {
+          applyRemoteDeath(pkt.data);
+        }
+        break;
+      case 'Retrieved': {
+        // Server-side backup of the granted currency totals. Only ever adopt
+        // a HIGHER value: local may legitimately be ahead (grants received
+        // while offline), and taking a lower one would re-grant on the next
+        // poll since applied would exceed granted.
+        const ck = currencyKeys();
+        const kv = pkt.keys || {};
+        let restored = false;
+        for(const c of CURRENCY_FIELDS){
+          const v = kv[c.field === 'coin' ? ck.coin : ck.gem];
+          if(typeof v === 'number' && v > (st[c.granted]||0)){
+            st[c.granted] = v;
+            restored = true;
+          }
+        }
+        if(restored){ svSt(); applyPendingCurrency(); }
+        pushCurrencyToServer(); // push local back up if we were ahead
+        break;
+      }
     }
+  }
+
+  // ── DeathLink ─────────────────────────────────────────────────────────────
+  let deathLinkEnabled = false;
+  let suppressDeathLinkSend = false;
+  let lastDeathLinkSentAt = 0;
+
+  // Called (via window._AP_onGameLose) from the loseDarken hook installed on
+  // the game's UI class the moment a level is actually lost.
+  window._AP_onGameLose = function(){
+    if(!deathLinkEnabled || suppressDeathLinkSend) return;
+    const now = Date.now();
+    if(now - lastDeathLinkSentAt < 3000) return; // debounce: loseDarken can
+    lastDeathLinkSentAt = now;                   // fire more than once per loss
+    send([{cmd:'Bounced', games:[GAME_NAME], tags:['DeathLink'],
+           data:{time: now/1000, source: cfg.slot, cause: cfg.slot+' lost a level'}}]);
+  };
+
+  function applyRemoteDeath(data){
+    const inst = window._AP_UI && window._AP_UI.component;
+    if(!inst) return; // not currently in a level -- can't kill what isn't running
+    // loseDarken is itself hooked to send DeathLink on loss; suppress that
+    // while we're the ones triggering it, or this becomes an infinite ping-pong.
+    suppressDeathLinkSend = true;
+    try { inst.loseDarken(null, data.cause || ((data.source||'Someone')+' died'), ''); }
+    catch(e) {}
+    setTimeout(()=>{ suppressDeathLinkSend = false; }, 500);
+    toast('💀 '+(data.cause || ((data.source||'Someone')+' died')), '#f66');
   }
 
   function applyItem(name) {
@@ -1383,23 +1497,114 @@ window.electron = electron;
       return;
     }
     if(ITEM_PLANT[name]!==undefined){ toast('🌱 '+name,'#4f4'); return; }
+    // Currency fillers (e.g. "500 Coins", "20 Gems"). Only the cumulative
+    // GRANTED total is recorded here; actually pushing it into the game is
+    // applyPendingCurrency()'s job. Applying inline would silently drop the
+    // grant whenever currentPlayer isn't loaded yet -- which is exactly the
+    // case during the Sync item replay right after connecting -- and
+    // st.lastIdx would then stop it from ever being reprocessed.
+    const currencyMatch = /^(\d+) (Coins|Gems)$/.exec(name);
+    if(currencyMatch){
+      const amount = parseInt(currencyMatch[1], 10);
+      const isCoin = currencyMatch[2] === 'Coins';
+      const grantedKey = isCoin ? 'coinGranted' : 'gemGranted';
+      st[grantedKey] = (st[grantedKey]||0) + amount;
+      svSt();
+      pushCurrencyToServer();
+      applyPendingCurrency();
+      toast((isCoin ? '🪙 ' : '💎 ') + name, '#fbbf24');
+      return;
+    }
     toast('📦 '+name,'#4af');
+  }
+
+  // ── Currency (coins / gems) ───────────────────────────────────────────────
+  // st.coinGranted/gemGranted = cumulative total AP has ever awarded.
+  // st.coinApplied/gemApplied = how much of that has been pushed into the
+  // game. The difference is applied whenever a player slot is available, so
+  // a grant is never lost just because it arrived at a bad moment. Spending
+  // in-game lowers the balance but not these counters, so nothing is
+  // re-granted afterwards.
+  const CURRENCY_FIELDS = [
+    { field:'coin', granted:'coinGranted', applied:'coinApplied',
+      cls:function(){ return window._AP_CoinCount; }, add:'addCoinCount' },
+    { field:'gem',  granted:'gemGranted',  applied:'gemApplied',
+      cls:function(){ return window._AP_GemCount; },  add:'addGemCount' },
+  ];
+
+  function applyPendingCurrency(){
+    const APP = window._AP_AllPlayerProperties;
+    const cp  = APP ? APP.currentPlayer : null;
+    if(!cp) return; // retried from rebuildAPSave() on the next poll
+    let dirty = false;
+    for(const c of CURRENCY_FIELDS){
+      const pending = (st[c.granted]||0) - (st[c.applied]||0);
+      if(pending <= 0) continue;
+      const comp = c.cls() && c.cls().component;
+      if(comp && typeof comp[c.add] === 'function'){
+        // Preferred path: the live UI component owns the value while it
+        // exists, and its setter writes currentPlayer + saves for us.
+        try { comp[c.add](pending); } catch(e) { continue; }
+      } else {
+        cp[c.field] = (cp[c.field]||0) + pending;
+        try { APP.savePP(); } catch(e) {}
+      }
+      st[c.applied] = (st[c.applied]||0) + pending;
+      dirty = true;
+    }
+    if(dirty) svSt();
+  }
+
+  // AP DataStorage keys are shared across the whole room, so they must be
+  // namespaced per team+slot.
+  function currencyKeys(){
+    return { coin:'pvz2ge_coin_'+apTeam+'_'+apSlotId,
+             gem: 'pvz2ge_gem_'+apTeam+'_'+apSlotId };
+  }
+
+  function pushCurrencyToServer(){
+    if(!conn) return;
+    const k = currencyKeys();
+    // 'max' rather than 'replace': the granted totals only ever increase, so
+    // a stale client can never lower the stored value.
+    send([
+      {cmd:'Set', key:k.coin, default:0, want_reply:false,
+       operations:[{operation:'max', value: st.coinGranted||0}]},
+      {cmd:'Set', key:k.gem,  default:0, want_reply:false,
+       operations:[{operation:'max', value: st.gemGranted||0}]},
+    ]);
+  }
+
+  function fetchCurrencyFromServer(){
+    if(!conn) return;
+    const k = currencyKeys();
+    send([{cmd:'Get', keys:[k.coin, k.gem]}]);
   }
 
   // ── Location polling (every 2s) ───────────────────────────────────────────
   function canAccessModernDay(){
     if(!st.receivedKeys || !st.receivedKeys.includes('Modern Day Key')) return false;
+    const goalLocs  = st.goalLocs || [];
+    const worldsReq = st.worldsReq || 7;
     const completed = goalLocs.filter(l=>st.checked.includes(l)).length;
     return completed >= worldsReq;
   }
 
   function pollChecks(){
-    rebuildAPSave();
-    if(!conn || !sessionActive) return;
-    for(const[loc,levelId] of Object.entries(LOC_LEVELS)){
-      if(st.checked.includes(loc)) continue;
-      if(isFinished(levelId)) fireCheck(loc);
+    // Detect newly-finished levels BEFORE rebuildAPSave() runs: isFinished()
+    // for tutorial levels reads cp.forceLevel, which rebuildAPSave() step 5
+    // unconditionally overwrites from st.checked -- if rebuild ran first, it
+    // would stomp the game's live forceLevel back to the last-known tutorial
+    // step before isFinished() ever saw the advanced value, permanently
+    // deadlocking tutorial check detection (and regressing forceLevel/
+    // levelProps for whichever tutorial step the player is actually on).
+    if(conn && sessionActive){
+      for(const[loc,levelId] of Object.entries(LOC_LEVELS)){
+        if(st.checked.includes(loc)) continue;
+        if(isFinished(levelId)) fireCheck(loc);
+      }
     }
+    rebuildAPSave();
   }
 
   function fireCheck(loc){

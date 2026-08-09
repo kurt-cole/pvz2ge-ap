@@ -1,2 +1,19 @@
 .claude/
 build/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Local reference copy of the upstream game source (Gzh0821/pvzge_web).
+# ~1.3GB of third-party code and assets; the installer clones it at build
+# time, so it must never be committed or redistributed here.
+Base Game/
+
+# Build output -- generated from pvz2gardendless/ by packaging the world.
+*.apworld
+
+# Local generation artifacts
+*_Spoiler.txt
+message.txt
+output/
