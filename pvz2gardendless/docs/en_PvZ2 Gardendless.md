@@ -36,6 +36,20 @@ Danger Rooms, the store — is unaffected, so even a one-world seed still has a 
 
 **Worlds Required** shrinks to fit. Ask for 4 world keys in a 3-world seed and the run needs 3.
 
+## What does Randomize Conveyor Plants do?
+
+Conveyor levels hand you plants on a belt instead of letting you pick a seed bank. With this on, the
+plants on that belt are replaced at random, drawn from the whole roster.
+
+Each belt entry keeps the level's own drop weight and counts, so the level runs at the pace it was
+designed to — only the plant changes. The roll is fixed per level, so retrying is not a reroll.
+
+Bowling, power-tile and potion levels are left alone. Their belts deliver projectiles and tools rather
+than plants, and swapping those out would make the level unplayable.
+
+This does not leak progression. Conveyor levels already hand out plants regardless of what
+Archipelago has sent you, and you do not keep what comes down the belt.
+
 ## What is the goal?
 
 Clear one specific Modern Day level, chosen by the **Modern Day Victory** option:

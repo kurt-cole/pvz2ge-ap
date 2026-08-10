@@ -235,6 +235,9 @@ window.electron = electron;
       installAPHooks(v);
     },
     'UIInGame': function(v) { window._AP_UI = v; installUILoseHook(v); },
+    // Lower-case l: levelController.ts exports 'levelController', not
+    // 'LevelController'. module_SetConveyor lives on its prototype.
+    'levelController': function(v) { window._AP_levelController = v; installConveyorHook(v); },
     'CoinCount': function(v) { window._AP_CoinCount = v; },
     'GemCount':  function(v) { window._AP_GemCount  = v; },
     // Square.getLane(0..4) is how the Lawn Mower Trap reaches each lane's
@@ -265,10 +268,87 @@ window.electron = electron;
     SC._ap_hooked_store = true;
   }
 
+  // Conveyor randomization. levelController.module_SetConveyor() is handed the
+  // level's ConveyorSeedBankProperties and builds the belt from its
+  // InitialPlantList, so rewriting each entry's PlantType on the way in swaps
+  // the plants while leaving MinCount/MaxCount/Weight -- the level's pacing --
+  // exactly as designed.
+  //
+  // FNV-1a plus mulberry32: the roll has to be reproducible without any stored
+  // state, so it is derived from the level's own untouched plant list rather
+  // than from a counter or Math.random().
+  function _apHash(str) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+  function _apRng(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function installConveyorHook(LC) {
+    if (!LC || LC._ap_hooked_conveyor || !LC.prototype || !LC.prototype.module_SetConveyor) return;
+    const _origSetConveyor = LC.prototype.module_SetConveyor;
+    LC.prototype.module_SetConveyor = function (props) {
+      let patched = props;
+      try {
+        const pool = window._AP_conveyorPool;
+        if (window._AP_randomizeConveyor && props &&
+            Array.isArray(props.InitialPlantList) && pool && pool.length) {
+          const list  = props.InitialPlantList;
+          const known = window._AP_conveyorKnown;
+          // Seeded off the ORIGINAL plant types, which is what makes the roll
+          // stable: the same level always produces the same belt, and a retry
+          // is not a reroll. That only holds because nothing below writes back
+          // to props -- the entries are copied, see the map() further down.
+          const rnd = _apRng(_apHash(String(window._AP_conveyorSeed || 0) + '|' +
+                                     list.map(e => (e && e.PlantType) || '').join('|')));
+          const used = new Set();
+          const newList = list.map(function (entry) {
+            // Only genuine plants are swapped. A conveyor also delivers
+            // bowling projectiles, power tiles and potions on the minigame
+            // levels (tool_projectile_*, tool_powertile_*, zombiepotion_*),
+            // and turning those into plants makes the level unplayable.
+            if (!entry || !known || !known.has(entry.PlantType)) return entry;
+            let pick = entry.PlantType;
+            for (let tries = 0; tries < 20; tries++) {
+              const candidate = pool[Math.floor(rnd() * pool.length)];
+              // Keep one belt from being three copies of the same plant while
+              // the pool has plenty of alternatives. Bounded, so a tiny pool
+              // still terminates rather than spinning.
+              if (!used.has(candidate)) { pick = candidate; break; }
+              pick = candidate;
+            }
+            used.add(pick);
+            return Object.assign({}, entry, { PlantType: pick });
+          });
+          // Copy rather than mutate. The level's properties object is cached
+          // and handed back on a replay, so writing to it would feed the next
+          // roll its own output and the level would drift on every attempt.
+          patched = Object.assign(Object.create(Object.getPrototypeOf(props) || Object.prototype), props);
+          patched.InitialPlantList = newList;
+        }
+      } catch (e) { /* never stop a level from loading over this */ }
+      const args = Array.prototype.slice.call(arguments);
+      args[0] = patched;
+      return _origSetConveyor.apply(this, args);
+    };
+    LC._ap_hooked_conveyor = true;
+  }
+
   const _origRegister = System.register.bind(System);
   System.register = function(name, deps, declare) {
     if (typeof name === 'string' &&
-        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity)\.ts/.test(name)) {
+        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity|levelController)\.ts/.test(name)) {
       const _origDeclare = declare;
       declare = function(_export, _context) {
         return _origDeclare(function(exportName, value) {
@@ -379,6 +459,24 @@ window.electron = electron;
   // Reverse map exposed for the plantProps Proxy in the SystemJS hook IIFE above.
   window._AP_CN_TO_ID = {};
   for (const pid in ID_TO_CN) window._AP_CN_TO_ID[ID_TO_CN[pid]] = Number(pid);
+
+  // Conveyor randomization pool, also exposed for the hook in that IIFE.
+  // Neither of these two is a plant you would hand a player off a belt:
+  // powerplant is what a power tile turns into, and holonut is Infi-nut's
+  // hologram. A level that puts either on its conveyor is doing something
+  // specific with it, so they are excluded from the pool AND left in place
+  // when they appear -- the hook only swaps entries it finds in this set.
+  const CONVEYOR_EXCLUDE = new Set(['powerplant', 'holonut']);
+  window._AP_conveyorPool  = Object.values(ID_TO_CN).filter(cn => !CONVEYOR_EXCLUDE.has(cn));
+  window._AP_conveyorKnown = new Set(window._AP_conveyorPool);
+
+  // Mirrors the conveyor slot_data onto window for that hook. Persisted on st
+  // so a page reload keeps randomizing before the socket is back up, and read
+  // as off when absent -- which is what seeds predating the option do.
+  function syncConveyorConfig() {
+    window._AP_randomizeConveyor = !!st.randomizeConveyor;
+    window._AP_conveyorSeed      = st.conveyorSeed || 0;
+  }
 
   // AP item name -> plant enum ID
   const ITEM_PLANT = {
@@ -1324,6 +1422,7 @@ window.electron = electron;
     try { Object.assign(st, JSON.parse(localStorage.getItem('ap_pvz2_state')||'{}')); } catch(e){}
     syncGrantedPlants();
     syncGrantedUpgrades();
+    syncConveyorConfig();
   })();
 
   // ── Save guard ────────────────────────────────────────────────────────────
@@ -1664,6 +1763,9 @@ window.electron = electron;
           st.shuffleUpgrades = !!pkt.slot_data.shuffle_upgrades;
           st.upgradeItems    = pkt.slot_data.upgrade_items || {};
           syncGrantedUpgrades();
+          st.randomizeConveyor = !!pkt.slot_data.randomize_conveyor;
+          st.conveyorSeed      = pkt.slot_data.conveyor_seed || 0;
+          syncConveyorConfig();
           svSt();
           // DeathLink isn't known until slot_data arrives (after the initial
           // Connect), so it's applied via ConnectUpdate rather than being in

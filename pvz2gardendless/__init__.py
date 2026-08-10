@@ -303,6 +303,13 @@ class PvZ2GardendlessWorld(World):
             # the progressive items work. Sent rather than duplicated in the
             # client so the two cannot drift.
             "upgrade_items":     UPGRADE_ITEM_TO_CNS,
+            "randomize_conveyor": bool(self.options.randomize_conveyor_plants),
+            # Per-slot seed for the client's conveyor roll. Generated here so
+            # the belt is reproducible for this slot and differs between
+            # slots, rather than every player on one seed seeing the same
+            # plants. The client folds the level's own plant list into it, so
+            # each level rolls differently and a retry is not a reroll.
+            "conveyor_seed":     self.random.getrandbits(32),
             # Informational for now -- worlds left out simply never receive a
             # key, which is what keeps them locked. Sorted so the value is
             # stable for a given seed rather than varying with set order.

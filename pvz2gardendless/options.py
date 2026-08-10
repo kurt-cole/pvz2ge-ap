@@ -159,6 +159,28 @@ class ShuffleUpgrades(DefaultOnToggle):
     display_name = "Shuffle Upgrades"
 
 
+class RandomizeConveyorPlants(Toggle):
+    """
+    Randomize which plants come down the belt on conveyor levels.
+
+    Each conveyor entry keeps the level's own drop weight and count, so the
+    pacing of the level is unchanged -- only the plant itself is swapped, for
+    any plant in the game.
+
+    Conveyor levels already hand out plants regardless of what Archipelago has
+    sent you, so this does not leak progression: you get the plant on the belt
+    for that level only, and do not keep it.
+
+    Bowling, power-tile and potion levels are left alone. Their belts deliver
+    projectiles and tools rather than plants, and swapping those for plants
+    would make the level unplayable.
+
+    The roll is fixed per level, so retrying a level gives the same plants
+    rather than rerolling until you like them.
+    """
+    display_name = "Randomize Conveyor Plants"
+
+
 class TrapPercentage(Range):
     """
     Percentage of the filler item pool (coins and gems) to replace with traps.
@@ -186,5 +208,6 @@ class PvZ2Options(PerGameCommonOptions):
     skip_tutorial:    SkipTutorial
     shopsanity:       Shopsanity
     shuffle_upgrades: ShuffleUpgrades
+    randomize_conveyor_plants: RandomizeConveyorPlants
     trap_percentage:  TrapPercentage
     death_link:       DeathLink
