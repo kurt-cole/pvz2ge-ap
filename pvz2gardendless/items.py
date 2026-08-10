@@ -9,7 +9,7 @@ from BaseClasses import Item, ItemClassification
 
 from .constants import (
     BASE_ID, GAME_NAME, KEY_NAME_TO_WORLD, KEYED_WORLDS, LOGIC_PLANTS,
-    UPGRADE_TABLE,
+    UPGRADE_GROUPS,
 )
 
 if TYPE_CHECKING:
@@ -226,15 +226,19 @@ for i, name in enumerate(_trap_names):
 # item keeps the ID it already had. Classified useful, not progression: they
 # make the run easier but no access rule names one, and marking them
 # progression would have fill treat them as gating something they do not.
+# One item per GROUP, not per level -- the progressive ones go into the pool
+# once per level they cover (see create_item_pool).
 UPGRADE_ITEMS: List[PvZ2ItemData] = []
 _upgrade_base = _trap_base + len(TRAP_ITEMS)
-for i, (name, _codename) in enumerate(UPGRADE_TABLE):
+for i, (name, _codenames) in enumerate(UPGRADE_GROUPS):
     UPGRADE_ITEMS.append(PvZ2ItemData(name, ItemClassification.useful, _upgrade_base + i))
 
-# Item name -> the codename the game keys currentPlayer.upgradeProps by. Sent
-# in slot_data so the client does not carry a second copy of this mapping that
-# could drift out of step with this one.
-UPGRADE_ITEM_TO_CN: Dict[str, str] = dict(UPGRADE_TABLE)
+# Item name -> the codenames it grants, in the order copies of it are applied.
+# Sent in slot_data so the client does not carry a second copy of this mapping
+# that could drift out of step with this one: the client grants the first N
+# codenames of a group after receiving N copies of its item.
+UPGRADE_ITEM_TO_CNS: Dict[str, List[str]] = {name: list(cns)
+                                             for name, cns in UPGRADE_GROUPS}
 
 ALL_ITEMS: List[PvZ2ItemData] = (PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS
                                  + TRAP_ITEMS + UPGRADE_ITEMS)
@@ -299,8 +303,12 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
     # off the game hands them out itself, so shipping them as items too would
     # mean receiving something already owned.
     if world.options.shuffle_upgrades:
-        for upgrade in UPGRADE_ITEMS:
-            pool.append(world.create_item(upgrade.name))
+        # One copy per level the group covers: three Progressive Sun Shovels,
+        # one Sky Shield. Sized off the codename list so adding a level to a
+        # group is a constants.py edit alone.
+        for name, codenames in UPGRADE_GROUPS:
+            for _ in codenames:
+                pool.append(world.create_item(name))
 
     # Everything left over is filler, of which trap_percentage becomes
     # traps. Traps only ever displace filler, never a plant or a key.

@@ -1253,29 +1253,44 @@ window.electron = electron;
     }
   }
 
-  // Same idea for the permanent upgrades, driven by the item name -> game
-  // codename map slot_data hands over (st.upgradeItems). Both this and the
-  // shuffle flag are persisted on st, so a page reload has the right answer
-  // before the socket is back up -- otherwise the first rebuildAPSave() of
-  // the session would strip every upgrade the player legitimately holds.
+  // Same idea for the permanent upgrades, driven by the item name -> ordered
+  // codename list slot_data hands over (st.upgradeItems). The upgrades are
+  // progressive: N copies of "Progressive Sun Shovel" grant that group's
+  // first N codenames. Which N is arbitrary as far as the game is concerned,
+  // since every level of a group has the same effect and they are summed --
+  // it only has to be consistent between calls, which taking a prefix is.
+  //
+  // Counts come from st.upgradeCounts rather than st.receivedItems, which is
+  // deduplicated by name and so cannot tell one copy from three.
+  //
+  // The counts, the item map and the shuffle flag are all persisted on st, so
+  // a page reload has the right answer before the socket is back up --
+  // otherwise the first rebuildAPSave() of the session would strip every
+  // upgrade the player legitimately holds.
   function syncGrantedUpgrades() {
     window._AP_shuffleUpgrades = !!st.shuffleUpgrades;
     const map = st.upgradeItems || {};
-    const granted = new Set();
-    (st.receivedItems||[]).forEach(name=>{
-      const cn = map[name];
-      if(cn) granted.add(cn);
-    });
+    const counts = st.upgradeCounts || {};
+    const granted = new Set(), known = new Set();
+    for(const name of Object.keys(map)){
+      const cns = map[name] || [];
+      cns.forEach(cn => known.add(cn));
+      // Capped at the group's length: a pool that somehow over-delivered
+      // would otherwise index past the end and add undefined to the set.
+      const n = Math.min(counts[name] || 0, cns.length);
+      for(let i = 0; i < n; i++) granted.add(cns[i]);
+    }
     window._AP_grantedUpgrades = granted;
-    // Which codenames AP manages at all. The save guard strips only these, so
-    // an upgrade the game gains in a future version is left alone rather than
-    // deleted every write for not being in a map that predates it.
-    window._AP_knownUpgradeCns = new Set(Object.values(map));
+    // Which codenames AP manages at all, so rebuildAPSave() only ever resets
+    // these -- an upgrade the game gains in a future version is left alone
+    // rather than forced to 0 for not being in a map that predates it.
+    window._AP_knownUpgradeCns = known;
     return granted;
   }
 
   let cfg   = { server:'localhost:38281', slot:'', password:'' };
-  let st    = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[], runKey:'' };
+  let st    = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
+                upgradeCounts:{}, runKey:'' };
   let sessionActive = false; // set true only after explicit Connect + server ack
   // Whether this session has told the server the goal is met. Session state,
   // not persisted: it is reset on every disconnect so a reconnect re-sends,
@@ -1626,7 +1641,11 @@ window.electron = electron;
         // Check if this is a different seed/slot from last session
         const runKey = cfg.slot + '@' + (window._AP_seedName||'');
         if(st.runKey !== runKey){
-          st = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[], runKey };
+          // upgradeCounts is a running tally rather than a deduplicated list,
+          // so it has to be cleared here explicitly -- carrying it into a new
+          // seed would grant upgrades that seed never sent.
+          st = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
+                 upgradeCounts:{}, runKey };
           window._AP_grantedPlantIds = new Set();
           window._AP_grantedUpgrades = new Set();
           svSt();
@@ -1771,12 +1790,23 @@ window.electron = electron;
     }
     if(ITEM_PLANT[name]!==undefined){ toast('🌱 '+name,'#4f4'); return; }
     // Permanent upgrades. rebuildAPSave() runs straight after every
-    // ReceivedItems and writes upgradeProps from the granted set, so the
-    // grant itself is handled there; this only has to refresh the set the
-    // rebuild reads and say something.
-    if((st.upgradeItems||{})[name]){
+    // ReceivedItems and reconciles the game's upgrade state against the
+    // granted set, so the grant itself is handled there; this only has to
+    // count the copy and say something.
+    // Counting here is safe against the post-connect replay for the same
+    // reason the coin/gem running totals are: applyItem() is only reached for
+    // items at or past st.lastIdx, so a replayed item is never counted twice.
+    const upgradeCns = (st.upgradeItems||{})[name];
+    if(upgradeCns){
+      if(!st.upgradeCounts) st.upgradeCounts = {};
+      st.upgradeCounts[name] = (st.upgradeCounts[name]||0) + 1;
+      svSt();
       syncGrantedUpgrades();
-      toast('⭐ '+name,'#a78bfa');
+      // "2/3" for a progressive group, plain for the one-shot upgrades.
+      const held = Math.min(st.upgradeCounts[name], upgradeCns.length);
+      const label = upgradeCns.length > 1
+        ? name + ' (' + held + '/' + upgradeCns.length + ')' : name;
+      toast('⭐ '+label,'#a78bfa');
       return;
     }
     // Currency fillers (e.g. "500 Coins", "20 Gems"). Only the cumulative
@@ -2056,7 +2086,7 @@ window.electron = electron;
     };
     document.getElementById('ap-reset').onclick=()=>{
       if(!confirm('Reset all AP progress for this slot? This clears checked locations, received items, and run state.')) return;
-      st={checked:[],lastIdx:0,receivedKeys:[],receivedItems:[],runKey:''};
+      st={checked:[],lastIdx:0,receivedKeys:[],receivedItems:[],upgradeCounts:{},runKey:''};
       // The victory location is no longer checked, so clearing goalSent lets
       // re-earning it send the goal again.
       goalSent=false;

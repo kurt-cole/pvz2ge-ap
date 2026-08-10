@@ -21,7 +21,7 @@ from .constants import (
 from .options import PvZ2Options
 from .items import (
     FILLER_ITEMS, ITEM_NAME_GROUPS, ITEM_NAME_TO_ID, ITEM_NAME_TO_ITEM,
-    UPGRADE_ITEM_TO_CN, PvZ2Item, create_item_pool,
+    UPGRADE_ITEM_TO_CNS, PvZ2Item, create_item_pool,
 )
 from .locations import (
     LOC_NAME_GROUPS, LOC_NAME_TO_ID, MODERN_DAY_VICTORY_LOCS, PvZ2LocationData,
@@ -298,9 +298,11 @@ class PvZ2GardendlessWorld(World):
             # no key here at all, and the client reads a missing key as off --
             # which is what keeps their upgrades working as they always did.
             "shuffle_upgrades":  bool(self.options.shuffle_upgrades),
-            # Item name -> the codename the game keys upgradeProps by. Sent
-            # rather than duplicated in the client so the two cannot drift.
-            "upgrade_items":     UPGRADE_ITEM_TO_CN,
+            # Item name -> the codenames it grants, in order. The client
+            # grants the first N after receiving N copies, which is what makes
+            # the progressive items work. Sent rather than duplicated in the
+            # client so the two cannot drift.
+            "upgrade_items":     UPGRADE_ITEM_TO_CNS,
             # Informational for now -- worlds left out simply never receive a
             # key, which is what keeps them locked. Sorted so the value is
             # stable for a given seed rather than varying with set order.

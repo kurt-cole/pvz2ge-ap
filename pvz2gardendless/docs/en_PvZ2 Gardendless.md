@@ -59,13 +59,25 @@ removes the levels of the worlds it leaves out.
   Perfume-shroom for Jurassic Marsh, and Hot Potato, Pepper-pult or Fire Peashooter for Frostbite
   Caves.
 - **World Keys** — one per locked world.
-- **Upgrades** — the fourteen permanent ones, with **Shuffle Upgrades** on. Starting Sun I and II
-  (+25 sun each), Plant Food Slot I and II, the 7th and 8th Seed Slots, Sun Shovel I to III, Manual
-  Mower I and II, Wall-nut First Aid, Plant Food Refresh and Sky Shield. Nine of them are normally
+- **Upgrades** — the fourteen permanent ones, with **Shuffle Upgrades** on. Nine of them are normally
   level rewards and five are store purchases; with the option on, clearing that level or making that
   purchase still sends the check, but the upgrade itself goes into the multiworld and only takes
   effect once you receive it. With the option off they are handed out as they always have been and
   are not items at all.
+
+  The tiered ones are **progressive**, because each level of a tier does the same thing and the game
+  simply adds them up — there is no "level 2" to receive out of order:
+
+  | Item | Copies | Each copy gives |
+  | --- | --- | --- |
+  | Progressive Starting Sun | 2 | +25 starting sun |
+  | Progressive Plant Food Slot | 2 | +1 plant food held (base 3) |
+  | Progressive Seed Slot | 2 | +1 seed slot (base 6) |
+  | Progressive Sun Shovel | 3 | +0.25 sun shovel rate |
+  | Progressive Manual Mower | 2 | +1 manual mower |
+  | Wall-nut First Aid | 1 | — |
+  | Plant Food Refresh | 1 | — |
+  | Sky Shield | 1 | — |
 - **Coins and gems** — filler, and the currency the store runs on.
 - **Lawn Mower Trap** — sets off every lawn mower on the field at once. They roll out and are spent,
   leaving those lanes with no last line of defence for the rest of the level. A trap received while

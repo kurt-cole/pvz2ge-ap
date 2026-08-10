@@ -158,28 +158,36 @@ SHOP_REGION = "Shop"
 #
 # Nine are level rewards and five are store purchases, which is only about
 # where their *location* is -- every one of them is an item either way.
-# Effects, read off the game's own upgrade loop (it applies an upgrade when
-# progress > 0 and enabled):
-#   starting sun  +25 each        plant food slots  +1 each, base 3 cap 5
-#   seed slots    +1 each, base 6 cap 8
-#   sun shovel    +0.25 rate each  manual mower     +1 each
-#   the last four are one-shot flags
-UPGRADE_TABLE = [
-    ("Starting Sun I",      "upgrade_starting_sun_lvl1"),
-    ("Starting Sun II",     "upgrade_starting_sun_lvl2"),
-    ("Plant Food Slot I",   "upgrade_pf_slots_lvl1"),
-    ("Plant Food Slot II",  "upgrade_pf_slots_lvl2"),
-    ("Wall-nut First Aid",  "upgrade_wallnut_firstaid"),
-    ("Plant Food Refresh",  "upgrade_pf_refresh"),
-    ("Sun Shovel I",        "upgrade_sunshovel_lvl1"),
-    ("Sun Shovel II",       "upgrade_sunshovel_lvl2"),
-    ("Sun Shovel III",      "upgrade_sunshovel_lvl3"),
-    ("7th Seed Slot",       "upgrade_7_slots"),
-    ("8th Seed Slot",       "upgrade_8_slots"),
-    ("Manual Mower I",      "upgrade_manual_mowers_1"),
-    ("Manual Mower II",     "upgrade_manual_mowers_2"),
-    ("Sky Shield",          "upgrade_sky_shield"),
+#
+# Grouped as (item name, [codenames granted in this order]). The multi-level
+# ones are PROGRESSIVE rather than one item per level, because the game's
+# upgrade loop simply sums whatever is held:
+#   starting sun +25 each   plant food slots +1 each, base 3 cap 5
+#   seed slots   +1 each, base 6 cap 8
+#   sun shovel   +0.25 rate each   manual mower +1 each
+# lvl1 and lvl2 have identical effects, so receiving "Sun Shovel III" first
+# would be indistinguishable from receiving "Sun Shovel I" first -- separate
+# items would imply an ordering the game does not have, and would show up on
+# a tracker as holding III while missing I and II. The last three are one-shot
+# flags with nothing to progress through, so they stay single items.
+UPGRADE_GROUPS = [
+    ("Progressive Starting Sun",    ["upgrade_starting_sun_lvl1",
+                                     "upgrade_starting_sun_lvl2"]),
+    ("Progressive Plant Food Slot", ["upgrade_pf_slots_lvl1",
+                                     "upgrade_pf_slots_lvl2"]),
+    ("Progressive Seed Slot",       ["upgrade_7_slots", "upgrade_8_slots"]),
+    ("Progressive Sun Shovel",      ["upgrade_sunshovel_lvl1",
+                                     "upgrade_sunshovel_lvl2",
+                                     "upgrade_sunshovel_lvl3"]),
+    ("Progressive Manual Mower",    ["upgrade_manual_mowers_1",
+                                     "upgrade_manual_mowers_2"]),
+    ("Wall-nut First Aid",          ["upgrade_wallnut_firstaid"]),
+    ("Plant Food Refresh",          ["upgrade_pf_refresh"]),
+    ("Sky Shield",                  ["upgrade_sky_shield"]),
 ]
+
+# Total upgrade items in a shuffled pool: 8 distinct names, 14 copies.
+UPGRADE_ITEM_COUNT = sum(len(cns) for _, cns in UPGRADE_GROUPS)
 
 
 def shop_location_name(commodity: str) -> str:
