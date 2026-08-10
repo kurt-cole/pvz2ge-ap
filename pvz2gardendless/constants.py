@@ -148,6 +148,39 @@ SHOP_UPGRADE_COMMODITIES = [
 SHOP_COMMODITIES = SHOP_PLANT_COMMODITIES + SHOP_UPGRADE_COMMODITIES
 SHOP_REGION = "Shop"
 
+# ── Permanent upgrades ────────────────────────────────────────────────────────
+# The game's fourteen permanent upgrades, as (item name, game codename), in
+# the game's own UpgradeEnum order. The codenames are what the save file keys
+# currentPlayer.upgradeProps by, and what unlockUpgrade() takes.
+#
+# ORDER IS LOAD-BEARING for the same reason as KEYED_WORLDS: items.py numbers
+# these from the end of the trap block. Append only.
+#
+# Nine are level rewards and five are store purchases, which is only about
+# where their *location* is -- every one of them is an item either way.
+# Effects, read off the game's own upgrade loop (it applies an upgrade when
+# progress > 0 and enabled):
+#   starting sun  +25 each        plant food slots  +1 each, base 3 cap 5
+#   seed slots    +1 each, base 6 cap 8
+#   sun shovel    +0.25 rate each  manual mower     +1 each
+#   the last four are one-shot flags
+UPGRADE_TABLE = [
+    ("Starting Sun I",      "upgrade_starting_sun_lvl1"),
+    ("Starting Sun II",     "upgrade_starting_sun_lvl2"),
+    ("Plant Food Slot I",   "upgrade_pf_slots_lvl1"),
+    ("Plant Food Slot II",  "upgrade_pf_slots_lvl2"),
+    ("Wall-nut First Aid",  "upgrade_wallnut_firstaid"),
+    ("Plant Food Refresh",  "upgrade_pf_refresh"),
+    ("Sun Shovel I",        "upgrade_sunshovel_lvl1"),
+    ("Sun Shovel II",       "upgrade_sunshovel_lvl2"),
+    ("Sun Shovel III",      "upgrade_sunshovel_lvl3"),
+    ("7th Seed Slot",       "upgrade_7_slots"),
+    ("8th Seed Slot",       "upgrade_8_slots"),
+    ("Manual Mower I",      "upgrade_manual_mowers_1"),
+    ("Manual Mower II",     "upgrade_manual_mowers_2"),
+    ("Sky Shield",          "upgrade_sky_shield"),
+]
+
 
 def shop_location_name(commodity: str) -> str:
     return f"Shop: {commodity}"

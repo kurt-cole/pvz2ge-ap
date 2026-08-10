@@ -59,6 +59,13 @@ removes the levels of the worlds it leaves out.
   Perfume-shroom for Jurassic Marsh, and Hot Potato, Pepper-pult or Fire Peashooter for Frostbite
   Caves.
 - **World Keys** — one per locked world.
+- **Upgrades** — the fourteen permanent ones, with **Shuffle Upgrades** on. Starting Sun I and II
+  (+25 sun each), Plant Food Slot I and II, the 7th and 8th Seed Slots, Sun Shovel I to III, Manual
+  Mower I and II, Wall-nut First Aid, Plant Food Refresh and Sky Shield. Nine of them are normally
+  level rewards and five are store purchases; with the option on, clearing that level or making that
+  purchase still sends the check, but the upgrade itself goes into the multiworld and only takes
+  effect once you receive it. With the option off they are handed out as they always have been and
+  are not items at all.
 - **Coins and gems** — filler, and the currency the store runs on.
 - **Lawn Mower Trap** — sets off every lawn mower on the field at once. They roll out and are spent,
   leaving those lanes with no last line of defence for the rest of the level. A trap received while
@@ -66,7 +73,8 @@ removes the levels of the worlds it leaves out.
 
 ## Which items can be in another player's world?
 
-Any of them. All plants, world keys, filler and traps can land in any world in the multiworld.
+Any of them. All plants, world keys, upgrades, filler and traps can land in any world in the
+multiworld.
 
 ## What does another world's item look like in PvZ2 Gardendless?
 

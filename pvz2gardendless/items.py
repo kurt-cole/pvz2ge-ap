@@ -7,7 +7,10 @@ from typing import Dict, List, TYPE_CHECKING
 
 from BaseClasses import Item, ItemClassification
 
-from .constants import BASE_ID, GAME_NAME, KEY_NAME_TO_WORLD, KEYED_WORLDS, LOGIC_PLANTS
+from .constants import (
+    BASE_ID, GAME_NAME, KEY_NAME_TO_WORLD, KEYED_WORLDS, LOGIC_PLANTS,
+    UPGRADE_TABLE,
+)
 
 if TYPE_CHECKING:
     from . import PvZ2GardendlessWorld
@@ -219,14 +222,39 @@ _trap_base = _filler_base + len(FILLER_ITEMS)
 for i, name in enumerate(_trap_names):
     TRAP_ITEMS.append(PvZ2ItemData(name, ItemClassification.trap, _trap_base + i))
 
-ALL_ITEMS: List[PvZ2ItemData] = PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS + TRAP_ITEMS
+# Permanent upgrade items. Appended after the trap block so every existing
+# item keeps the ID it already had. Classified useful, not progression: they
+# make the run easier but no access rule names one, and marking them
+# progression would have fill treat them as gating something they do not.
+UPGRADE_ITEMS: List[PvZ2ItemData] = []
+_upgrade_base = _trap_base + len(TRAP_ITEMS)
+for i, (name, _codename) in enumerate(UPGRADE_TABLE):
+    UPGRADE_ITEMS.append(PvZ2ItemData(name, ItemClassification.useful, _upgrade_base + i))
+
+# Item name -> the codename the game keys currentPlayer.upgradeProps by. Sent
+# in slot_data so the client does not carry a second copy of this mapping that
+# could drift out of step with this one.
+UPGRADE_ITEM_TO_CN: Dict[str, str] = dict(UPGRADE_TABLE)
+
+ALL_ITEMS: List[PvZ2ItemData] = (PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS
+                                 + TRAP_ITEMS + UPGRADE_ITEMS)
 ITEM_NAME_TO_ITEM: Dict[str, PvZ2ItemData] = {item.name: item for item in ALL_ITEMS}
 ITEM_NAME_TO_ID: Dict[str, int]        = {item.name: item.code for item in ALL_ITEMS}
+
+# Two items sharing a name would collapse into one entry here, silently
+# dropping whichever was defined first from every lookup that matters.
+if len(ITEM_NAME_TO_ITEM) != len(ALL_ITEMS):
+    _seen: Dict[str, int] = {}
+    for item in ALL_ITEMS:
+        _seen[item.name] = _seen.get(item.name, 0) + 1
+    raise ValueError("duplicate item names: "
+                     f"{sorted(n for n, c in _seen.items() if c > 1)}")
 
 ITEM_NAME_GROUPS: Dict[str, set] = {
     "Plants":     {i.name for i in PLANT_ITEMS},
     "World Keys": {i.name for i in KEY_ITEMS},
     "Traps":      {i.name for i in TRAP_ITEMS},
+    "Upgrades":   {i.name for i in UPGRADE_ITEMS},
 }
 
 # Order filler is dealt out in. It deliberately interleaves the two currencies
@@ -266,6 +294,13 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
         if plant.classification in (ItemClassification.progression,
                                     ItemClassification.useful):
             pool.append(world.create_item(plant.name))
+
+    # Permanent upgrades, when the option has the game withhold them. With it
+    # off the game hands them out itself, so shipping them as items too would
+    # mean receiving something already owned.
+    if world.options.shuffle_upgrades:
+        for upgrade in UPGRADE_ITEMS:
+            pool.append(world.create_item(upgrade.name))
 
     # Everything left over is filler, of which trap_percentage becomes
     # traps. Traps only ever displace filler, never a plant or a key.

@@ -154,6 +154,25 @@ window.electron = electron;
       };
     }
 
+    // Permanent upgrades, same shape as the plant guard above. The game's own
+    // upgrade loop applies an upgrade when its upgradeProps entry has
+    // progress > 0 and enabled, and unlockUpgrade() is the single place that
+    // sets progress -- both the level-reward path and the store purchase go
+    // through it -- so blocking here withholds an upgrade however it was
+    // earned. Only active when slot_data turned shuffle_upgrades on: seeds
+    // generated before that option existed ship no upgrade items, so
+    // withholding on them would mean never getting an upgrade at all.
+    if (app.unlockUpgrade) {
+      const _origUnlockUpgrade = app.unlockUpgrade.bind(app);
+      app.unlockUpgrade = function(codename) {
+        if (window._AP_shuffleUpgrades) {
+          const granted = window._AP_grantedUpgrades || new Set();
+          if (!granted.has(codename)) return;
+        }
+        return _origUnlockUpgrade(codename);
+      };
+    }
+
     // Layer 2: hook getPlayer so we install a plantProps Proxy on whichever
     // currentPlayer slot the game (or we) load.  AllPlayerProperties.plantProps
     // is undefined — the real data lives on currentPlayer.plantProps.
@@ -1234,6 +1253,27 @@ window.electron = electron;
     }
   }
 
+  // Same idea for the permanent upgrades, driven by the item name -> game
+  // codename map slot_data hands over (st.upgradeItems). Both this and the
+  // shuffle flag are persisted on st, so a page reload has the right answer
+  // before the socket is back up -- otherwise the first rebuildAPSave() of
+  // the session would strip every upgrade the player legitimately holds.
+  function syncGrantedUpgrades() {
+    window._AP_shuffleUpgrades = !!st.shuffleUpgrades;
+    const map = st.upgradeItems || {};
+    const granted = new Set();
+    (st.receivedItems||[]).forEach(name=>{
+      const cn = map[name];
+      if(cn) granted.add(cn);
+    });
+    window._AP_grantedUpgrades = granted;
+    // Which codenames AP manages at all. The save guard strips only these, so
+    // an upgrade the game gains in a future version is left alone rather than
+    // deleted every write for not being in a map that predates it.
+    window._AP_knownUpgradeCns = new Set(Object.values(map));
+    return granted;
+  }
+
   let cfg   = { server:'localhost:38281', slot:'', password:'' };
   let st    = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[], runKey:'' };
   let sessionActive = false; // set true only after explicit Connect + server ack
@@ -1268,6 +1308,7 @@ window.electron = electron;
   (function() {
     try { Object.assign(st, JSON.parse(localStorage.getItem('ap_pvz2_state')||'{}')); } catch(e){}
     syncGrantedPlants();
+    syncGrantedUpgrades();
   })();
 
   // ── Save guard ────────────────────────────────────────────────────────────
@@ -1295,6 +1336,14 @@ window.electron = electron;
               }
               value = JSON.stringify(arr);
             }
+            // No upgrade equivalent here on purpose. Plants need this pass
+            // because the game can write plantProps straight out mid-level,
+            // ahead of the next poll. Upgrades have a single grant path,
+            // unlockUpgrade(), which is hooked at source, and rebuildAPSave()
+            // reconciles the whole set every poll on top of that -- so a
+            // scrub here would add a third copy of the rule with nothing left
+            // for it to catch, against a serialised shape (player_upgrades,
+            // post-migration) this code would have to guess at.
           }
         } catch(e) {}
       }
@@ -1375,6 +1424,47 @@ window.electron = electron;
       // recreated from scratch every poll, tutorialLevel:0 here would make
       // the game re-show the tip every time a plant is placed, not just once.
       if(cn) cp.plantProps[cn] = {progress:1,medal:false,tutorialLevel:1,boost:0,costume:-1,costumes:[]};
+    }
+
+    // 2b. Same treatment for the permanent upgrades, when this seed shuffles
+    // them. Reconciling the whole set every poll -- rather than only granting
+    // on receipt -- is what takes an upgrade back off the player if some path
+    // the unlockUpgrade() hook does not cover managed to set it.
+    //
+    // This goes through the game's own accessors rather than writing
+    // cp.upgradeProps directly. upgradeProps is a LEGACY field: the first
+    // getUpgradeProgressProps() call folds it into cp.player_upgrades and
+    // then sets it to undefined, so a write here would take effect once and
+    // silently stop mattering. getUpgradeProgressProps() returns the live
+    // store, keyed by codename, which is the same thing
+    // getUpgradeProgressByID() looks names up in.
+    //
+    // progress 2 is the game's `obtained`. 1 is `unlocked_willBeObtained`,
+    // which leaves the upgrade queued for a pickup animation the player never
+    // earned. The game applies an upgrade whenever progress > 0 and enabled.
+    const grantedUpgrades = syncGrantedUpgrades();
+    if(window._AP_shuffleUpgrades && APP.getUpgradeProgressProps){
+      try {
+        const props = APP.getUpgradeProgressProps();
+        if(props){
+          for(const cn of window._AP_knownUpgradeCns){
+            const want = grantedUpgrades.has(cn) ? 2 : 0;
+            let entry = props[cn];
+            if(!entry){
+              // Absent and not granted is already the desired state; leave it
+              // alone rather than materialising an entry for every upgrade.
+              if(!want) continue;
+              // getUpgradeProgressByID both builds the entry the way the game
+              // expects and stores it, so let it do that instead of guessing
+              // the shape.
+              entry = APP.getUpgradeProgressByID ? APP.getUpgradeProgressByID(cn) : null;
+              if(!entry) continue;
+            }
+            if(entry.progress !== want) entry.progress = want;
+            if(want && entry.enabled === false) entry.enabled = true;
+          }
+        }
+      } catch(e) {}
     }
 
     // 3. Reset AP-tracked level progress, then restore checked locations
@@ -1538,6 +1628,7 @@ window.electron = electron;
         if(st.runKey !== runKey){
           st = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[], runKey };
           window._AP_grantedPlantIds = new Set();
+          window._AP_grantedUpgrades = new Set();
           svSt();
           toast('New seed detected — state reset','#fa0');
         }
@@ -1547,6 +1638,13 @@ window.electron = electron;
           st.shopsanity = !!pkt.slot_data.shopsanity;
           st.victoryLoc = pkt.slot_data.modern_day_victory || 'modern_zomboss_01_egypt';
           skipTutorial = !!pkt.slot_data.skip_tutorial;
+          // Absent on seeds generated before the option existed, which reads
+          // as off -- the game keeps granting upgrades itself and nothing is
+          // withheld. The item map is persisted alongside it so a reload can
+          // rebuild the granted set before the socket is back.
+          st.shuffleUpgrades = !!pkt.slot_data.shuffle_upgrades;
+          st.upgradeItems    = pkt.slot_data.upgrade_items || {};
+          syncGrantedUpgrades();
           svSt();
           // DeathLink isn't known until slot_data arrives (after the initial
           // Connect), so it's applied via ConnectUpdate rather than being in
@@ -1672,6 +1770,15 @@ window.electron = electron;
       return;
     }
     if(ITEM_PLANT[name]!==undefined){ toast('🌱 '+name,'#4f4'); return; }
+    // Permanent upgrades. rebuildAPSave() runs straight after every
+    // ReceivedItems and writes upgradeProps from the granted set, so the
+    // grant itself is handled there; this only has to refresh the set the
+    // rebuild reads and say something.
+    if((st.upgradeItems||{})[name]){
+      syncGrantedUpgrades();
+      toast('⭐ '+name,'#a78bfa');
+      return;
+    }
     // Currency fillers (e.g. "500 Coins", "20 Gems"). Only the cumulative
     // GRANTED total is recorded here; actually pushing it into the game is
     // applyPendingCurrency()'s job. Applying inline would silently drop the
@@ -1955,6 +2062,7 @@ window.electron = electron;
       goalSent=false;
       svSt();
       window._AP_grantedPlantIds=new Set();
+      window._AP_grantedUpgrades=new Set();
       log('State reset.');toast('AP state cleared','#a5b4fc');
     };
 

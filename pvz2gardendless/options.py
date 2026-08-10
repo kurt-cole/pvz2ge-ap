@@ -4,7 +4,10 @@ PvZ2 Gardendless — player-facing options.
 
 import dataclasses
 
-from Options import Choice, OptionSet, Range, Toggle, DeathLink, PerGameCommonOptions
+from Options import (
+    Choice, DefaultOnToggle, OptionSet, Range, Toggle, DeathLink,
+    PerGameCommonOptions,
+)
 
 from .constants import SELECTABLE_WORLDS
 
@@ -137,6 +140,25 @@ class Shopsanity(Toggle):
     display_name = "Shopsanity"
 
 
+class ShuffleUpgrades(DefaultOnToggle):
+    """
+    Shuffle the fourteen permanent upgrades into the item pool.
+
+    These are the ones that raise your starting sun, plant food capacity, seed
+    slots, sun shovel rate and manual mowers, plus Wall-nut First Aid, Plant
+    Food Refresh and Sky Shield.
+
+    On, the game stops granting them when you clear the level or buy them --
+    the check still fires, but the upgrade itself becomes an Archipelago item
+    that can land in anyone's world, and it only takes effect once you receive
+    it. Off, the levels and store hand them out as they always have and the
+    items are not in the pool.
+
+    Off also matches how seeds generated before this option existed behave.
+    """
+    display_name = "Shuffle Upgrades"
+
+
 class TrapPercentage(Range):
     """
     Percentage of the filler item pool (coins and gems) to replace with traps.
@@ -163,5 +185,6 @@ class PvZ2Options(PerGameCommonOptions):
     modern_day_victory: ModernDayVictory
     skip_tutorial:    SkipTutorial
     shopsanity:       Shopsanity
+    shuffle_upgrades: ShuffleUpgrades
     trap_percentage:  TrapPercentage
     death_link:       DeathLink
