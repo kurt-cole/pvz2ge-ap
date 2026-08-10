@@ -1440,6 +1440,7 @@ window.electron = electron;
           st.goalLocs  = pkt.slot_data.goal_locations  || [];
           st.worldsReq = pkt.slot_data.worlds_required || 7;
           st.shopsanity = !!pkt.slot_data.shopsanity;
+          st.victoryLoc = pkt.slot_data.modern_day_victory || 'modern_zomboss_01_egypt';
           skipTutorial = !!pkt.slot_data.skip_tutorial;
           svSt();
           // DeathLink isn't known until slot_data arrives (after the initial
@@ -1735,8 +1736,10 @@ window.electron = electron;
     st.checked.push(loc);svSt();
     const id=locIds[loc];
     if(id&&conn) send([{cmd:'LocationChecks',locations:[id]}]);
-    // Victory: Modern Day zomboss checked
-    if(loc==='modern_zomboss_01_egypt')
+    // Victory: the Modern Day level chosen by the modern_day_victory option.
+    // Falls back to the Zomboss for seeds generated before that option
+    // existed, which is what used to be hardcoded here.
+    if(loc===(st.victoryLoc || 'modern_zomboss_01_egypt'))
       send([{cmd:'StatusUpdate',status:30}]);
   }
 

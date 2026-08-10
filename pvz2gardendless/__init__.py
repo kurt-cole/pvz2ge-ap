@@ -213,6 +213,16 @@ SHOP_UPGRADE_COMMODITIES = [
 SHOP_COMMODITIES = SHOP_PLANT_COMMODITIES + SHOP_UPGRADE_COMMODITIES
 SHOP_REGION = "Shop"
 
+# How far into Modern Day the run has to go, keyed by ModernDayVictory.
+# Modern Day's real order is modern1..modern31, then the ten Zomboss fights,
+# then modern35..modern44 -- which is why there is no modern32/33/34 to point
+# at: those slots are the Zomboss block.
+MODERN_DAY_VICTORY_LOCS = {
+    0: "World Key - Modern Day",      # modern16
+    1: "modern_zomboss_01_egypt",     # the Zomboss, slot ~33
+    2: "modern44",                    # final Modern Day level
+}
+
 
 def shop_location_name(commodity: str) -> str:
     return f"Shop: {commodity}"
@@ -278,6 +288,28 @@ class SkipTutorial(Toggle):
     display_name = "Skip Tutorial"
 
 
+class ModernDayVictory(Choice):
+    """
+    Which Modern Day level ends the run, once Modern Day has been unlocked.
+
+    Modern Day runs modern1-modern31, then the ten Zomboss fights, then
+    modern35-modern44, so the Zomboss sits at roughly level 33.
+
+    world_key:  clear the World Key level, modern16. Shortest.
+    zomboss:    beat the Modern Day Zomboss, around level 33. Default, and
+                what every earlier version of this world used.
+    completion: clear modern44, the final Modern Day level. Longest.
+
+    Independent of the goal type, which only decides how much of the rest of
+    the game is needed before Modern Day opens at all.
+    """
+    display_name = "Modern Day Victory"
+    option_world_key  = 0
+    option_zomboss    = 1
+    option_completion = 2
+    default = 1
+
+
 class Shopsanity(Toggle):
     """
     Turn the in-game store's one-time purchases into location checks.
@@ -311,6 +343,7 @@ class TrapPercentage(Range):
 class PvZ2Options(PerGameCommonOptions):
     goal_type:        GoalType
     worlds_required:  WorldsRequired
+    modern_day_victory: ModernDayVictory
     skip_tutorial:    SkipTutorial
     shopsanity:       Shopsanity
     trap_percentage:  TrapPercentage
@@ -1530,6 +1563,10 @@ class PvZ2GardendlessWorld(World):
             "worlds_required": req,
             "goal_locations":  goal_locs,
             "victory_locations": VICTORY_LOC_NAMES,
+            # The single location whose check ends the run. The client used to
+            # hardcode the Zomboss; it now reports goal completion off this.
+            "modern_day_victory": MODERN_DAY_VICTORY_LOCS[
+                self.options.modern_day_victory.value],
             "skip_tutorial":     bool(self.options.skip_tutorial),
             # The client needs this because location_name_to_id is static and
             # always contains the shop entries, so their presence there says
