@@ -6,9 +6,7 @@ reimagining of Plants vs. Zombies 2 ([PVZGE-Electron](https://github.com/Twig694
 finding its unique Key item, Modern Day unlocks once a configurable number of world goals are met, and
 victory is defeating the Modern Day Zomboss.
 
-## Install
-
-There are two things you might mean by "build the client", depending on what you're doing.
+## Installation
 
 ### Full build (packages the game client as an .exe)
 
@@ -33,7 +31,7 @@ This takes several minutes the first time (clone + `npm install` + packaging).
 
 **Requirements:** Python 3.8+, Node.js 18+, Git, and an internet connection for the initial clone.
 
-### Fast iteration on the client JS
+### Fast iteration on the client JS (Primarily for development)
 
 Once you've run the full build once, use `devrun.py` instead of rebuilding — it skips the clone,
 `npm install`, and packaging steps entirely:
