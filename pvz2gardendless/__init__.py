@@ -188,6 +188,36 @@ CHEAP_ATTACKER_PLANTS = [
     "Snow Pea", "Spore-shroom", "Star Fruit",
 ]
 
+# Shop commodities, taken verbatim from the game's store data. Only the
+# one-time purchases are usable as checks -- the Gem/Coin/Zen bundles in the
+# same table are repeatable, so they can be bought over and over and would
+# not be valid locations. Codenames are used as-is so the location name the
+# client builds from CommodityName always matches exactly.
+SHOP_PLANT_COMMODITIES = [
+    'imitater', 'darkmatterdragonfruit', 'snappea', 'shootingstarfruit',
+    'iceweed', 'snowdrop', 'jalapeno', 'starfruit', 'mirrornut',
+    'pinkstarfruit', 'asparagus', 'hypnoshroom', 'peanut', 'homingthistle',
+    'chomper', 'hurrikale', 'lavaguava', 'toadstool', 'powerlily',
+    'bamboozle', 'firepeashooter', 'cactus', 'electricblueberry',
+    'caulipower', 'jackolantern', 'grapeshot', 'escaperoot', 'explodeonut',
+    'applemortar', 'wasabiwhip', 'floawerPot', 'coldsnapdragon',
+    'missiletoe', 'electricpeashooter', 'zoybeanpod', 'shrinkingviolet',
+    'pyrevine', 'cranjelly',
+]  # 38
+
+SHOP_UPGRADE_COMMODITIES = [
+    'upgrade_sunshovel_lvl3', 'upgrade_8_slots', 'upgrade_pf_slots_lvl2',
+    'upgrade_starting_sun_lvl2', 'upgrade_manual_mowers_2',
+]  # 5
+
+SHOP_COMMODITIES = SHOP_PLANT_COMMODITIES + SHOP_UPGRADE_COMMODITIES
+SHOP_REGION = "Shop"
+
+
+def shop_location_name(commodity: str) -> str:
+    return f"Shop: {commodity}"
+
+
 SIDE_PATH_REGIONS = [
     "Aloe Sidepath", "Appease Sidepath", "Atombomb Sidepath", "Bank Sidepath",
     "Bloominghearts Sidepath", "Buttercup Sidepath", "Conceal Sidepath",
@@ -248,6 +278,18 @@ class SkipTutorial(Toggle):
     display_name = "Skip Tutorial"
 
 
+class Shopsanity(Toggle):
+    """
+    Turn the in-game store's one-time purchases into location checks.
+
+    Adds 43 checks: the 38 plants and 5 upgrades the store sells. The gem,
+    coin and sprout bundles are excluded because they can be bought
+    repeatedly. Buying a plant still will not grant it -- plants only come
+    from Archipelago -- so a purchase spends the currency and sends the check.
+    """
+    display_name = "Shopsanity"
+
+
 class TrapPercentage(Range):
     """
     Percentage of the filler item pool (coins and gems) to replace with traps.
@@ -270,6 +312,7 @@ class PvZ2Options(PerGameCommonOptions):
     goal_type:        GoalType
     worlds_required:  WorldsRequired
     skip_tutorial:    SkipTutorial
+    shopsanity:       Shopsanity
     trap_percentage:  TrapPercentage
     death_link:       DeathLink
 
@@ -479,15 +522,16 @@ class PvZ2LocationData:
     region: str
     code: int
     is_victory: bool = False
+    is_shop: bool = False
 
 
 def _make_locs() -> List[PvZ2LocationData]:
     locs = []
     id_ = BASE_ID + 0x10000
 
-    def add(name, region, victory=False):
+    def add(name, region, victory=False, shop=False):
         nonlocal id_
-        locs.append(PvZ2LocationData(name, region, id_, victory))
+        locs.append(PvZ2LocationData(name, region, id_, victory, shop))
         id_ += 1
 
     # ── Tutorial ──
@@ -1222,6 +1266,14 @@ def _make_locs() -> List[PvZ2LocationData]:
     add("sandbox_modern_night", "Sandbox Sidepath")
     add("sandbox_sky", "Sandbox Sidepath")
 
+    # ── Shop (only created when shopsanity is on) ──
+    # Appended last so every pre-existing location keeps the ID it already
+    # had. These stay in the static location_name_to_id map either way --
+    # AP requires that mapping to be constant across option combinations --
+    # but the Location objects are only built when the option is enabled.
+    for commodity in SHOP_COMMODITIES:
+        add(shop_location_name(commodity), SHOP_REGION, shop=True)
+
     return locs
 
 
@@ -1289,8 +1341,21 @@ class PvZ2GardendlessWorld(World):
         # short and causing "more locations than items" fill failures.
         return self.random.choice(FILLER_ITEMS).name
 
+    def active_locations(self) -> List[PvZ2LocationData]:
+        """Locations actually built for this slot's options.
+
+        Shop locations stay in the static location_name_to_id map regardless
+        (AP requires that to be constant), so they must be filtered here
+        rather than out of ALL_LOCATIONS -- and create_items() has to size the
+        pool off this, not len(ALL_LOCATIONS), or a shopsanity-off slot ends
+        up with 43 more items than it has places to put them.
+        """
+        if self.options.shopsanity:
+            return ALL_LOCATIONS
+        return [l for l in ALL_LOCATIONS if not l.is_shop]
+
     def create_items(self) -> None:
-        pool_size = len(ALL_LOCATIONS)
+        pool_size = len(self.active_locations())
 
         # Build into a local list, NOT straight into multiworld.itempool --
         # that pool is shared by every player, so measuring it to size the
@@ -1407,8 +1472,14 @@ class PvZ2GardendlessWorld(World):
         for sp in SIDE_PATH_REGIONS:
             tutorial.connect(regions[sp])
 
+        # Shop — reachable from the world map at any time. Affordability is
+        # not modelled: currency accrues from play and from Archipelago's own
+        # coin/gem items, so a purchase is a matter of grinding rather than a
+        # logic gate.
+        tutorial.connect(regions[SHOP_REGION])
+
         # Add all locations to their regions
-        for loc_data in ALL_LOCATIONS:
+        for loc_data in self.active_locations():
             region = regions.get(loc_data.region, tutorial)
             loc = Location(self.player, loc_data.name, loc_data.code, region)
             region.locations.append(loc)
@@ -1460,4 +1531,8 @@ class PvZ2GardendlessWorld(World):
             "goal_locations":  goal_locs,
             "victory_locations": VICTORY_LOC_NAMES,
             "skip_tutorial":     bool(self.options.skip_tutorial),
+            # The client needs this because location_name_to_id is static and
+            # always contains the shop entries, so their presence there says
+            # nothing about whether this slot actually has them.
+            "shopsanity":        bool(self.options.shopsanity),
         }

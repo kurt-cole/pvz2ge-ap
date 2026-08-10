@@ -178,12 +178,35 @@ window.electron = electron;
     // Square.getLane(0..4) is how the Lawn Mower Trap reaches each lane's
     // mower.
     'Square':    function(v) { window._AP_Square    = v; },
+    'StoreCommodity': function(v) { installStoreHook(v); },
   };
+
+  // Shopsanity: unlockCommodity() is the single point every completed store
+  // purchase passes through, and it still holds the commodity being bought,
+  // so hooking it catches plants and upgrades alike without touching the
+  // buy-button or currency paths.
+  function installStoreHook(SC) {
+    if (!SC || SC._ap_hooked_store || !SC.prototype || !SC.prototype.unlockCommodity) return;
+    const _origUnlockCommodity = SC.prototype.unlockCommodity;
+    SC.prototype.unlockCommodity = function() {
+      try {
+        const c = this.currentCommodity;
+        // Only the one-time purchases are checks; gem/coin/sprout bundles are
+        // repeatable and have no CommodityName at all.
+        if (c && c.CommodityName && window._AP_onShopPurchase &&
+            (c.CommodityType === 'plant' || c.CommodityType === 'upgrade')) {
+          window._AP_onShopPurchase(c.CommodityName);
+        }
+      } catch (e) { /* never block the purchase itself */ }
+      return _origUnlockCommodity.apply(this, arguments);
+    };
+    SC._ap_hooked_store = true;
+  }
 
   const _origRegister = System.register.bind(System);
   System.register = function(name, deps, declare) {
     if (typeof name === 'string' &&
-        /(?:PlayerProperties|UI|CoinCount|GemCount|Square)\.ts/.test(name)) {
+        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity)\.ts/.test(name)) {
       const _origDeclare = declare;
       declare = function(_export, _context) {
         return _origDeclare(function(exportName, value) {
@@ -1397,6 +1420,7 @@ window.electron = electron;
         if(pkt.slot_data){
           st.goalLocs  = pkt.slot_data.goal_locations  || [];
           st.worldsReq = pkt.slot_data.worlds_required || 7;
+          st.shopsanity = !!pkt.slot_data.shopsanity;
           skipTutorial = !!pkt.slot_data.skip_tutorial;
           svSt();
           // DeathLink isn't known until slot_data arrives (after the initial
@@ -1627,6 +1651,15 @@ window.electron = electron;
     }
     return fired > 0;
   }
+
+  // ── Shopsanity ────────────────────────────────────────────────────────────
+  // Called (via window._AP_onShopPurchase) from the StoreCommodity hook.
+  window._AP_onShopPurchase = function(commodityName){
+    // location_name_to_id always carries the shop entries, so their presence
+    // proves nothing -- slot_data is what says this slot actually has them.
+    if(!st.shopsanity) return;
+    fireCheck('Shop: ' + commodityName);
+  };
 
   function applyPendingTraps(){
     let pending = st.pendingMowerTraps || 0;
