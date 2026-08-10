@@ -64,11 +64,16 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
     # logic gate.
     tutorial.connect(regions[SHOP_REGION])
 
-    # Add all locations to their regions
+    # Add all locations to their regions. Indexed, not .get(name, tutorial):
+    # ALL_REGIONS is derived from these same locations, so a miss is
+    # impossible today and would mean the two had drifted apart. Falling back
+    # to Tutorial would quietly relocate the orphans into sphere 1, where
+    # nothing gates them -- a KeyError at generation time is the far cheaper
+    # failure.
     for loc_data in world.active_locations():
-        region = regions.get(loc_data.region, tutorial)
-        loc = PvZ2Location(player, loc_data.name, loc_data.code, region)
-        region.locations.append(loc)
+        region = regions[loc_data.region]
+        region.locations.append(
+            PvZ2Location(player, loc_data.name, loc_data.code, region))
 
     # Victory event in Modern Day. multiworld.completion_condition is set in
     # rules.py, alongside the rest of this world's logic.
