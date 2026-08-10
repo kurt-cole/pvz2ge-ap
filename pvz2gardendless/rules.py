@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING
 
 from worlds.generic.Rules import add_rule, set_rule
 
-from .constants import CHEAP_ATTACKER_PLANTS, KEYED_WORLDS, SUN_PRODUCER_PLANTS
+from .constants import (
+    CHEAP_ATTACKER_PLANTS, KEYED_WORLDS, SUN_PRODUCER_PLANTS, WORLD_ENTRY_PLANTS,
+)
 from .locations import LOC_NAME_TO_DATA, goal_locations_for
 
 if TYPE_CHECKING:
@@ -43,15 +45,12 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # A few worlds need a specific plant beyond their key. add_rule ANDs onto
     # the entrance's existing key requirement, which is equivalent to gating
     # every location inside the region individually but without the
-    # per-location loop.
-    add_rule(multiworld.get_entrance("Enter Big Wave Beach", player),
-              lambda state: state.has("Lily Pad", player))
-    add_rule(multiworld.get_entrance("Enter Frostbite Caves", player),
-              lambda state: (state.has("Hot Potato", player) or
-                             state.has("Pepper-pult", player) or
-                             state.has("Fire Peashooter", player)))
-    add_rule(multiworld.get_entrance("Enter Jurassic Marsh", player),
-              lambda state: state.has("Perfume-shroom", player))
+    # per-location loop. The plant lists live in constants.WORLD_ENTRY_PLANTS
+    # so items.py can force every one of them to progression -- see
+    # LOGIC_PLANTS.
+    for world_name, plants in WORLD_ENTRY_PLANTS.items():
+        add_rule(multiworld.get_entrance(f"Enter {world_name}", player),
+                 lambda state, p=plants: state.has_any(p, player))
 
     # Modern Day — unlocked once enough world goals (trophies / completions /
     # keys, per the goal_type option) are reachable.

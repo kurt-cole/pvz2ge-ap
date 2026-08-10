@@ -7,7 +7,7 @@ from typing import Dict, List, TYPE_CHECKING
 
 from BaseClasses import Item, ItemClassification
 
-from .constants import BASE_ID, CHEAP_ATTACKER_PLANTS, KEYED_WORLDS, SUN_PRODUCER_PLANTS
+from .constants import BASE_ID, KEYED_WORLDS, LOGIC_PLANTS
 
 if TYPE_CHECKING:
     from . import PvZ2GardendlessWorld
@@ -169,13 +169,20 @@ _plants = [
 # can never be satisfied, and fill responds by treating everything behind it
 # as unreachable (verified in a spoiler log: zero progression items placed in
 # any gated Ancient Egypt region, and no sun producer anywhere in sphere 1).
-# Promoting them here keeps the item IDs below unchanged.
-_GATING_PLANTS = set(SUN_PRODUCER_PLANTS) | set(CHEAP_ATTACKER_PLANTS)
-
+# LOGIC_PLANTS is assembled from the rule data itself, so a plant cannot be
+# named by a rule without being promoted here. Promoting leaves the item IDs
+# below unchanged.
 for i, (name, cls) in enumerate(_plants):
-    if name in _GATING_PLANTS:
+    if name in LOGIC_PLANTS:
         cls = ItemClassification.progression
     PLANT_ITEMS.append(PvZ2Item(name, cls, BASE_ID + i))
+
+# A rule naming a plant with no matching item is a rule that can never pass,
+# and it would fail silently -- state.has() just returns False forever.
+_unknown_logic_plants = LOGIC_PLANTS - {plant.name for plant in PLANT_ITEMS}
+if _unknown_logic_plants:
+    raise ValueError("access rules reference plants that have no item: "
+                     f"{sorted(_unknown_logic_plants)}")
 
 # World Key items — one per keyed world.
 # Modern Day no longer uses a key (it unlocks purely on the world-goal

@@ -46,6 +46,30 @@ CHEAP_ATTACKER_PLANTS = [
     "Snow Pea", "Spore-shroom", "Star Fruit",
 ]
 
+# Plants a world needs on top of its key item. rules.py ANDs one has_any()
+# per entry onto that world's key requirement, so adding a world here is all
+# it takes to gate it -- and its plants are picked up by LOGIC_PLANTS below
+# automatically.
+WORLD_ENTRY_PLANTS = {
+    "Big Wave Beach":  ["Lily Pad"],
+    "Frostbite Caves": ["Hot Potato", "Pepper-pult", "Fire Peashooter"],
+    "Jurassic Marsh":  ["Perfume-shroom"],
+}
+
+# Every plant named by an access rule anywhere in rules.py. items.py forces
+# each of these to progression, because AP only tracks advancement items in
+# CollectionState.prog_items -- state.has()/has_any() is permanently False for
+# a "useful" item, so a rule naming one silently loses that option.
+# This set is derived from the rule data rather than maintained by hand: the
+# hand-maintained version is what left Pepper-pult and Fire Peashooter at
+# "useful" while the Frostbite Caves rule named them, quietly collapsing that
+# rule to "Hot Potato only".
+LOGIC_PLANTS = (
+    set(SUN_PRODUCER_PLANTS)
+    | set(CHEAP_ATTACKER_PLANTS)
+    | {plant for plants in WORLD_ENTRY_PLANTS.values() for plant in plants}
+)
+
 # Shop commodities, taken verbatim from the game's store data. Only the
 # one-time purchases are usable as checks -- the Gem/Coin/Zen bundles in the
 # same table are repeatable, so they can be bought over and over and would

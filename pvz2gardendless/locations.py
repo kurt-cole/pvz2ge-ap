@@ -775,7 +775,13 @@ LOC_NAME_TO_DATA: Dict[str, PvZ2LocationData] = {l.name: l for l in ALL_LOCATION
 LOC_NAME_TO_ID:   Dict[str, int]              = {l.name: l.code for l in ALL_LOCATIONS}
 VICTORY_LOC_NAMES = [l.name for l in ALL_LOCATIONS if l.is_victory]
 
-ALL_REGIONS = list({l.region for l in ALL_LOCATIONS})
+# dict.fromkeys, not a set: set iteration order for strings varies between
+# processes (hash randomization), which would make the order regions are
+# appended to multiworld.regions differ run to run for one seed. AP sorts
+# locations and items before shuffling them, so this does not currently move
+# a seed's fill -- but nothing guarantees every consumer sorts, and first-seen
+# order costs nothing.
+ALL_REGIONS = list(dict.fromkeys(l.region for l in ALL_LOCATIONS))
 
 
 def active_locations(shopsanity: bool) -> List[PvZ2LocationData]:
@@ -784,7 +790,7 @@ def active_locations(shopsanity: bool) -> List[PvZ2LocationData]:
     Shop locations stay in the static location_name_to_id map regardless
     (AP requires that to be constant), so they must be filtered here rather
     than out of ALL_LOCATIONS -- and the item pool has to size off this, not
-    len(ALL_LOCATIONS), or a shopsanity-off slot ends up with 43 more items
+    len(ALL_LOCATIONS), or a shopsanity-off slot ends up with 39 more items
     than it has places to put them.
     """
     if shopsanity:
