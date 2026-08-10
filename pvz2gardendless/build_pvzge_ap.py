@@ -1936,14 +1936,33 @@ window.electron = electron;
   let _speed = 1.0;
   const _SPEED_STEP = 0.25, _SPEED_MIN = 0.5, _SPEED_MAX = 8.0;
 
-  function setSpeed(s) {
-    _speed = Math.round(Math.min(_SPEED_MAX, Math.max(_SPEED_MIN, s)) * 100) / 100;
+  // The engine is loaded as a SystemJS module, not a global: index.html
+  // bootstraps with System.import('./index.js') and nothing ever assigns
+  // window.cc or globalThis.cc. A bare `cc` reference is therefore always
+  // undefined, which is why the old check fell through to its warning and
+  // the speed never actually changed. Pull the module out of the registry
+  // instead -- 'cc' is in the import map, and it is already loaded by the
+  // time any key can be pressed.
+  let _ccModule = null;
+  function getCC() {
+    if (_ccModule) return _ccModule;
     try {
-      if (typeof cc !== 'undefined' && cc.director)
-        cc.director.getScheduler().setTimeScale(_speed);
-      else
-        toast(`⚠️ cc not ready`, '#f88');
-    } catch(e) { toast(`⚠️ ${e.message}`, '#f88'); }
+      if (typeof System === 'undefined') return null;
+      _ccModule = System.get(System.resolve('cc')) || null;
+    } catch (e) { _ccModule = null; }
+    return _ccModule;
+  }
+
+  function setSpeed(s) {
+    const clamped = Math.round(Math.min(_SPEED_MAX, Math.max(_SPEED_MIN, s)) * 100) / 100;
+    const CC = getCC();
+    if (!CC || !CC.director) { toast('⚠️ engine not ready', '#f88'); return; }
+    try {
+      CC.director.getScheduler().setTimeScale(clamped);
+    } catch (e) { toast(`⚠️ ${e.message}`, '#f88'); return; }
+    // Only commit the new speed once it actually took, so the displayed
+    // value can't drift away from the engine's.
+    _speed = clamped;
     toast(`⏩ ${_speed}x`, '#aaf');
   }
 
