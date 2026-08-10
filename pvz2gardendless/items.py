@@ -229,6 +229,19 @@ ITEM_NAME_GROUPS: Dict[str, set] = {
     "Traps":      {i.name for i in TRAP_ITEMS},
 }
 
+# Order filler is dealt out in. It deliberately interleaves the two currencies
+# instead of reusing FILLER_ITEMS order, which is grouped by type and would
+# hand out a long run of coins followed by a long run of gems.
+FILLER_CYCLE = ["100 Coins", "500 Coins", "10 Gems",
+                "1000 Coins", "20 Gems", "50 Gems"]
+
+# The two lists drifting apart would not raise: a name here that is not a real
+# item reaches create_item() as an unknown, which builds it with code=None --
+# and AP reads a None code as an event, not a pool item.
+if set(FILLER_CYCLE) != {f.name for f in FILLER_ITEMS}:
+    raise ValueError("FILLER_CYCLE and FILLER_ITEMS disagree: "
+                     f"{sorted(set(FILLER_CYCLE) ^ {f.name for f in FILLER_ITEMS})}")
+
 
 def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item]:
     """Build this slot's item pool. Does not touch multiworld.itempool --
@@ -258,15 +271,7 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
         pool.append(world.create_item(LAWN_MOWER_TRAP))
     remaining -= trap_count
 
-    filler_cycle = ["100 Coins", "500 Coins", "10 Gems",
-                    "1000 Coins", "20 Gems", "50 Gems"]
-    fi = 0
-    while remaining > 0:
-        name = filler_cycle[fi % len(filler_cycle)]
-        pool.append(
-            PvZ2Item(name, ItemClassification.filler,
-                     ITEM_NAME_TO_ID.get(name), world.player))
-        fi += 1
-        remaining -= 1
+    for i in range(remaining):
+        pool.append(world.create_item(FILLER_CYCLE[i % len(FILLER_CYCLE)]))
 
     return pool

@@ -71,6 +71,3 @@ and sends the check.
 The repeatable gem, coin and sprout bundles are excluded because they can be bought over and over,
 and four ticket-priced plants are excluded because tickets have no Archipelago source and would be
 pure grind.
-
-**Known limitation:** most store entries are gated behind an in-game level in addition to their
-price, and logic does not currently model that. See the development notes in the repository README.
