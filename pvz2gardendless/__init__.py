@@ -193,8 +193,13 @@ CHEAP_ATTACKER_PLANTS = [
 # same table are repeatable, so they can be bought over and over and would
 # not be valid locations. Codenames are used as-is so the location name the
 # client builds from CommodityName always matches exactly.
+# Deliberately excluded: imitater, darkmatterdragonfruit, snappea and
+# shootingstarfruit are priced in tickets (1000 each). Tickets only come from
+# Pinata prizes and in-level drops worth 10 apiece, there is no ticket bundle
+# in the store, and Archipelago has no ticket item -- so those four would be
+# ~400 pickups of pure grind. Everything kept below is priced in gems, which
+# AP's filler actually supplies.
 SHOP_PLANT_COMMODITIES = [
-    'imitater', 'darkmatterdragonfruit', 'snappea', 'shootingstarfruit',
     'iceweed', 'snowdrop', 'jalapeno', 'starfruit', 'mirrornut',
     'pinkstarfruit', 'asparagus', 'hypnoshroom', 'peanut', 'homingthistle',
     'chomper', 'hurrikale', 'lavaguava', 'toadstool', 'powerlily',
@@ -203,12 +208,12 @@ SHOP_PLANT_COMMODITIES = [
     'applemortar', 'wasabiwhip', 'floawerPot', 'coldsnapdragon',
     'missiletoe', 'electricpeashooter', 'zoybeanpod', 'shrinkingviolet',
     'pyrevine', 'cranjelly',
-]  # 38
+]  # 34, all gem-priced
 
 SHOP_UPGRADE_COMMODITIES = [
     'upgrade_sunshovel_lvl3', 'upgrade_8_slots', 'upgrade_pf_slots_lvl2',
     'upgrade_starting_sun_lvl2', 'upgrade_manual_mowers_2',
-]  # 5
+]  # 5, all gem-priced
 
 SHOP_COMMODITIES = SHOP_PLANT_COMMODITIES + SHOP_UPGRADE_COMMODITIES
 SHOP_REGION = "Shop"
@@ -314,10 +319,16 @@ class Shopsanity(Toggle):
     """
     Turn the in-game store's one-time purchases into location checks.
 
-    Adds 43 checks: the 38 plants and 5 upgrades the store sells. The gem,
+    Adds 39 checks: 34 plants and 5 upgrades, all priced in gems. The gem,
     coin and sprout bundles are excluded because they can be bought
-    repeatedly. Buying a plant still will not grant it -- plants only come
-    from Archipelago -- so a purchase spends the currency and sends the check.
+    repeatedly, and the four ticket-priced plants are excluded because
+    tickets are pure grind with no Archipelago source.
+
+    Note no store check is priced in coins, so coins only help indirectly,
+    by buying gem bundles.
+
+    Buying a plant still will not grant it -- plants only come from
+    Archipelago -- so a purchase spends the currency and sends the check.
     """
     display_name = "Shopsanity"
 
