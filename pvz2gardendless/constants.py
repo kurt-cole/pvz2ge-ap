@@ -3,15 +3,63 @@ Static world-shape data shared across items.py, locations.py, regions.py and
 rules.py: identifiers, world lists, and the plant sets used for logic gating.
 """
 
+from typing import Dict, List
+
 GAME_NAME = "PvZ2 Gardendless"
 BASE_ID   = 0xD1A2B3C4
 
-# Worlds that need a key item to access (Ancient Egypt is always free)
+# Worlds that need a key item to access (Ancient Egypt is always free).
+# ORDER IS LOAD-BEARING: items.py derives each World Key's item ID from this
+# list's index, so reordering or inserting renumbers keys for every existing
+# seed. Append only.
 KEYED_WORLDS = [
     "Pirate Seas", "Wild West", "Far Future", "Dark Ages",
     "Big Wave Beach", "Frostbite Caves", "Lost City",
     "Kongfu Temple", "Neon Mixtape Tour", "Jurassic Marsh", "Modern Day", "Aerial Fortress",
 ]
+
+# ── Main worlds ───────────────────────────────────────────────────────────────
+# Every main world mapped to the regions that make it up, in game order.
+# Ancient Egypt is the only multi-region entry: it is split into sequential
+# checkpoints so its 35 levels are not all flatly reachable (see regions.py).
+# Regions NOT listed here -- Tutorial, the side paths, Shop -- are not part of
+# any world and are always built.
+WORLD_REGIONS: Dict[str, List[str]] = {
+    "Ancient Egypt":     ["Ancient Egypt", "Ancient Egypt Mid1",
+                          "Ancient Egypt Mid2", "Ancient Egypt Late"],
+    "Pirate Seas":       ["Pirate Seas"],
+    "Wild West":         ["Wild West"],
+    "Far Future":        ["Far Future"],
+    "Dark Ages":         ["Dark Ages"],
+    "Big Wave Beach":    ["Big Wave Beach"],
+    "Frostbite Caves":   ["Frostbite Caves"],
+    "Lost City":         ["Lost City"],
+    "Kongfu Temple":     ["Kongfu Temple"],
+    "Neon Mixtape Tour": ["Neon Mixtape Tour"],
+    "Jurassic Marsh":    ["Jurassic Marsh"],
+    "Aerial Fortress":   ["Aerial Fortress"],
+    "Modern Day":        ["Modern Day"],
+}
+
+ALL_WORLD_REGIONS = {r for regions in WORLD_REGIONS.values() for r in regions}
+
+# Worlds every seed keeps, whatever the world-selection options say. Ancient
+# Egypt is the only world reachable with no items at all, so it is what
+# sphere 1 is made of; Modern Day holds the victory location. A seed missing
+# either has no opening or no ending.
+ALWAYS_ENABLED_WORLDS = ["Ancient Egypt", "Modern Day"]
+
+# The worlds enabled_worlds / world_count actually choose between. Modern Day
+# is not offered -- it is the goal world, and it is gated by the world-goal
+# count rather than by being in or out of the pool.
+SELECTABLE_WORLDS = [w for w in WORLD_REGIONS if w != "Modern Day"]
+OPTIONAL_WORLDS   = [w for w in SELECTABLE_WORLDS if w not in ALWAYS_ENABLED_WORLDS]
+
+# World Key item name -> world, so the pool builder can drop the keys of
+# worlds this slot did not enable. Built from KEYED_WORLDS rather than by
+# slicing " Key" off the item names, which would break on a world whose name
+# ever ends in "Key".
+KEY_NAME_TO_WORLD = {f"{world} Key": world for world in KEYED_WORLDS}
 
 # Sequential sphere-1 gating for Ancient Egypt (see checkpoint split in
 # regions.py): each checkpoint requires at least one of these sun producers

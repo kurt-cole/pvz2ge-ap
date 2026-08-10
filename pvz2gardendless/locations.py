@@ -3,13 +3,13 @@ PvZ2 Gardendless — location definitions and goal/victory location lookups.
 """
 
 import dataclasses
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 
 from BaseClasses import Location
 
 from .constants import (
-    BASE_ID, GAME_NAME, SHOP_COMMODITIES, SHOP_REGION, SIDE_PATH_REGIONS,
-    shop_location_name,
+    ALL_WORLD_REGIONS, BASE_ID, GAME_NAME, SHOP_COMMODITIES, SHOP_REGION,
+    SIDE_PATH_REGIONS, shop_location_name,
 )
 from .options import GoalType
 
@@ -796,18 +796,33 @@ VICTORY_LOC_NAMES = [l.name for l in ALL_LOCATIONS if l.is_victory]
 ALL_REGIONS = list(dict.fromkeys(l.region for l in ALL_LOCATIONS))
 
 
-def active_locations(shopsanity: bool) -> List[PvZ2LocationData]:
-    """Locations actually built for a slot with the given Shopsanity setting.
+# Every region a location can be in has to be either part of a world (and so
+# switchable by the world-selection options) or one of the always-built ones.
+# A region in neither would be silently dropped from the seed by the filter in
+# active_locations(), taking its locations with it.
+_unclassified_regions = (set(ALL_REGIONS) - ALL_WORLD_REGIONS
+                         - set(SIDE_PATH_REGIONS) - {"Tutorial", SHOP_REGION})
+if _unclassified_regions:
+    raise ValueError("regions belong to no world and are not always-built: "
+                     f"{sorted(_unclassified_regions)}")
 
-    Shop locations stay in the static location_name_to_id map regardless
-    (AP requires that to be constant), so they must be filtered here rather
-    than out of ALL_LOCATIONS -- and the item pool has to size off this, not
-    len(ALL_LOCATIONS), or a shopsanity-off slot ends up with 39 more items
-    than it has places to put them.
+
+def active_locations(shopsanity: bool,
+                     enabled_regions: Set[str]) -> List[PvZ2LocationData]:
+    """Locations actually built for a slot with these settings.
+
+    Shop and disabled-world locations stay in the static location_name_to_id
+    map regardless (AP requires that to be constant), so they must be filtered
+    here rather than out of ALL_LOCATIONS -- and the item pool has to size off
+    this, not len(ALL_LOCATIONS), or a slot ends up with more items than it
+    has places to put them.
+
+    enabled_regions only decides world regions. Tutorial, the side paths and
+    Shop are not part of any world and are always kept.
     """
-    if shopsanity:
-        return ALL_LOCATIONS
-    return [l for l in ALL_LOCATIONS if not l.is_shop]
+    return [l for l in ALL_LOCATIONS
+            if (shopsanity or not l.is_shop)
+            and (l.region not in ALL_WORLD_REGIONS or l.region in enabled_regions)]
 
 
 # World Trophy locations — the mid-world milestone check in each world.
@@ -866,18 +881,28 @@ WORLD_KEY_LOCS = [
 ]  # 11 total
 
 
-def goal_locations_for(goal_type: int) -> List[str]:
+def goal_locations_for(goal_type: int,
+                       enabled_regions: Optional[Set[str]] = None) -> List[str]:
+    """The goal locations for this goal type that this slot actually builds.
+
+    enabled_regions drops the goals of worlds the seed left out. Their
+    locations are never created, so rules.py would raise looking them up --
+    and a goal nobody can reach would lock Modern Day for good. Dropping them
+    is what shrinks worlds_required to fit: the caller clamps against the
+    length of this list.
+    """
     if goal_type == GoalType.option_world_trophies:
         locs = WORLD_TROPHY_LOCS
     elif goal_type == GoalType.option_world_keys:
         locs = WORLD_KEY_LOCS
     else:
         locs = WORLD_COMPLETION_LOCS
-    # Drop names with no matching location. regions.py looks each of these up
-    # in LOC_NAME_TO_DATA and calls state.can_reach() on it, so a stale name
-    # would raise KeyError during generation instead of just shrinking the
-    # goal pool.
-    return [n for n in locs if n in LOC_NAME_TO_ID]
+    # Also drops names with no matching location at all, so a stale name here
+    # just shrinks the goal pool rather than raising during generation.
+    return [n for n in locs
+            if n in LOC_NAME_TO_DATA
+            and (enabled_regions is None
+                 or LOC_NAME_TO_DATA[n].region in enabled_regions)]
 
 
 # How far into Modern Day the run has to go, keyed by ModernDayVictory.

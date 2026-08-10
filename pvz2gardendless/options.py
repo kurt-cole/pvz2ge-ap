@@ -4,7 +4,51 @@ PvZ2 Gardendless — player-facing options.
 
 import dataclasses
 
-from Options import Choice, Range, Toggle, DeathLink, PerGameCommonOptions
+from Options import Choice, OptionSet, Range, Toggle, DeathLink, PerGameCommonOptions
+
+from .constants import SELECTABLE_WORLDS
+
+
+class WorldCount(Range):
+    """
+    How many main worlds this seed uses, counting Ancient Egypt.
+
+    Ancient Egypt is always one of them -- it is the only world playable with
+    no items, so it is where the seed opens. Modern Day is not counted: it is
+    the goal world and is always present, unlocked by the world-goal
+    requirement rather than by being picked here.
+
+    The remaining slots are filled at random from the worlds not already named
+    in enabled_worlds. Set this to `random` to let the generator pick the
+    number of worlds too.
+
+    Locations in worlds that are left out are removed from the seed entirely,
+    along with their World Key items, so those worlds stay locked for good.
+
+    12 (the default) is every world, which is how this game has always
+    generated.
+    """
+    display_name = "World Count"
+    range_start  = 1
+    range_end    = len(SELECTABLE_WORLDS)
+    default      = len(SELECTABLE_WORLDS)
+
+
+class EnabledWorlds(OptionSet):
+    """
+    Worlds this seed must include. Any world named here is always in.
+
+    Leave it empty to have world_count pick every world at random. Name fewer
+    worlds than world_count and the rest of the slots are filled at random;
+    name more and every one of them is still included, since an explicit
+    choice always wins over the count.
+
+    Ancient Egypt is included whether or not it is listed. Modern Day is not a
+    valid entry -- it is always present as the goal world.
+    """
+    display_name = "Enabled Worlds"
+    valid_keys   = SELECTABLE_WORLDS
+    default      = frozenset()
 
 
 class GoalType(Choice):
@@ -33,6 +77,10 @@ class WorldsRequired(Range):
     How many worlds must satisfy the goal condition before Modern Day unlocks.
     For world_trophies the effective cap is 10 (Kongfu Temple excluded).
     For world_completions and world_keys the cap is 11.
+
+    Worlds left out by world_count / enabled_worlds take their goal location
+    with them, so this is clamped down to what the seed can actually offer --
+    asking for 4 world keys in a 3-world seed requires 3.
     """
     display_name = "Worlds Required for Modern Day"
     range_start  = 1
@@ -108,6 +156,8 @@ class TrapPercentage(Range):
 
 @dataclasses.dataclass
 class PvZ2Options(PerGameCommonOptions):
+    world_count:      WorldCount
+    enabled_worlds:   EnabledWorlds
     goal_type:        GoalType
     worlds_required:  WorldsRequired
     modern_day_victory: ModernDayVictory

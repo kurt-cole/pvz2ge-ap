@@ -10,7 +10,9 @@ from typing import Dict, TYPE_CHECKING
 
 from BaseClasses import Region, ItemClassification
 
-from .constants import KEYED_WORLDS, SHOP_REGION, SIDE_PATH_REGIONS
+from .constants import (
+    ALL_WORLD_REGIONS, KEYED_WORLDS, SHOP_REGION, SIDE_PATH_REGIONS,
+)
 from .items import PvZ2Item
 from .locations import ALL_REGIONS, PvZ2Location
 
@@ -28,11 +30,17 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
 
     regions: Dict[str, Region] = {"Menu": menu, "Tutorial": tutorial}
 
+    # Regions of worlds this seed left out are never built, so nothing can be
+    # placed in them and nothing can route through them. Shop is built even
+    # with shopsanity off: an empty region costs nothing, while a missing one
+    # would break the connect below.
+    built = ({r for r in ALL_REGIONS if r not in ALL_WORLD_REGIONS}
+             | world.enabled_regions)
     for name in ALL_REGIONS:
-        if name not in regions:
+        if name in built and name not in regions:
             regions[name] = Region(name, player, multiworld)
 
-    # Ancient Egypt — always accessible from Tutorial
+    # Ancient Egypt — always accessible from Tutorial, and always built
     tutorial.connect(regions["Ancient Egypt"])
 
     # Ancient Egypt is split into sequential checkpoints (roughly every 10
@@ -45,9 +53,13 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
         prev_egypt_region = regions[checkpoint_name]
 
     # Keyed main worlds — rules.py requires each world's key on its entrance.
+    # Only the enabled ones get an entrance, which is what rules.py keys off:
+    # it walks the same list and would raise on a missing entrance otherwise.
     for w in KEYED_WORLDS:
         if w == "Modern Day":
             continue  # handled separately, see below
+        if w not in world.enabled_worlds:
+            continue
         tutorial.connect(regions[w], f"Enter {w}")
 
     # Modern Day — unlocked purely by meeting the world-goal requirement

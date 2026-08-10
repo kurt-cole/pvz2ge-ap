@@ -8,13 +8,16 @@ Victory = defeat the Modern Day Zomboss.
 """
 
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Set
 
 from worlds.AutoWorld import World, WebWorld
 from BaseClasses import Item, ItemClassification, Tutorial
 import settings
 
-from .constants import CHEAP_ATTACKER_PLANTS, GAME_NAME
+from .constants import (
+    ALWAYS_ENABLED_WORLDS, CHEAP_ATTACKER_PLANTS, GAME_NAME, OPTIONAL_WORLDS,
+    SELECTABLE_WORLDS, WORLD_REGIONS,
+)
 from .options import PvZ2Options
 from .items import (
     FILLER_ITEMS, ITEM_NAME_GROUPS, ITEM_NAME_TO_ID, ITEM_NAME_TO_ITEM,
@@ -147,6 +150,9 @@ class PvZ2Web(WebWorld):
     # it actually means to pin; everything else falls back to its default.
     options_presets = {
         "Short": {
+            # Four worlds counting Ancient Egypt, so worlds_required's 3 is
+            # exactly the three keyed worlds the seed actually contains.
+            "world_count":        4,
             "goal_type":          "world_keys",
             "worlds_required":    3,
             "modern_day_victory": "world_key",
@@ -154,6 +160,7 @@ class PvZ2Web(WebWorld):
             "shopsanity":         False,
         },
         "Standard": {
+            "world_count":        12,
             "goal_type":          "world_keys",
             "worlds_required":    7,
             "modern_day_victory": "zomboss",
@@ -161,6 +168,7 @@ class PvZ2Web(WebWorld):
             "shopsanity":         False,
         },
         "Completionist": {
+            "world_count":        12,
             "goal_type":          "world_completions",
             "worlds_required":    11,
             "modern_day_victory": "completion",
@@ -192,7 +200,18 @@ class PvZ2GardendlessWorld(World):
     item_name_groups     = ITEM_NAME_GROUPS
     location_name_groups = LOC_NAME_GROUPS
 
+    # Which main worlds this seed uses, and the regions they cover. Resolved
+    # in generate_early() because create_items(), create_regions(),
+    # set_rules() and fill_slot_data() all have to agree on one answer -- a
+    # second roll would give them different seeds.
+    enabled_worlds:  Set[str]
+    enabled_regions: Set[str]
+
     def generate_early(self) -> None:
+        self.enabled_worlds  = self._choose_worlds()
+        self.enabled_regions = {region for world in self.enabled_worlds
+                                for region in WORLD_REGIONS[world]}
+
         # The base game normally grants Peashooter/Sunflower/etc. via its own
         # BASEUNLOCKLIST, but the AP client's plantProps guard blocks any
         # AP-managed plant until it's actually been received as an item --
@@ -200,6 +219,28 @@ class PvZ2GardendlessWorld(World):
         # zero usable plants until the multiworld happens to send one.
         starter = self.random.choice(CHEAP_ATTACKER_PLANTS)
         self.multiworld.push_precollected(self.create_item(starter))
+
+    def _choose_worlds(self) -> Set[str]:
+        """Resolve world_count and enabled_worlds into one set of worlds.
+
+        Named worlds are kept unconditionally and world_count tops the
+        selection up at random, so naming more worlds than the count asks for
+        gives you all of them rather than a truncated list -- an explicit
+        choice is a statement about the seed, the count is only a target.
+        """
+        chosen = set(self.options.enabled_worlds.value) & set(SELECTABLE_WORLDS)
+        chosen.update(ALWAYS_ENABLED_WORLDS)
+
+        # Ancient Egypt counts toward world_count (it is a world you play);
+        # Modern Day does not (it is the goal, always present, and not
+        # selectable). Top up from OPTIONAL_WORLDS, which is list-ordered, so
+        # the sample depends only on the slot's seeded RNG.
+        short = self.options.world_count.value - len(chosen - {"Modern Day"})
+        if short > 0:
+            candidates = [w for w in OPTIONAL_WORLDS if w not in chosen]
+            chosen.update(self.random.sample(candidates,
+                                             min(short, len(candidates))))
+        return chosen
 
     def create_item(self, name: str) -> Item:
         data = ITEM_NAME_TO_ITEM.get(name)
@@ -216,7 +257,8 @@ class PvZ2GardendlessWorld(World):
 
     def active_locations(self) -> List[PvZ2LocationData]:
         """Locations actually built for this slot's options."""
-        return compute_active_locations(bool(self.options.shopsanity))
+        return compute_active_locations(bool(self.options.shopsanity),
+                                        self.enabled_regions)
 
     def create_items(self) -> None:
         pool = create_item_pool(self, len(self.active_locations()))
@@ -229,7 +271,8 @@ class PvZ2GardendlessWorld(World):
         apply_rules(self)
 
     def fill_slot_data(self) -> Dict[str, Any]:
-        goal_locs = goal_locations_for(self.options.goal_type.value)
+        goal_locs = goal_locations_for(self.options.goal_type.value,
+                                       self.enabled_regions)
         # Must match the clamp in rules.py's modern_day_rule, or the
         # client's canAccessModernDay() enforces a stricter (unreachable)
         # threshold than the generation-time access rule actually requires.
@@ -250,4 +293,8 @@ class PvZ2GardendlessWorld(World):
             # always contains the shop entries, so their presence there says
             # nothing about whether this slot actually has them.
             "shopsanity":        bool(self.options.shopsanity),
+            # Informational for now -- worlds left out simply never receive a
+            # key, which is what keeps them locked. Sorted so the value is
+            # stable for a given seed rather than varying with set order.
+            "enabled_worlds":    sorted(self.enabled_worlds),
         }

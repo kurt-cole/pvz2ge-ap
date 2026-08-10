@@ -34,10 +34,14 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         set_rule(multiworld.get_entrance(f"Enter {checkpoint_name}", player),
                  has_sun_and_attacker)
 
-    # Keyed main worlds — accessible once their key is held.
+    # Keyed main worlds — accessible once their key is held. Worlds this seed
+    # left out have no entrance to rule on (regions.py skips them) and no key
+    # in the pool, so they stay locked with nothing behind them.
     for w in KEYED_WORLDS:
         if w == "Modern Day":
             continue  # handled separately, see below
+        if w not in world.enabled_worlds:
+            continue
         key_name = f"{w} Key"
         set_rule(multiworld.get_entrance(f"Enter {w}", player),
                  lambda state, k=key_name: state.has(k, player))
@@ -49,15 +53,20 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # so items.py can force every one of them to progression -- see
     # LOGIC_PLANTS.
     for world_name, plants in WORLD_ENTRY_PLANTS.items():
+        if world_name not in world.enabled_worlds:
+            continue
         add_rule(multiworld.get_entrance(f"Enter {world_name}", player),
                  lambda state, p=plants: state.has_any(p, player))
 
     # Modern Day — unlocked once enough world goals (trophies / completions /
     # keys, per the goal_type option) are reachable.
-    goal_locs = goal_locations_for(world.options.goal_type.value)
-    # Clamp: world_trophies has only 10 eligible locations (Kongfu Temple has
-    # no trophy), so the option's nominal 1-11 range can request more goals
-    # than are reachable, making Modern Day permanently locked.
+    goal_locs = goal_locations_for(world.options.goal_type.value,
+                                   world.enabled_regions)
+    # Clamp: the goal list shrinks with the seed. world_trophies has only 10
+    # eligible locations to begin with (Kongfu Temple has no trophy), and
+    # world_count / enabled_worlds cut it down further, so the option's
+    # nominal 1-11 range can ask for more goals than exist -- which would lock
+    # Modern Day for good.
     req = min(world.options.worlds_required.value, len(goal_locs))
 
     # Resolve the goal Locations once, here, rather than by name inside the

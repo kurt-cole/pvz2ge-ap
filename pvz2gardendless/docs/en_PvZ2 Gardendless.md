@@ -20,6 +20,22 @@ the logic considers it survivable.
 Modern Day is the exception: it has no key. It opens once you have met a configurable number of world
 goals — world trophies, world completions, or world keys, whichever you pick.
 
+## Do I have to play all thirteen worlds?
+
+No. **World Count** sets how many main worlds the seed uses, counting Ancient Egypt but not Modern
+Day, and the generator picks the rest at random — set it to `random` and it picks the number too. Use
+**Enabled Worlds** to name worlds you definitely want; any remaining slots are filled at random around
+them, and naming more worlds than the count asks for keeps all of them.
+
+Ancient Egypt is always in, since it is the only world playable with no items. Modern Day is always in,
+since that is where the run ends.
+
+Worlds left out are gone completely: their levels are not locations, their World Key is not in the item
+pool, and they stay locked for the whole run. Everything outside the main worlds — the side paths, the
+Danger Rooms, the store — is unaffected, so even a one-world seed still has a few hundred checks.
+
+**Worlds Required** shrinks to fit. Ask for 4 world keys in a 3-world seed and the run needs 3.
+
 ## What is the goal?
 
 Clear one specific Modern Day level, chosen by the **Modern Day Victory** option:
@@ -34,7 +50,8 @@ before Modern Day opens at all.
 ## What items and locations get shuffled?
 
 **Locations** are the levels themselves — 761 of them across every world, the side paths, and the
-Danger Rooms — plus, with Shopsanity enabled, 39 one-time store purchases.
+Danger Rooms — plus, with Shopsanity enabled, 39 one-time store purchases. Lowering **World Count**
+removes the levels of the worlds it leaves out.
 
 **Items** are:
 

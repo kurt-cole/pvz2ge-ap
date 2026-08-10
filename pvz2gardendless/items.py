@@ -7,7 +7,7 @@ from typing import Dict, List, TYPE_CHECKING
 
 from BaseClasses import Item, ItemClassification
 
-from .constants import BASE_ID, GAME_NAME, KEYED_WORLDS, LOGIC_PLANTS
+from .constants import BASE_ID, GAME_NAME, KEY_NAME_TO_WORLD, KEYED_WORLDS, LOGIC_PLANTS
 
 if TYPE_CHECKING:
     from . import PvZ2GardendlessWorld
@@ -251,9 +251,13 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
 
     # One unique key per keyed world, minus Modern Day -- that world is
     # gated on the world-goal count alone, so shipping a key nobody needs
-    # would just waste a location.
+    # would just waste a location. Worlds this seed left out are skipped for
+    # the same reason: their regions hold no locations, so their key would
+    # unlock nothing.
     for key_item in KEY_ITEMS:
         if key_item.name == MODERN_DAY_KEY:
+            continue
+        if KEY_NAME_TO_WORLD[key_item.name] not in world.enabled_worlds:
             continue
         pool.append(world.create_item(key_item.name))
 
@@ -266,6 +270,14 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
     # Everything left over is filler, of which trap_percentage becomes
     # traps. Traps only ever displace filler, never a plant or a key.
     remaining = pool_size - len(pool)
+    # Keys and plants are a fixed block, so a seed small enough to have fewer
+    # locations than that block cannot hold its own item pool. The side paths
+    # and Modern Day keep even a one-world seed well clear of this, but the
+    # arithmetic below would silently produce a short pool rather than say so.
+    if remaining < 0:
+        raise ValueError(
+            f"item pool ({len(pool)} keys and plants) exceeds the "
+            f"{pool_size} locations this slot builds; enable more worlds")
     trap_count = remaining * world.options.trap_percentage.value // 100
     for _ in range(trap_count):
         pool.append(world.create_item(LAWN_MOWER_TRAP))
