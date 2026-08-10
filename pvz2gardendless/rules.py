@@ -13,7 +13,7 @@ from worlds.generic.Rules import add_rule, set_rule
 from .constants import (
     CHEAP_ATTACKER_PLANTS, KEYED_WORLDS, SUN_PRODUCER_PLANTS, WORLD_ENTRY_PLANTS,
 )
-from .locations import LOC_NAME_TO_DATA, goal_locations_for
+from .locations import goal_locations_for
 
 if TYPE_CHECKING:
     from . import PvZ2GardendlessWorld
@@ -60,11 +60,28 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # than are reachable, making Modern Day permanently locked.
     req = min(world.options.worlds_required.value, len(goal_locs))
 
-    def modern_day_rule(state, n=req, locs=goal_locs):
-        completed = sum(
-            1 for loc_name in locs
-            if state.can_reach(loc_name, "Location", player)
-        )
+    # Resolve the goal Locations once, here, rather than by name inside the
+    # rule. This rule is re-evaluated constantly during fill and sweeping, and
+    # state.can_reach(name, "Location", player) pays a type dispatch plus a
+    # name lookup on every goal on every call before it reaches the actual
+    # reachability test. Location.can_reach() is what that resolves to anyway.
+    goal_locations = [multiworld.get_location(name, player) for name in goal_locs]
+
+    def modern_day_rule(state, n=req, locs=goal_locations):
+        # Counts reachable goals, but stops as soon as the answer is settled:
+        # once n are reachable the rest cannot change it, and once too few are
+        # left to ever total n the answer is already no. The old version always
+        # walked all 11.
+        completed = 0
+        left = len(locs)
+        for loc in locs:
+            if completed >= n:
+                return True
+            if completed + left < n:
+                return False
+            if loc.can_reach(state):
+                completed += 1
+            left -= 1
         return completed >= n
 
     modern_day_entrance = multiworld.get_entrance("Enter Modern Day", player)
@@ -78,8 +95,10 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # rule before a dependency region has been marked reachable in the same
     # pass (queue order for retried entrances is not guaranteed) and
     # incorrectly read it as still locked.
-    for loc_name in goal_locs:
-        dep_region = multiworld.get_region(LOC_NAME_TO_DATA[loc_name].region, player)
-        multiworld.register_indirect_condition(dep_region, modern_day_entrance)
+    # parent_region is the region the location was built into, so it is the
+    # same region the old LOC_NAME_TO_DATA lookup produced -- read off the
+    # objects already resolved above instead of going back through the tables.
+    for loc in goal_locations:
+        multiworld.register_indirect_condition(loc.parent_region, modern_day_entrance)
 
     multiworld.completion_condition[player] = lambda state: state.has("Victory", player)
