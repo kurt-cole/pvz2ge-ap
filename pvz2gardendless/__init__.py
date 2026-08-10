@@ -7,16 +7,21 @@ world keys, world completions (beat the final level), or world trophies.
 Victory = defeat the Modern Day Zomboss.
 """
 
+import logging
+from typing import Dict, List, Any
+
 from worlds.AutoWorld import World, WebWorld
 from BaseClasses import Item, ItemClassification, Tutorial
 import settings
-from typing import Dict, List, Any
 
 from .constants import CHEAP_ATTACKER_PLANTS, GAME_NAME
 from .options import PvZ2Options
-from .items import FILLER_ITEMS, ITEM_NAME_GROUPS, ITEM_NAME_TO_ID, ITEM_NAME_TO_ITEM, create_item_pool
+from .items import (
+    FILLER_ITEMS, ITEM_NAME_GROUPS, ITEM_NAME_TO_ID, ITEM_NAME_TO_ITEM,
+    PvZ2Item, create_item_pool,
+)
 from .locations import (
-    LOC_NAME_TO_ID, MODERN_DAY_VICTORY_LOCS, PvZ2LocationData,
+    LOC_NAME_GROUPS, LOC_NAME_TO_ID, MODERN_DAY_VICTORY_LOCS, PvZ2LocationData,
     VICTORY_LOC_NAMES, active_locations as compute_active_locations, goal_locations_for,
 )
 from .regions import create_regions as build_regions
@@ -66,13 +71,23 @@ def _launch_installer(*args) -> None:
     from worlds.LauncherComponents import launch
     launch(_run_builder_gui, name="PvZ2GE AP Installer")
 
+# Registering the Launcher entry must never take the whole world down with it
+# -- a world that fails to import cannot generate at all, and the installer is
+# a convenience, not a generation dependency. Only ImportError is swallowed
+# (older AP builds, or LauncherComponents moving), and even that is logged:
+# the previous bare `except Exception: pass` meant any breakage here showed up
+# as the installer silently vanishing from the Launcher with no explanation.
 try:
     from worlds.LauncherComponents import components, Component, Type
+except ImportError:  # pragma: no cover - depends on the host AP version
+    logging.warning(
+        "PvZ2 Gardendless: worlds.LauncherComponents unavailable, so the "
+        "installer will not appear in the Archipelago Launcher. Generation "
+        "is unaffected.", exc_info=True)
+else:
     components.append(Component("PvZ2 Gardendless Installer", func=_launch_installer,
         component_type=Type.CLIENT,
         description="Build and install the PvZ2 Gardendless Archipelago mod."))
-except Exception:
-    pass
 
 
 # ── Settings (persisted to host.yaml) ────────────────────────────────────────
@@ -86,10 +101,38 @@ class PvZ2Settings(settings.Group):
 
 class PvZ2Web(WebWorld):
     theme = "grass"
+    # file_name must match a real file in docs/ -- WebHost reads it straight
+    # off disk, and a name that does not resolve 404s the guide.
     tutorials = [Tutorial(
         "Mod Setup Guide", "How to set up the PvZ2 Gardendless Archipelago mod",
-        "English", "setup.md", "setup/en", ["Trikehard"]
+        "English", "setup_en.md", "setup/en", ["Trikehard"]
     )]
+
+    # Starting points on the options page. Each preset only names the options
+    # it actually means to pin; everything else falls back to its default.
+    options_presets = {
+        "Short": {
+            "goal_type":          "world_keys",
+            "worlds_required":    3,
+            "modern_day_victory": "world_key",
+            "skip_tutorial":      True,
+            "shopsanity":         False,
+        },
+        "Standard": {
+            "goal_type":          "world_keys",
+            "worlds_required":    7,
+            "modern_day_victory": "zomboss",
+            "skip_tutorial":      True,
+            "shopsanity":         False,
+        },
+        "Completionist": {
+            "goal_type":          "world_completions",
+            "worlds_required":    11,
+            "modern_day_victory": "completion",
+            "skip_tutorial":      False,
+            "shopsanity":         True,
+        },
+    }
 
 
 class PvZ2GardendlessWorld(World):
@@ -111,7 +154,8 @@ class PvZ2GardendlessWorld(World):
     options_dataclass = PvZ2Options
     options: PvZ2Options
 
-    item_name_groups = ITEM_NAME_GROUPS
+    item_name_groups     = ITEM_NAME_GROUPS
+    location_name_groups = LOC_NAME_GROUPS
 
     def generate_early(self) -> None:
         # The base game normally grants Peashooter/Sunflower/etc. via its own
@@ -125,8 +169,8 @@ class PvZ2GardendlessWorld(World):
     def create_item(self, name: str) -> Item:
         data = ITEM_NAME_TO_ITEM.get(name)
         if data:
-            return Item(name, data.classification, data.code, self.player)
-        return Item(name, ItemClassification.filler, None, self.player)
+            return PvZ2Item(name, data.classification, data.code, self.player)
+        return PvZ2Item(name, ItemClassification.filler, None, self.player)
 
     def get_filler_item_name(self) -> str:
         # Backfills pool slots emptied by mechanisms outside create_items()

@@ -8,10 +8,11 @@ keeping region shape and logic cleanly separated.
 
 from typing import Dict, TYPE_CHECKING
 
-from BaseClasses import Region, Location, Item, ItemClassification
+from BaseClasses import Region, ItemClassification
 
 from .constants import KEYED_WORLDS, SHOP_REGION, SIDE_PATH_REGIONS
-from .locations import ALL_REGIONS
+from .items import PvZ2Item
+from .locations import ALL_REGIONS, PvZ2Location
 
 if TYPE_CHECKING:
     from . import PvZ2GardendlessWorld
@@ -66,14 +67,14 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
     # Add all locations to their regions
     for loc_data in world.active_locations():
         region = regions.get(loc_data.region, tutorial)
-        loc = Location(player, loc_data.name, loc_data.code, region)
+        loc = PvZ2Location(player, loc_data.name, loc_data.code, region)
         region.locations.append(loc)
 
     # Victory event in Modern Day. multiworld.completion_condition is set in
     # rules.py, alongside the rest of this world's logic.
-    victory_loc = Location(player, "Victory", None, regions["Modern Day"])
+    victory_loc = PvZ2Location(player, "Victory", None, regions["Modern Day"])
     victory_loc.place_locked_item(
-        Item("Victory", ItemClassification.progression, None, player))
+        PvZ2Item("Victory", ItemClassification.progression, None, player))
     regions["Modern Day"].locations.append(victory_loc)
 
     for r in regions.values():

@@ -3,14 +3,26 @@ PvZ2 Gardendless — location definitions and goal/victory location lookups.
 """
 
 import dataclasses
-from typing import Dict, List
+from typing import Dict, List, Set
 
-from .constants import BASE_ID, SHOP_COMMODITIES, SHOP_REGION, shop_location_name
+from BaseClasses import Location
+
+from .constants import (
+    BASE_ID, GAME_NAME, SHOP_COMMODITIES, SHOP_REGION, SIDE_PATH_REGIONS,
+    shop_location_name,
+)
 from .options import GoalType
+
+
+class PvZ2Location(Location):
+    """Every location this world puts into the multiworld. Subclassing purely
+    to carry `game`: a bare BaseClasses.Location reports game == "Generic"."""
+    game: str = GAME_NAME
 
 
 @dataclasses.dataclass
 class PvZ2LocationData:
+    """Static definition of a location -- name, region, ID and role flags."""
     name: str
     region: str
     code: int
@@ -877,3 +889,44 @@ MODERN_DAY_VICTORY_LOCS = {
     1: "modern_zomboss_01_egypt",     # the Zomboss, slot ~33
     2: "modern44",                    # final Modern Day level
 }
+
+
+# ── Location name groups ──────────────────────────────────────────────────────
+# Surfaced to players through !hint and to trackers. Built from the same data
+# the regions are, so a location cannot end up in the wrong group or be left
+# out of one. Groups are computed over ALL_LOCATIONS rather than the active
+# set because, like location_name_to_id, AP expects them to be constant across
+# option combinations.
+
+def _group_by_region() -> Dict[str, Set[str]]:
+    groups: Dict[str, Set[str]] = {}
+    for loc in ALL_LOCATIONS:
+        groups.setdefault(loc.region, set()).add(loc.name)
+    return groups
+
+
+LOC_NAME_GROUPS: Dict[str, Set[str]] = _group_by_region()
+
+LOC_NAME_GROUPS.update({
+    # The three goal sets, so a player can hint the whole Modern Day
+    # requirement in one command whatever their goal_type is.
+    "World Trophies":    set(WORLD_TROPHY_LOCS),
+    "World Completions": set(WORLD_COMPLETION_LOCS),
+    # Named "Levels" to stay distinct from the "World Keys" *item* group.
+    "World Key Levels":  set(WORLD_KEY_LOCS),
+    # Each world's final boss, including the ten Modern Day rematches.
+    "Zomboss Fights":    {l.name for l in ALL_LOCATIONS if l.is_victory},
+    "Side Paths":        {l.name for l in ALL_LOCATIONS
+                          if l.region in SIDE_PATH_REGIONS},
+    "Danger Rooms":      {l.name for l in ALL_LOCATIONS
+                          if "dangerroom" in l.name.lower()},
+    "Upgrades":          {l.name for l in ALL_LOCATIONS
+                          if l.name.startswith("Upgrade ")},
+})
+
+# A group sharing a name with a location makes !hint ambiguous, and AP has no
+# way to tell the player which one it resolved to.
+_group_name_clashes = set(LOC_NAME_GROUPS) & set(LOC_NAME_TO_ID)
+if _group_name_clashes:
+    raise ValueError("location group names collide with location names: "
+                     f"{sorted(_group_name_clashes)}")

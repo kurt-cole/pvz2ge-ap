@@ -7,20 +7,29 @@ from typing import Dict, List, TYPE_CHECKING
 
 from BaseClasses import Item, ItemClassification
 
-from .constants import BASE_ID, KEYED_WORLDS, LOGIC_PLANTS
+from .constants import BASE_ID, GAME_NAME, KEYED_WORLDS, LOGIC_PLANTS
 
 if TYPE_CHECKING:
     from . import PvZ2GardendlessWorld
 
 
+class PvZ2Item(Item):
+    """Every item this world puts into the multiworld. Subclassing purely to
+    carry `game`: a bare BaseClasses.Item reports game == "Generic", which is
+    what trackers, the spoiler log and AP's own world tests read."""
+    game: str = GAME_NAME
+
+
 @dataclasses.dataclass
-class PvZ2Item:
+class PvZ2ItemData:
+    """Static definition of an item -- name, classification and ID. Distinct
+    from PvZ2Item, which is the live per-slot instance handed to AP."""
     name: str
     classification: ItemClassification
     code: int
 
 
-PLANT_ITEMS: List[PvZ2Item] = []
+PLANT_ITEMS: List[PvZ2ItemData] = []
 _plants = [
     # Progression (required for specific world rules)
     ("Lily Pad",            ItemClassification.progression),   # Big Wave Beach
@@ -175,7 +184,7 @@ _plants = [
 for i, (name, cls) in enumerate(_plants):
     if name in LOGIC_PLANTS:
         cls = ItemClassification.progression
-    PLANT_ITEMS.append(PvZ2Item(name, cls, BASE_ID + i))
+    PLANT_ITEMS.append(PvZ2ItemData(name, cls, BASE_ID + i))
 
 # A rule naming a plant with no matching item is a rule that can never pass,
 # and it would fail silently -- state.has() just returns False forever.
@@ -189,29 +198,29 @@ if _unknown_logic_plants:
 # requirement), but its entry is kept so every later item ID stays put.
 # It is filtered out of the pool in create_item_pool() instead.
 MODERN_DAY_KEY = "Modern Day Key"
-KEY_ITEMS: List[PvZ2Item] = []
+KEY_ITEMS: List[PvZ2ItemData] = []
 _key_base = BASE_ID + len(PLANT_ITEMS)
 for i, world_name in enumerate(KEYED_WORLDS):
-    KEY_ITEMS.append(PvZ2Item(f"{world_name} Key", ItemClassification.progression, _key_base + i))
+    KEY_ITEMS.append(PvZ2ItemData(f"{world_name} Key", ItemClassification.progression, _key_base + i))
 
 # Filler items — coins and gems only
-FILLER_ITEMS: List[PvZ2Item] = []
+FILLER_ITEMS: List[PvZ2ItemData] = []
 _filler_names = ["100 Coins", "500 Coins", "1000 Coins", "10 Gems", "20 Gems", "50 Gems"]
 _filler_base = _key_base + len(KEY_ITEMS)
 for i, name in enumerate(_filler_names):
-    FILLER_ITEMS.append(PvZ2Item(name, ItemClassification.filler, _filler_base + i))
+    FILLER_ITEMS.append(PvZ2ItemData(name, ItemClassification.filler, _filler_base + i))
 
 # Trap items. Appended after the filler block so every existing item keeps the
 # ID it already had.
 LAWN_MOWER_TRAP = "Lawn Mower Trap"
-TRAP_ITEMS: List[PvZ2Item] = []
+TRAP_ITEMS: List[PvZ2ItemData] = []
 _trap_names = [LAWN_MOWER_TRAP]
 _trap_base = _filler_base + len(FILLER_ITEMS)
 for i, name in enumerate(_trap_names):
-    TRAP_ITEMS.append(PvZ2Item(name, ItemClassification.trap, _trap_base + i))
+    TRAP_ITEMS.append(PvZ2ItemData(name, ItemClassification.trap, _trap_base + i))
 
-ALL_ITEMS: List[PvZ2Item] = PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS + TRAP_ITEMS
-ITEM_NAME_TO_ITEM: Dict[str, PvZ2Item] = {item.name: item for item in ALL_ITEMS}
+ALL_ITEMS: List[PvZ2ItemData] = PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS + TRAP_ITEMS
+ITEM_NAME_TO_ITEM: Dict[str, PvZ2ItemData] = {item.name: item for item in ALL_ITEMS}
 ITEM_NAME_TO_ID: Dict[str, int]        = {item.name: item.code for item in ALL_ITEMS}
 
 ITEM_NAME_GROUPS: Dict[str, set] = {
@@ -255,8 +264,8 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
     while remaining > 0:
         name = filler_cycle[fi % len(filler_cycle)]
         pool.append(
-            Item(name, ItemClassification.filler,
-                 ITEM_NAME_TO_ID.get(name), world.player))
+            PvZ2Item(name, ItemClassification.filler,
+                     ITEM_NAME_TO_ID.get(name), world.player))
         fi += 1
         remaining -= 1
 
