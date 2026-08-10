@@ -1237,6 +1237,10 @@ window.electron = electron;
   let cfg   = { server:'localhost:38281', slot:'', password:'' };
   let st    = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[], runKey:'' };
   let sessionActive = false; // set true only after explicit Connect + server ack
+  // Whether this session has told the server the goal is met. Session state,
+  // not persisted: it is reset on every disconnect so a reconnect re-sends,
+  // which is what makes a StatusUpdate lost to a dropped socket self-healing.
+  let goalSent = false;
 
   // st.checked stays an Array because it is persisted as JSON, but membership
   // is tested 761 times every poll tick -- Array.includes() made that O(n*m),
@@ -1473,7 +1477,7 @@ window.electron = electron;
       ws=new WebSocket(`ws://${cfg.server}`);
       ws.onmessage=e=>{try{JSON.parse(e.data).forEach(onPkt);}catch(ex){}};
       ws.onclose=()=>{
-        conn=false;sessionActive=false;ws=null;setStatus('Disconnected','#f44');
+        conn=false;sessionActive=false;goalSent=false;ws=null;setStatus('Disconnected','#f44');
         rtimer=setTimeout(()=>{rdelay=Math.min(rdelay*1.5,30000);connect();},rdelay);
       };
       ws.onerror=()=>{};
@@ -1815,6 +1819,11 @@ window.electron = electron;
   // Modern Day has no key -- it unlocks purely on the world-goal count.
   // (Older seeds may still hand out a "Modern Day Key" item; it is simply
   // ignored rather than being required, so those seeds stay completable.)
+  // The location whose check ends the run, chosen by the modern_day_victory
+  // option. Falls back to the Zomboss for seeds generated before that option
+  // existed, which is what used to be hardcoded in fireCheck().
+  function victoryLoc(){ return st.victoryLoc || 'modern_zomboss_01_egypt'; }
+
   function canAccessModernDay(){
     const goalLocs  = st.goalLocs || [];
     const worldsReq = st.worldsReq || 7;
@@ -1833,7 +1842,12 @@ window.electron = electron;
     // levelProps for whichever tutorial step the player is actually on).
     if(conn && sessionActive){
       for(const[loc,levelId] of Object.entries(LOC_LEVELS)){
-        if(isChecked(loc)) continue;
+        // Checked locations are skipped, with one exception: the victory
+        // location while the goal is still unsent this session, which is how
+        // fireCheck() gets the chance to retry the StatusUpdate. goalSent is
+        // tested first so the common case stays a boolean, not a string
+        // compare against all 761 entries every tick.
+        if(isChecked(loc) && (goalSent || loc!==victoryLoc())) continue;
         if(isFinished(levelId)) fireCheck(loc);
       }
     }
@@ -1844,17 +1858,26 @@ window.electron = electron;
   }
 
   function fireCheck(loc){
-    if(isChecked(loc)) return;
-    // Check Modern Day accessibility before firing any Modern Day check
+    // Modern Day accessibility gates everything below, the goal included: a
+    // Modern Day check fired before the world is legitimately unlocked is not
+    // one the run has earned.
     if(MODERN_DAY_LOCS.has(loc) && !canAccessModernDay()) return;
+    // The goal is settled BEFORE the already-checked bail-out. StatusUpdate is
+    // independent of the location send, and a victory location can reach
+    // st.checked without the server ever hearing the goal -- the reconnect
+    // merge in mergeServerChecks() pushes names straight into st.checked, and
+    // a StatusUpdate can be lost to a socket that drops between the two sends.
+    // With the isChecked() test first, that state was terminal: fireCheck()
+    // returned immediately every time, and pollChecks() skips checked
+    // locations, so nothing ever retried the goal.
+    if(loc===victoryLoc() && !goalSent && conn){
+      send([{cmd:'StatusUpdate',status:30}]);
+      goalSent = true;
+    }
+    if(isChecked(loc)) return;
     st.checked.push(loc);svSt();
     const id=locIds[loc];
     if(id&&conn) send([{cmd:'LocationChecks',locations:[id]}]);
-    // Victory: the Modern Day level chosen by the modern_day_victory option.
-    // Falls back to the Zomboss for seeds generated before that option
-    // existed, which is what used to be hardcoded here.
-    if(loc===(st.victoryLoc || 'modern_zomboss_01_egypt'))
-      send([{cmd:'StatusUpdate',status:30}]);
   }
 
   // ── UI ────────────────────────────────────────────────────────────────────
@@ -1922,11 +1945,14 @@ window.electron = electron;
     document.getElementById('ap-disc').onclick=()=>{
       clearTimeout(rtimer);
       if(ws){ws.onclose=null;ws.close();ws=null;}
-      conn=false;sessionActive=false;setStatus('Disconnected','#f44');
+      conn=false;sessionActive=false;goalSent=false;setStatus('Disconnected','#f44');
     };
     document.getElementById('ap-reset').onclick=()=>{
       if(!confirm('Reset all AP progress for this slot? This clears checked locations, received items, and run state.')) return;
       st={checked:[],lastIdx:0,receivedKeys:[],receivedItems:[],runKey:''};
+      // The victory location is no longer checked, so clearing goalSent lets
+      // re-earning it send the goal again.
+      goalSent=false;
       svSt();
       window._AP_grantedPlantIds=new Set();
       log('State reset.');toast('AP state cleared','#a5b4fc');
