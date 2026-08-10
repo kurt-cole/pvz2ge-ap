@@ -118,6 +118,7 @@ window.electron = electron;
 
   function installAPHooks(app) {
     // app = AllPlayerProperties (static class, not an instance)
+    if (!app || app._ap_hooked) return; // never wrap twice
 
     // Layer 1: intercept the static unlockPlant() method.
     if (app.unlockPlant) {
@@ -138,6 +139,24 @@ window.electron = electron;
         const result = _origGetPlayer(idx);
         installCurrentPlayerHooks(app.currentPlayer);
         return result;
+      };
+    }
+
+    // Layer 3: suppress the "first placement" description tip for every
+    // plant, owned or not. The game decides via
+    //   isTeacher = !(getPlantProgressByID(id).tutorialLevel > 0)
+    // and this getter *creates* a fresh entry with tutorialLevel 0 for any
+    // plant missing from plantProps. Plants AP hasn't granted are exactly the
+    // ones rebuildAPSave() strips on every poll, so the entry is recreated at
+    // 0 each time and the tip replays forever. Setting tutorialLevel on the
+    // returned object covers granted and ungranted plants through one place,
+    // whatever route the game took to get here.
+    if (app.getPlantProgressByID) {
+      const _origGetPlantProgress = app.getPlantProgressByID.bind(app);
+      app.getPlantProgressByID = function(plantId) {
+        const progress = _origGetPlantProgress(plantId);
+        if (progress && !(progress.tutorialLevel > 0)) progress.tutorialLevel = 1;
+        return progress;
       };
     }
 
