@@ -53,13 +53,37 @@ window.electron = electron;
 (function(){
   const AP_SLOT_IDX_KEY = 'ap_pvz2_slot_idx';
   const SETTINGS_KEY = 'PvZ2_Settings';
+  const SAVE_KEY     = 'PvZ2_PlayerProperties';
   const _origGet = Storage.prototype.getItem;
+
+  // Resolve which save slot is ours, preferring the _ap_managed marker over
+  // the stored index. The index alone is not safe: it is a fixed number into
+  // an array whose length changes, and the game's getPlayer() reacts to an
+  // out-of-range PlayerIndex by building a fresh player and PUSHING it --
+  // which lands at allPlayers.length, not necessarily at PlayerIndex. Once
+  // that happens the loaded player is a different object from the one we
+  // write to, it starts with coin/gem 0, and everything saved into the old
+  // slot is invisible from then on.
+  function resolveApIdx() {
+    let stored = parseInt(_origGet.call(localStorage, AP_SLOT_IDX_KEY), 10);
+    if (isNaN(stored) || stored < 0) stored = -1;
+    let players;
+    try { players = JSON.parse(_origGet.call(localStorage, SAVE_KEY) || '[]'); }
+    catch (e) { return stored; }
+    if (!Array.isArray(players)) return stored;
+    const marked = players.findIndex(p => p && p._ap_managed === true);
+    if (marked >= 0) return marked;
+    // Marker missing (older save, or the game replaced the object). Keep the
+    // stored index only while it still points at something real -- forcing an
+    // out-of-range PlayerIndex is what triggers the push-mismatch above.
+    return (stored >= 0 && stored < players.length) ? stored : -1;
+  }
+
   Storage.prototype.getItem = function(key) {
     const v = _origGet.call(this, key);
     if (key === SETTINGS_KEY) {
-      const idxRaw = _origGet.call(this, AP_SLOT_IDX_KEY);
-      const apIdx = parseInt(idxRaw, 10);
-      if (!isNaN(apIdx) && apIdx >= 0) {
+      const apIdx = resolveApIdx();
+      if (apIdx >= 0) {
         try {
           const s = v ? JSON.parse(v) : {};
           s.PlayerIndex = apIdx;
@@ -1222,10 +1246,13 @@ window.electron = electron;
     Storage.prototype.setItem = function(key, value) {
       if (key === SAVE_KEY && window._AP_grantedPlantIds) {
         try {
-          const apIdx = parseInt(localStorage.getItem(AP_SLOT_IDX_KEY), 10);
           const arr = JSON.parse(value);
           if (Array.isArray(arr)) {
-            const p = !isNaN(apIdx) ? arr[apIdx] : null;
+            // Prefer the marker over the stored index, which can point at the
+            // wrong entry (or past the end) if the slot ever got reindexed.
+            let apIdx = arr.findIndex(p => p && p._ap_managed === true);
+            if (apIdx < 0) apIdx = parseInt(localStorage.getItem(AP_SLOT_IDX_KEY), 10);
+            const p = !isNaN(apIdx) && apIdx >= 0 ? arr[apIdx] : null;
             if (p && p.plantProps) {
               const authorizedCns = new Set();
               for (const pid in ID_TO_CN) {
@@ -1280,6 +1307,20 @@ window.electron = electron;
     const APP = window._AP_AllPlayerProperties;
     if(!APP || !APP.currentPlayer) return;
     const cp = APP.currentPlayer;
+
+    // 0. Keep the slot marker and index pinned to whatever object the game
+    // actually loaded. The stored index is a fixed number into an array whose
+    // length changes, and getPlayer() answers an out-of-range PlayerIndex by
+    // creating a fresh player and pushing it -- so currentPlayer can end up at
+    // a different index than the one we think we own, with coin/gem back at
+    // 0 and everything previously saved stranded in an entry nothing loads.
+    // Re-stamping the marker and rewriting the index each rebuild makes that
+    // self-correcting instead of permanent.
+    cp._ap_managed = true;
+    const liveIdx = (APP.allPlayers || []).indexOf(cp);
+    if(liveIdx >= 0 && String(liveIdx) !== localStorage.getItem(AP_SLOT_IDX_KEY)){
+      localStorage.setItem(AP_SLOT_IDX_KEY, String(liveIdx));
+    }
 
     // 1. Rebuild granted plant set
     if(!window._AP_grantedPlantIds) window._AP_grantedPlantIds = new Set();
