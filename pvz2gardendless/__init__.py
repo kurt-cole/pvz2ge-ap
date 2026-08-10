@@ -252,9 +252,10 @@ class TrapPercentage(Range):
     """
     Percentage of the filler item pool (coins and gems) to replace with traps.
 
-    Lawn Mower Trap removes every lawn mower currently on the field, taking
-    away the last line of defence for the rest of that level. Traps received
-    outside a level are held and applied when the next level starts.
+    Lawn Mower Trap sets off every lawn mower on the field at once. They roll
+    out and are spent, leaving those lanes with no last line of defence for the
+    rest of the level. Traps received outside a level are held and applied when
+    the next level starts.
 
     0 disables traps entirely.
     """

@@ -176,16 +176,14 @@ window.electron = electron;
     'CoinCount': function(v) { window._AP_CoinCount = v; },
     'GemCount':  function(v) { window._AP_GemCount  = v; },
     // Square.getLane(0..4) is how the Lawn Mower Trap reaches each lane's
-    // mower; LevelPlay owns the currentMowerLanes bookkeeping that has to be
-    // updated alongside removing one.
+    // mower.
     'Square':    function(v) { window._AP_Square    = v; },
-    'LevelPlay': function(v) { window._AP_LevelPlay = v; },
   };
 
   const _origRegister = System.register.bind(System);
   System.register = function(name, deps, declare) {
     if (typeof name === 'string' &&
-        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|levelController)\.ts/.test(name)) {
+        /(?:PlayerProperties|UI|CoinCount|GemCount|Square)\.ts/.test(name)) {
       const _origDeclare = declare;
       declare = function(_export, _context) {
         return _origDeclare(function(exportName, value) {
@@ -1603,11 +1601,13 @@ window.electron = electron;
   }
 
   // ── Traps ─────────────────────────────────────────────────────────────────
-  // Lawn Mower Trap: strips every mower currently on the field. Uses
-  // fade() + onMowerLose() rather than the mower's own launch(), because
-  // launch() sends the mower rolling and wipes out that lane's zombies --
-  // which in a losing position would rescue the player instead of punishing
-  // them. fade() just removes it, which is the intent.
+  // Lawn Mower Trap: sets off every mower on the field at once. They roll out
+  // and are spent, leaving the lanes with no last line of defence.
+  // launch() does all the bookkeeping itself -- clears inLane.mower, calls
+  // LevelPlay.onMowerLose, plays the Trans animation and the sound -- so it is
+  // the whole implementation. Note this also mows down whatever zombies are
+  // already on screen, so firing the trap during a heavy wave can help the
+  // player in the short term while still costing them the mowers.
   const LAWN_MOWER_TRAP = 'Lawn Mower Trap';
 
   function applyLawnMowerTrap(){
@@ -1615,36 +1615,29 @@ window.electron = electron;
     // Square.getLane() dereferences Square.component, so bail out when no
     // level is running rather than throwing.
     if(!Square || typeof Square.getLane !== 'function' || !Square.component) return false;
-    const levelPlay = window._AP_LevelPlay;
-    let removed = 0;
+    let fired = 0;
     for(let i = 0; i < 5; i++){
       let lane;
       try { lane = Square.getLane(i); } catch(e) { continue; }
+      // A mower that has already been set off is no longer on its lane, so
+      // only idle ones are picked up here.
       const mower = lane && lane.mower;
-      if(!mower) continue;
-      try {
-        if(typeof mower.fade === 'function') mower.fade();
-        lane.mower = null;
-        if(levelPlay && levelPlay.component &&
-           typeof levelPlay.component.onMowerLose === 'function'){
-          levelPlay.component.onMowerLose(i);
-        }
-        removed++;
-      } catch(e) { /* leave this lane alone, try the rest */ }
+      if(!mower || typeof mower.launch !== 'function') continue;
+      try { mower.launch(); fired++; } catch(e) { /* try the rest */ }
     }
-    return removed > 0;
+    return fired > 0;
   }
 
   function applyPendingTraps(){
     let pending = st.pendingMowerTraps || 0;
     if(pending <= 0) return;
-    // Every queued trap collapses into one sweep -- once the mowers are gone
-    // there is nothing left for the extras to take, so they are consumed
-    // rather than held for the next level.
+    // Every queued trap collapses into one activation -- once the mowers have
+    // gone off there is nothing left for the extras to set off, so they are
+    // consumed rather than held for the next level.
     if(applyLawnMowerTrap()){
       st.pendingMowerTraps = 0;
       svSt();
-      toast('🚜 Lawn Mower Trap — mowers lost!', '#f66');
+      toast('🚜 Lawn Mower Trap — mowers activated!', '#f66');
     }
   }
 
