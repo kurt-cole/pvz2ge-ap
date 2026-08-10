@@ -1208,6 +1208,13 @@ window.electron = electron;
     return null;
   }
 
+  // Which locations live in Modern Day. Constant for the life of the page, so
+  // it is computed once here -- fireCheck() used to rebuild this list on every
+  // single check, scanning all 761 LOC_LEVELS entries and running getRegion()
+  // (a 13-prefix scan) on each one before it could answer.
+  const MODERN_DAY_LOCS = new Set(
+    Object.keys(LOC_LEVELS).filter(n => getRegion(n) === 'Modern Day'));
+
   // Goal config (st.goalLocs / st.worldsReq) is populated from slot_data on
   // connect and persisted on st so it survives a page reload -- rebuildAPSave
   // runs on the poll timer even before the player reconnects this session,
@@ -1230,6 +1237,27 @@ window.electron = electron;
   let cfg   = { server:'localhost:38281', slot:'', password:'' };
   let st    = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[], runKey:'' };
   let sessionActive = false; // set true only after explicit Connect + server ack
+
+  // st.checked stays an Array because it is persisted as JSON, but membership
+  // is tested 761 times every poll tick -- Array.includes() made that O(n*m),
+  // several hundred thousand string comparisons every 2s once a run is well
+  // along. Mirror it into a Set for lookups.
+  // The mirror is rebuilt whenever the array's identity OR length changes,
+  // rather than being updated at each mutation site: st is replaced wholesale
+  // in four places (init, load, run-key change, manual reset) and pushed to in
+  // two, and a mirror that has to be maintained at every one of those is a
+  // desync -- i.e. a silently dropped or duplicated check -- waiting to
+  // happen. Identity plus length catches every mutation this code performs.
+  let _checkedSet = null, _checkedSrc = null, _checkedLen = -1;
+  function isChecked(loc){
+    const arr = st.checked || [];
+    if(_checkedSrc !== arr || _checkedLen !== arr.length){
+      _checkedSet = new Set(arr);
+      _checkedSrc = arr;
+      _checkedLen = arr.length;
+    }
+    return _checkedSet.has(loc);
+  }
 
   // Load persisted state and rebuild granted set SYNCHRONOUSLY right now,
   // before DOMContentLoaded fires, so installAPHooks sees the correct set.
@@ -1378,7 +1406,7 @@ window.electron = electron;
       let fl = 'tutorial1';
       for(const tut of tutSteps) {
         const loc = Object.keys(LOC_LEVELS).find(k => LOC_LEVELS[k] === tut);
-        if(loc && (st.checked||[]).includes(loc)) {
+        if(loc && isChecked(loc)) {
           const ni = tutSteps.indexOf(tut) + 1;
           fl = ni < tutSteps.length ? tutSteps[ni] : '';
         } else { break; }
@@ -1469,9 +1497,13 @@ window.electron = electron;
     // order, so this is called from both and no-ops until the map exists.
     if(!idToLoc || !Object.keys(idToLoc).length) return;
     let added = 0;
+    // Local Set rather than isChecked(): this loop pushes as it goes, which
+    // would invalidate the shared mirror on every iteration and rebuild it
+    // each time. One Set built up front stays O(n + m).
+    const known = new Set(st.checked);
     for(const id of serverCheckedIds){
       const name = idToLoc[id];
-      if(name && !st.checked.includes(name)){ st.checked.push(name); added++; }
+      if(name && !known.has(name)){ st.checked.push(name); known.add(name); added++; }
     }
     serverCheckedIds = [];
     if(added){
@@ -1787,7 +1819,7 @@ window.electron = electron;
     const goalLocs  = st.goalLocs || [];
     const worldsReq = st.worldsReq || 7;
     if(!goalLocs.length) return false; // slot_data not in yet; don't open early
-    const completed = goalLocs.filter(l=>st.checked.includes(l)).length;
+    const completed = goalLocs.filter(l=>isChecked(l)).length;
     return completed >= worldsReq;
   }
 
@@ -1801,7 +1833,7 @@ window.electron = electron;
     // levelProps for whichever tutorial step the player is actually on).
     if(conn && sessionActive){
       for(const[loc,levelId] of Object.entries(LOC_LEVELS)){
-        if(st.checked.includes(loc)) continue;
+        if(isChecked(loc)) continue;
         if(isFinished(levelId)) fireCheck(loc);
       }
     }
@@ -1812,12 +1844,9 @@ window.electron = electron;
   }
 
   function fireCheck(loc){
-    if(st.checked.includes(loc)) return;
+    if(isChecked(loc)) return;
     // Check Modern Day accessibility before firing any Modern Day check
-    const md_locs = Object.entries(LOC_LEVELS)
-      .filter(([n,l])=>{ const r=getRegion(n); return r==='Modern Day'; })
-      .map(([n])=>n);
-    if(md_locs.includes(loc) && !canAccessModernDay()) return;
+    if(MODERN_DAY_LOCS.has(loc) && !canAccessModernDay()) return;
     st.checked.push(loc);svSt();
     const id=locIds[loc];
     if(id&&conn) send([{cmd:'LocationChecks',locations:[id]}]);
