@@ -1383,7 +1383,7 @@ window.electron = electron;
 
   // ── WebSocket / AP Protocol ───────────────────────────────────────────────
   let ws=null, conn=false, rtimer=null, rdelay=5000;
-  let locIds={}, itemNames={};
+  let locIds={}, itemNames={}, idToLoc={};
   let apTeam=0, apSlotId=0; // set from Connected; namespaces DataStorage keys
 
   function connect() {
@@ -1412,6 +1412,34 @@ window.electron = electron;
   }
 
   function send(pkts){if(ws&&ws.readyState===1)ws.send(JSON.stringify(pkts));}
+
+  // ── Server -> local check sync ────────────────────────────────────────────
+  // The server tracks every location this slot has ever checked, but the
+  // client only ever marked levels cleared from its own st.checked. Anything
+  // the server knew and we didn't -- wiped localStorage, a second machine, a
+  // seed resumed after an AP state reset -- left the save with those levels
+  // still locked, so the player had to replay them to get past.
+  // Fold the server's list in so rebuildAPSave() can restore the progression.
+  let serverCheckedIds = [];
+
+  function mergeServerChecks(){
+    if(!serverCheckedIds.length) return;
+    // Needs the DataPackage; Connected and DataPackage can arrive in either
+    // order, so this is called from both and no-ops until the map exists.
+    if(!idToLoc || !Object.keys(idToLoc).length) return;
+    let added = 0;
+    for(const id of serverCheckedIds){
+      const name = idToLoc[id];
+      if(name && !st.checked.includes(name)){ st.checked.push(name); added++; }
+    }
+    serverCheckedIds = [];
+    if(added){
+      svSt();
+      rebuildAPSave();
+      log('Restored ' + added + ' check(s) from server');
+      toast('↺ Restored ' + added + ' check(s)', '#4af');
+    }
+  }
 
   function onPkt(pkt) {
     switch(pkt.cmd){
@@ -1449,11 +1477,23 @@ window.electron = electron;
           deathLinkEnabled = !!pkt.slot_data.death_link;
           if(deathLinkEnabled) send([{cmd:'ConnectUpdate', tags:['AP','DeathLink']}]);
         }
+        // Locations the server already has for this slot. Merged in before
+        // the rebuild so any level we'd forgotten comes back marked cleared.
+        serverCheckedIds = (pkt.checked_locations || []).slice();
+        mergeServerChecks();
         rebuildAPSave();
         const ids=st.checked.map(n=>locIds[n]).filter(Boolean);
         if(ids.length) send([{cmd:'LocationChecks',locations:ids}]);
         send([{cmd:'Sync'}]);
         fetchCurrencyFromServer();
+        break;
+      case 'RoomUpdate':
+        // Checks can also land mid-session (another client on this slot, or
+        // an admin !collect).
+        if(pkt.checked_locations && pkt.checked_locations.length){
+          serverCheckedIds = serverCheckedIds.concat(pkt.checked_locations);
+          mergeServerChecks();
+        }
         break;
       case 'ConnectionRefused':
         setStatus('Refused: '+(pkt.errors||[]).join(', '),'#f44');break;
@@ -1478,6 +1518,10 @@ window.electron = electron;
           locIds=gd.location_name_to_id||{};
           itemNames={};
           for(const[n,id] of Object.entries(gd.item_name_to_id||{})) itemNames[id]=n;
+          idToLoc={};
+          for(const[n,id] of Object.entries(locIds)) idToLoc[id]=n;
+          // Connected may have landed first, with ids we couldn't name yet.
+          mergeServerChecks();
         }
         break;
       case 'Bounced':
@@ -1827,12 +1871,23 @@ window.electron = electron;
   }
 
   let toastTimer=null;
+  function pushLog(msg){
+    logs.unshift(msg);if(logs.length>40)logs.pop();
+    if(logEl)logEl.innerHTML=logs.map(m=>`<div>${m}</div>`).join('');
+  }
+
+  // Panel-only message, no transient toast. This was being called from
+  // findOrCreateAPSlot(), connect() and the reset button without ever having
+  // been defined, so each of those threw a ReferenceError instead: the slot
+  // creation path never reached its reload, and the catch in
+  // findOrCreateAPSlot() threw again before it could return -1.
+  function log(msg){ pushLog(msg); }
+
   function toast(msg,color){
+    pushLog(msg);
     const el=document.getElementById('ap-toast');if(!el)return;
     el.textContent=msg;el.style.color=color||'#e2e8f0';el.style.opacity='1';
     clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.style.opacity='0',3500);
-    logs.unshift(msg);if(logs.length>40)logs.pop();
-    if(logEl)logEl.innerHTML=logs.map(m=>`<div>${m}</div>`).join('');
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
