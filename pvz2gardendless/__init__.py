@@ -30,42 +30,77 @@ from .rules import set_rules as apply_rules
 # ── Launcher ──────────────────────────────────────────────────────────────────
 
 def _run_builder_gui(*args) -> None:
-    import os, importlib.util, tempfile, zipfile
-    module_file = __file__
+    """Locate build_pvzge_ap.py and run its Tk installer.
+
+    The installer lives next to this module in a source checkout, and inside
+    the archive when the world is installed as an .apworld.
+    """
+    import importlib.util
+    import os
+    import tempfile
+    import zipfile
+
+    def show_error(message: str) -> None:
+        # Imported per call rather than at module scope: this is the only code
+        # path that needs Tk, and importing it during world load would pull a
+        # GUI toolkit into headless generation.
+        import tkinter.messagebox as mb
+        mb.showerror("Error", message)
+
+    def run_installer(installer_path: str) -> None:
+        spec = importlib.util.spec_from_file_location("build_pvzge_ap", installer_path)
+        # spec_from_file_location returns None for a path it cannot handle, and
+        # a spec with no loader for some importer types. Reporting that beats
+        # the AttributeError the unchecked version raised into the log.
+        if spec is None or spec.loader is None:
+            show_error(f"Could not load the installer from {installer_path}.")
+            return
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.main()
+
+    # Walk up from this module looking for the enclosing .apworld archive.
     apworld_zip = None
-    path = module_file
+    path = __file__
     while True:
         parent = os.path.dirname(path)
-        if parent == path: break
+        if parent == path:
+            break
         if path.endswith(".apworld") and os.path.isfile(path):
-            apworld_zip = path; break
+            apworld_zip = path
+            break
         path = parent
+
     if apworld_zip is None:
-        sibling = os.path.join(os.path.dirname(module_file), "build_pvzge_ap.py")
-        if os.path.isfile(sibling):
-            extracted = sibling
-        else:
-            import tkinter.messagebox as mb
-            mb.showerror("Error", "Could not locate pvz2gardendless.apworld."); return
-    else:
-        tmp_dir = tempfile.mkdtemp(prefix="pvz2ge_ap_")
+        sibling = os.path.join(os.path.dirname(__file__), "build_pvzge_ap.py")
+        if not os.path.isfile(sibling):
+            show_error("Could not locate pvz2gardendless.apworld.")
+            return
+        run_installer(sibling)
+        return
+
+    # Extract to a temp directory that is removed once the installer exits.
+    # The previous mkdtemp() was never cleaned up, so every launch left one
+    # behind. main() blocks until the GUI closes, so tearing the directory
+    # down after it returns is safe.
+    with tempfile.TemporaryDirectory(prefix="pvz2ge_ap_") as tmp_dir:
+        extracted = os.path.join(tmp_dir, "build_pvzge_ap.py")
         try:
             with zipfile.ZipFile(apworld_zip, "r") as zf:
-                names = zf.namelist()
-                entry = next((n for n in names if n.endswith("build_pvzge_ap.py")), None)
+                entry = next((n for n in zf.namelist()
+                              if n.endswith("build_pvzge_ap.py")), None)
                 if entry is None:
-                    import tkinter.messagebox as mb
-                    mb.showerror("Error", "build_pvzge_ap.py not found inside the apworld."); return
-                extracted = os.path.join(tmp_dir, "build_pvzge_ap.py")
+                    show_error("build_pvzge_ap.py not found inside the apworld.")
+                    return
                 with zf.open(entry) as src_f, open(extracted, "wb") as dst_f:
                     dst_f.write(src_f.read())
         except Exception as e:
-            import tkinter.messagebox as mb
-            mb.showerror("Error", f"Failed to extract installer: {e}"); return
-    spec = importlib.util.spec_from_file_location("build_pvzge_ap", extracted)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    mod.main()
+            # Deliberately broad: this is a GUI entry point whose job is to
+            # turn any extraction failure into a dialog the user can read,
+            # rather than a traceback in a log they will never open.
+            show_error(f"Failed to extract installer: {e}")
+            return
+        run_installer(extracted)
 
 def _launch_installer(*args) -> None:
     from worlds.LauncherComponents import launch
