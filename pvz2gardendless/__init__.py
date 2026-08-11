@@ -15,8 +15,8 @@ from BaseClasses import Item, ItemClassification, Tutorial
 import settings
 
 from .constants import (
-    ALWAYS_ENABLED_WORLDS, CHEAP_ATTACKER_PLANTS, GAME_NAME, OPTIONAL_WORLDS,
-    SELECTABLE_WORLDS, WORLD_REGIONS,
+    ALWAYS_ENABLED_WORLDS, GAME_NAME, OPTIONAL_WORLDS, SELECTABLE_WORLDS,
+    STARTER_PLANTS, WORLD_REGIONS,
 )
 from .options import PvZ2Options
 from .items import (
@@ -217,7 +217,11 @@ class PvZ2GardendlessWorld(World):
         # AP-managed plant until it's actually been received as an item --
         # so without a guaranteed starting plant, a player can be left with
         # zero usable plants until the multiworld happens to send one.
-        starter = self.random.choice(CHEAP_ATTACKER_PLANTS)
+        # STARTER_PLANTS rather than CHEAP_ATTACKER_PLANTS: the guarantee is
+        # only worth something if the plant can hold a lane, and the wider
+        # list includes single-use plants (Potato Mine, Chili Bean) and
+        # non-damaging support. Those still count for the Egypt logic gate.
+        starter = self.random.choice(STARTER_PLANTS)
         self.multiworld.push_precollected(self.create_item(starter))
 
     def _choose_worlds(self) -> Set[str]:

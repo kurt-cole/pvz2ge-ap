@@ -98,6 +98,46 @@ CHEAP_ATTACKER_PLANTS = [
 # per entry onto that world's key requirement, so adding a world here is all
 # it takes to gate it -- and its plants are picked up by LOGIC_PLANTS below
 # automatically.
+# Single-use plants: consumed the moment they go off (or, for Ghost Pepper,
+# after a short timer). They are perfectly good attackers, which is why they
+# stay in CHEAP_ATTACKER_PLANTS for the Ancient Egypt logic gate -- but they
+# are a poor GUARANTEED STARTING PLANT, which exists so a player always has
+# something that can hold a lane. A run whose only plant is Potato Mine has to
+# replant on every single zombie.
+# The game has no data flag for this: nothing in PlantProperties distinguishes
+# a plant that dies on use, and Family does not track it either (Explode-O-Nut
+# is Explosive but is a wall). So this is curated, like the lists above.
+SINGLE_USE_PLANTS = [
+    "Cherry Bomb", "Chili Bean", "E.M. Peach", "Electric Blueberry",
+    "Escape Root", "Ghost Pepper", "Grapeshot", "Hypno-shroom",
+    "Intensive Carrot", "Jalapeno", "Lava Guava", "Potato Mine",
+    "Primal Potato Mine", "Shadow-shroom", "Squash",
+]
+
+# Plants that persist but deal no damage of their own -- support, defence and
+# utility. Also unfit as the sole starting plant for the same reason: the
+# guarantee is meant to be something that can actually kill a zombie.
+NON_DAMAGING_PLANTS = [
+    "Explode-O-Nut",    # a wall; only hurts what is already eating it
+    "Moonflower",       # shadow support, powers other plants
+    "Shrinking Violet", # shrinks zombies rather than damaging them
+]
+
+# What generate_early() may hand a player for free. A cheap attacker that
+# persists on the lawn and does damage on its own.
+STARTER_PLANTS = [
+    plant for plant in CHEAP_ATTACKER_PLANTS
+    if plant not in set(SINGLE_USE_PLANTS) | set(NON_DAMAGING_PLANTS)
+]
+
+# Both lists must be drawn from CHEAP_ATTACKER_PLANTS -- a name that is not
+# would filter nothing and quietly leave the plant it was meant to exclude in
+# the starter pool.
+_unknown_excluded = (set(SINGLE_USE_PLANTS) | set(NON_DAMAGING_PLANTS)) - set(CHEAP_ATTACKER_PLANTS)
+if _unknown_excluded:
+    raise ValueError("excluded starter plants are not cheap attackers: "
+                     f"{sorted(_unknown_excluded)}")
+
 WORLD_ENTRY_PLANTS = {
     "Big Wave Beach":  ["Lily Pad"],
     "Frostbite Caves": ["Hot Potato", "Pepper-pult", "Fire Peashooter"],
