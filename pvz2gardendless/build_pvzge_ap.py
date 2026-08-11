@@ -265,6 +265,48 @@ window.electron = electron;
       } catch (e) { /* never block the purchase itself */ }
       return _origUnlockCommodity.apply(this, arguments);
     };
+
+    // readCommodity() is what builds a store card, and it destroys its own
+    // node when the commodity is already owned. Under AP "owned" is never
+    // true for a plant or a shuffled upgrade (see _AP_isShopCommodityChecked),
+    // so an already-bought card came back on every refresh of the screen.
+    // Destroying it here reproduces the game's own behaviour, keyed on the
+    // check instead of on ownership.
+    if (SC.prototype.readCommodity) {
+      const _origReadCommodity = SC.prototype.readCommodity;
+      SC.prototype.readCommodity = function (props) {
+        try {
+          if (props && props.CommodityName && window._AP_isShopCommodityChecked &&
+              window._AP_isShopCommodityChecked(props.CommodityName)) {
+            this.currentCommodity = props;
+            if (this.node && this.node.destroy) this.node.destroy();
+            // The original is async and its early-out still resolves, so hand
+            // back a promise rather than undefined for anything chaining off it.
+            return Promise.resolve();
+          }
+        } catch (e) { /* fall through and build the card as normal */ }
+        return _origReadCommodity.apply(this, arguments);
+      };
+    }
+
+    // Belt and braces for the live screen: the card the player just bought
+    // from is already built, so it is not going through readCommodity() again
+    // until the screen is rebuilt. unlockable() gates both the buy handler and
+    // the button's grey-out, so this is what stops an immediate second
+    // purchase. The check lands before the original unlockCommodity() runs --
+    // the hook above fires it first -- so this reads true straight away.
+    if (SC.prototype.unlockable) {
+      const _origUnlockable = SC.prototype.unlockable;
+      SC.prototype.unlockable = function () {
+        try {
+          const c = this.currentCommodity;
+          if (c && c.CommodityName && window._AP_isShopCommodityChecked &&
+              window._AP_isShopCommodityChecked(c.CommodityName)) return false;
+        } catch (e) { /* fall through to the game's own answer */ }
+        return _origUnlockable.apply(this, arguments);
+      };
+    }
+
     SC._ap_hooked_store = true;
   }
 
@@ -2039,6 +2081,24 @@ window.electron = electron;
     // proves nothing -- slot_data is what says this slot actually has them.
     if(!st.shopsanity) return;
     fireCheck('Shop: ' + commodityName);
+  };
+
+  // Whether the store should still be offering a commodity.
+  //
+  // The game hides a store card by asking whether the thing is already owned
+  // -- getPlantProgressByID(id).progress > 0 for a plant, and
+  // getUpgradeProgressByID(name).progress > 0 for an upgrade -- and destroying
+  // the card node if so. Under AP that answer is permanently no: the plant
+  // guard blocks unlockPlant(), the upgrade guard blocks unlockUpgrade() when
+  // the seed shuffles upgrades, and rebuildAPSave() resets both every poll.
+  // The card therefore never went away, so a purchase could be repeated for
+  // as long as the player had gems -- spending them on a location that was
+  // already checked and an item that was never going to be granted here.
+  //
+  // The check is the real record of the purchase, so that is what this reads.
+  window._AP_isShopCommodityChecked = function(commodityName){
+    if(!st.shopsanity) return false;
+    return isChecked('Shop: ' + commodityName);
   };
 
   function applyPendingTraps(){
