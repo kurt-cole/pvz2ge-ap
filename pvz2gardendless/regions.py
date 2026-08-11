@@ -12,6 +12,7 @@ from BaseClasses import Region, ItemClassification
 
 from .constants import (
     ALL_WORLD_REGIONS, KEYED_WORLDS, SHOP_REGION, SIDE_PATH_REGIONS,
+    WORLD_REGIONS, WORLD_STRETCHES,
 )
 from .items import PvZ2Item
 from .locations import ALL_REGIONS, PvZ2Location
@@ -76,14 +77,47 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
     # logic gate.
     tutorial.connect(regions[SHOP_REGION])
 
+    active = world.active_locations()
+
+    # Cut each world into sequential stretches, so holding its key opens the
+    # start of it rather than all 44-53 levels at once. Locations keep their
+    # world as loc_data.region -- that is what active_locations() and the hint
+    # groups read -- and are routed into a stretch here by their position in
+    # the world's own level order.
+    #
+    # Ancient Egypt is skipped: it already declares a four-region split in
+    # locations.py and re-cutting it would fight that. rules.py escalates its
+    # existing gates instead.
+    stretch_of: Dict[str, Region] = {}
+    for w in sorted(world.enabled_worlds):
+        if w == "Ancient Egypt":
+            continue
+        w_locs = [l for l in active if l.region in WORLD_REGIONS[w]]
+        # Too small to be worth cutting; Aerial Fortress at 16 is the smallest
+        # world that still is. Below two per stretch the split says nothing.
+        if len(w_locs) < len(WORLD_STRETCHES) * 2:
+            continue
+        prev = regions[w]
+        for suffix in WORLD_STRETCHES[1:]:
+            name = w + suffix
+            regions[name] = Region(name, player, multiworld)
+            prev.connect(regions[name], f"Enter {name}")
+            prev = regions[name]
+        # Ceiling division, so the remainder lands in the earlier stretches and
+        # the last one is never the biggest.
+        size = -(-len(w_locs) // len(WORLD_STRETCHES))
+        for i, l in enumerate(w_locs):
+            idx = min(i // size, len(WORLD_STRETCHES) - 1)
+            stretch_of[l.name] = regions[w + WORLD_STRETCHES[idx]]
+
     # Add all locations to their regions. Indexed, not .get(name, tutorial):
     # ALL_REGIONS is derived from these same locations, so a miss is
     # impossible today and would mean the two had drifted apart. Falling back
     # to Tutorial would quietly relocate the orphans into sphere 1, where
     # nothing gates them -- a KeyError at generation time is the far cheaper
     # failure.
-    for loc_data in world.active_locations():
-        region = regions[loc_data.region]
+    for loc_data in active:
+        region = stretch_of.get(loc_data.name) or regions[loc_data.region]
         region.locations.append(
             PvZ2Location(player, loc_data.name, loc_data.code, region))
 

@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING
 from worlds.generic.Rules import add_rule, set_rule
 
 from .constants import (
-    CHEAP_ATTACKER_PLANTS, KEYED_WORLDS, SUN_PRODUCER_PLANTS, WORLD_ENTRY_PLANTS,
+    CHEAP_ATTACKER_PLANTS, EGYPT_STRETCH_PLANTS, KEYED_WORLDS, STRETCH_PLANTS,
+    SUN_PRODUCER_PLANTS, WORLD_ENTRY_PLANTS,
 )
 from .locations import goal_locations_for
 
@@ -33,6 +34,16 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     for checkpoint_name in ("Ancient Egypt Mid1", "Ancient Egypt Mid2", "Ancient Egypt Late"):
         set_rule(multiworld.get_entrance(f"Enter {checkpoint_name}", player),
                  has_sun_and_attacker)
+        # All three gates asking for exactly the same thing put Egypt's 44
+        # levels in one sphere. The later two also want a plant count, so the
+        # world opens up as the multiworld feeds it rather than all at once.
+        # The first gate is deliberately left alone: Egypt is the only world
+        # playable with no items, and tightening its opening would leave a
+        # seed with nowhere to start.
+        need = EGYPT_STRETCH_PLANTS.get(checkpoint_name)
+        if need:
+            add_rule(multiworld.get_entrance(f"Enter {checkpoint_name}", player),
+                     lambda state, n=need: state.has_group("Plants", player, n))
 
     # Keyed main worlds — accessible once their key is held. Worlds this seed
     # left out have no entrance to rule on (regions.py skips them) and no key
@@ -57,6 +68,20 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
             continue
         add_rule(multiworld.get_entrance(f"Enter {world_name}", player),
                  lambda state, p=plants: state.has_any(p, player))
+
+    # Sequential stretches inside each world (regions.py cuts them). Gated on
+    # progression plants held, so a world key opens the start of a world and
+    # the rest follows as the multiworld sends plants. Only entrances that
+    # actually exist are ruled: regions.py skips worlds too small to cut and
+    # skips Ancient Egypt, which is handled above.
+    for w in sorted(world.enabled_worlds):
+        for suffix, need in STRETCH_PLANTS.items():
+            name = f"Enter {w}{suffix}"
+            try:
+                entrance = multiworld.get_entrance(name, player)
+            except KeyError:
+                continue
+            set_rule(entrance, lambda state, n=need: state.has_group("Plants", player, n))
 
     # Modern Day — unlocked once enough world goals (trophies / completions /
     # keys, per the goal_type option) are reachable.

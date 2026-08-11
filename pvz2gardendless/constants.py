@@ -43,6 +43,29 @@ WORLD_REGIONS: Dict[str, List[str]] = {
 
 ALL_WORLD_REGIONS = {r for regions in WORLD_REGIONS.values() for r in regions}
 
+# ── Sphere depth ──────────────────────────────────────────────────────────────
+# A world key used to open all 44-53 of its levels at once, so a whole world
+# landed in one sphere and fill had no reason to spread progression through it.
+# regions.py now cuts each world into these three sequential stretches, in the
+# order its levels are defined, and rules.py gates the later two on how many
+# progression plants are held.
+#
+# Counted against the 58 plants that are progression items (see LOGIC_PLANTS) --
+# "useful" plants are not tracked in CollectionState, so they cannot be counted.
+# 12 of 58 for the deepest stretch of any world leaves a wide margin; the point
+# is to layer the fill, not to make late levels a grind.
+WORLD_STRETCHES = ("", " Mid", " Late")
+STRETCH_PLANTS = {" Mid": 6, " Late": 12}
+
+# Ancient Egypt is not cut up by that code. It carries a bespoke four-region
+# split declared in locations.py, gated on holding a sun producer and a cheap
+# attacker, and it is the one world reachable with no items at all -- so its
+# opening stretch has to stay ungated or a seed has nowhere to begin. What it
+# lacked was any escalation: all three of its gates asked for the same thing,
+# which put its 44 levels in one sphere behind that single rule. These add a
+# plant count to the later two, on top of the sun-and-attacker requirement.
+EGYPT_STRETCH_PLANTS = {"Ancient Egypt Mid2": 3, "Ancient Egypt Late": 6}
+
 # Worlds every seed keeps, whatever the world-selection options say. Ancient
 # Egypt is the only world reachable with no items at all, so it is what
 # sphere 1 is made of; Modern Day holds the victory location. A seed missing
