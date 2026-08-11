@@ -265,6 +265,56 @@ def shop_location_name(commodity: str) -> str:
     return f"Shop: {commodity}"
 
 
+# Which world a side path is entered from. A side path is not a separate place
+# you can walk to -- it branches off a specific level on a specific world map,
+# so it is unreachable until that world is. These were all sitting in sphere 1,
+# which meant logic thought a Far Future side path was enterable from Egypt.
+#
+# Read out of the game rather than guessed. Three sources, in order of
+# authority: the world-map branch nodes (a map entry like [6,"25-1",
+# ["conceal0"]] places that side path at level 25 of the map it appears on),
+# the Epic Quest tables that group each side path's levels under an
+# epic_<world> codename, and for Rhythm the level's own "#comment": "Iceage 1".
+#
+# Appease spans two worlds -- appease1_* branches from Ancient Egypt and
+# appease2_* from Frostbite Caves -- and is tied to Egypt, the earlier of the
+# two, so the whole side path opens when its first half does.
+SIDE_PATH_WORLD = {
+    "Aloe Sidepath":            "Lost City",
+    "Appease Sidepath":         "Ancient Egypt",
+    "Atombomb Sidepath":        "Kongfu Temple",
+    "Bloominghearts Sidepath":  "Neon Mixtape Tour",
+    "Buttercup Sidepath":       "Pirate Seas",
+    "Conceal Sidepath":         "Modern Day",
+    "Doomshroom Sidepath":      "Dark Ages",
+    "Electriccurrant Sidepath": "Wild West",
+    "Enlighten Sidepath":       "Lost City",
+    "Ghostpepper Sidepath":     "Big Wave Beach",
+    "Gloomshroom Sidepath":     "Modern Day",
+    "Goldbloom Sidepath":       "Modern Day",
+    "Hotdate Sidepath":         "Frostbite Caves",
+    "Icebloom Sidepath":        "Big Wave Beach",
+    "Iceshroom Sidepath":       "Dark Ages",
+    "Meteorflower Sidepath":    "Jurassic Marsh",
+    "Parsnip Sidepath":         "Big Wave Beach",
+    "Plantern Sidepath":        "Dark Ages",
+    "Reinforce Sidepath":       "Far Future",
+    "Rhythm Sidepath":          "Frostbite Caves",
+    "Sapfling Sidepath":        "Wild West",
+    "Seashooter Sidepath":      "Big Wave Beach",
+    "Solartomato Sidepath":     "Far Future",
+    "Squash Sidepath":          "Ancient Egypt",
+    "Strawburst Sidepath":      "Neon Mixtape Tour",
+    "Sweetpotato Sidepath":     "Frostbite Caves",
+    "Umbrellaleaf Sidepath":    "Modern Day",
+    "Vamporcini Sidepath":      "Dark Ages",
+}
+
+# The seven side paths the game data ties to no world: Sandbox, the Bank Theft
+# levels, Epic Beghouled, FloawerPot, the Mixed Danger Room, Reinforcemint and
+# ShootingStarFruit. They are standalone content reached from the world
+# chooser rather than from inside a world, so they stay reachable from the
+# start -- which also keeps a guaranteed sphere-1 pool for fill to open with.
 SIDE_PATH_REGIONS = [
     "Aloe Sidepath", "Appease Sidepath", "Atombomb Sidepath", "Bank Sidepath",
     "Bloominghearts Sidepath", "Buttercup Sidepath", "Conceal Sidepath",
@@ -279,3 +329,12 @@ SIDE_PATH_REGIONS = [
     "Strawburst Sidepath", "Sweetpotato Sidepath", "Umbrellaleaf Sidepath",
     "Vamporcini Sidepath",
 ]
+
+# Every side path named above has to be a real region, or its entry silently
+# gates nothing.
+_unknown_side_paths = set(SIDE_PATH_WORLD) - set(SIDE_PATH_REGIONS)
+if _unknown_side_paths:
+    raise ValueError(f"SIDE_PATH_WORLD names unknown side paths: {sorted(_unknown_side_paths)}")
+_unknown_side_path_worlds = set(SIDE_PATH_WORLD.values()) - set(WORLD_REGIONS)
+if _unknown_side_path_worlds:
+    raise ValueError(f"side paths tied to unknown worlds: {sorted(_unknown_side_path_worlds)}")

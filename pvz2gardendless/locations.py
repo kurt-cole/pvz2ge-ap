@@ -9,7 +9,7 @@ from BaseClasses import Location
 
 from .constants import (
     ALL_WORLD_REGIONS, BASE_ID, GAME_NAME, SHOP_COMMODITIES, SHOP_REGION,
-    SIDE_PATH_REGIONS, shop_location_name,
+    SIDE_PATH_REGIONS, SIDE_PATH_WORLD, WORLD_REGIONS, shop_location_name,
 )
 from .options import GoalType
 
@@ -817,12 +817,22 @@ def active_locations(shopsanity: bool,
     this, not len(ALL_LOCATIONS), or a slot ends up with more items than it
     has places to put them.
 
-    enabled_regions only decides world regions. Tutorial, the side paths and
-    Shop are not part of any world and are always kept.
+    A side path is entered from inside a world (see SIDE_PATH_WORLD), so one
+    belonging to a world this seed left out has to go with it -- otherwise its
+    locations exist with nothing that can reach them and generation fails.
+    Tutorial, Shop and the seven worldless side paths are always kept.
     """
-    return [l for l in ALL_LOCATIONS
-            if (shopsanity or not l.is_shop)
-            and (l.region not in ALL_WORLD_REGIONS or l.region in enabled_regions)]
+    def keep(loc: PvZ2LocationData) -> bool:
+        if loc.is_shop and not shopsanity:
+            return False
+        if loc.region in ALL_WORLD_REGIONS:
+            return loc.region in enabled_regions
+        owner = SIDE_PATH_WORLD.get(loc.region)
+        if owner is not None:
+            return any(r in enabled_regions for r in WORLD_REGIONS[owner])
+        return True
+
+    return [l for l in ALL_LOCATIONS if keep(l)]
 
 
 # World Trophy locations — the mid-world milestone check in each world.

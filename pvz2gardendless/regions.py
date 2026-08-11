@@ -12,7 +12,7 @@ from BaseClasses import Region, ItemClassification
 
 from .constants import (
     ALL_WORLD_REGIONS, KEYED_WORLDS, SHOP_REGION, SIDE_PATH_REGIONS,
-    WORLD_REGIONS, WORLD_STRETCHES,
+    SIDE_PATH_WORLD, WORLD_REGIONS, WORLD_STRETCHES,
 )
 from .items import PvZ2Item
 from .locations import ALL_REGIONS, PvZ2Location
@@ -32,11 +32,14 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
     regions: Dict[str, Region] = {"Menu": menu, "Tutorial": tutorial}
 
     # Regions of worlds this seed left out are never built, so nothing can be
-    # placed in them and nothing can route through them. Shop is built even
-    # with shopsanity off: an empty region costs nothing, while a missing one
-    # would break the connect below.
+    # placed in them and nothing can route through them. That extends to the
+    # side paths of a dropped world, which have no way in once it is gone.
+    # Shop is built even with shopsanity off: an empty region costs nothing,
+    # while a missing one would break the connect below.
+    dropped_side_paths = {sp for sp, owner in SIDE_PATH_WORLD.items()
+                          if owner not in world.enabled_worlds}
     built = ({r for r in ALL_REGIONS if r not in ALL_WORLD_REGIONS}
-             | world.enabled_regions)
+             | world.enabled_regions) - dropped_side_paths
     for name in ALL_REGIONS:
         if name in built and name not in regions:
             regions[name] = Region(name, player, multiworld)
@@ -67,9 +70,22 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
     # (see rules.py); there is no Modern Day Key.
     tutorial.connect(regions["Modern Day"], "Enter Modern Day")
 
-    # Side paths — always accessible from Tutorial
+    # Side paths hang off the world they branch from, not off Tutorial. A side
+    # path is entered from a node on a world map, so it is not reachable until
+    # that world is -- you cannot walk into a Far Future side path from Egypt.
+    # The seven the game ties to no world are standalone content reached from
+    # the chooser, and stay connected to Tutorial.
+    #
+    # Connected to the world's opening stretch rather than to the stretch its
+    # branch node actually sits in: the entry level is usually early in the
+    # world, and gating a side path deeper than the game does would be a
+    # stricter rule than the game enforces.
     for sp in SIDE_PATH_REGIONS:
-        tutorial.connect(regions[sp])
+        if sp not in regions:
+            continue  # its world is not in this seed, so neither is it
+        owner = SIDE_PATH_WORLD.get(sp)
+        parent = regions[owner] if owner in regions else tutorial
+        parent.connect(regions[sp], f"Enter {sp}")
 
     # Shop — reachable from the world map at any time. Affordability is not
     # modelled: currency accrues from play and from Archipelago's own
