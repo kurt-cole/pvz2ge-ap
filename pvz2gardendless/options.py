@@ -164,8 +164,13 @@ class RandomizeConveyorPlants(Toggle):
     Randomize which plants come down the belt on conveyor levels.
 
     Each conveyor entry keeps the level's own drop weight and count, so the
-    pacing of the level is unchanged -- only the plant itself is swapped, for
-    any plant in the game.
+    pacing of the level is unchanged -- only the plant itself is swapped.
+
+    Swaps stay within a plant's own power band, so a belt keeps the shape the
+    level was built around. A sun producer is replaced by another sun producer,
+    a one-shot by another one-shot, and the replacement costs about what the
+    original did (the game's sun cost, bucketed into four tiers). A plant with
+    nothing comparable to trade for is left as the level had it.
 
     Conveyor levels already hand out plants regardless of what Archipelago has
     sent you, so this does not leak progression: you get the plant on the belt

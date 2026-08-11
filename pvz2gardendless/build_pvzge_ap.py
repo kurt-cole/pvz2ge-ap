@@ -343,7 +343,8 @@ window.electron = electron;
     LC.prototype.module_SetConveyor = function (props) {
       let patched = props;
       try {
-        const pool = window._AP_conveyorPool;
+        const pool  = window._AP_conveyorPool;
+        const swaps = window._AP_conveyorSwaps || {};
         if (window._AP_randomizeConveyor && props &&
             Array.isArray(props.InitialPlantList) && pool && pool.length) {
           const list  = props.InitialPlantList;
@@ -361,12 +362,19 @@ window.electron = electron;
             // levels (tool_projectile_*, tool_powertile_*, zombiepotion_*),
             // and turning those into plants makes the level unplayable.
             if (!entry || !known || !known.has(entry.PlantType)) return entry;
+            // Swap within the plant's own group, so a belt keeps the shape the
+            // level was built around: a sun producer stays a sun producer, a
+            // one-shot stays a one-shot, and the replacement costs about what
+            // the original did. A plant with no group -- nothing comparable to
+            // trade it for -- is left as the level had it.
+            const candidates = swaps[entry.PlantType];
+            if (!candidates) return entry;
             let pick = entry.PlantType;
             for (let tries = 0; tries < 20; tries++) {
-              const candidate = pool[Math.floor(rnd() * pool.length)];
+              const candidate = candidates[Math.floor(rnd() * candidates.length)];
               // Keep one belt from being three copies of the same plant while
-              // the pool has plenty of alternatives. Bounded, so a tiny pool
-              // still terminates rather than spinning.
+              // the group has alternatives. Bounded, so a small group still
+              // terminates rather than spinning.
               if (!used.has(candidate)) { pick = candidate; break; }
               pick = candidate;
             }
@@ -502,6 +510,69 @@ window.electron = electron;
   window._AP_CN_TO_ID = {};
   for (const pid in ID_TO_CN) window._AP_CN_TO_ID[ID_TO_CN[pid]] = Number(pid);
 
+  // Conveyor swap groups: which plants count as interchangeable when the belt
+  // is randomized. Keyed role:tier, where role separates plants that stay on
+  // the lawn from those consumed or timed out, and sun producers from both --
+  // a conveyor level that hands out Sunflower and gets an attacker back has no
+  // sun economy left and cannot be won. tier buckets the game's own sun cost,
+  // which is its pricing of a plant's power: budget <75, low 75-149,
+  // mid 150-249, high 250+.
+  //
+  // Derived from the game's own tables, not by hand -- _PLANTPROPERTIES for
+  // Cost / IsConsumable / Lifetime and PlantProps for Family. rotobaga is
+  // absent because it has no sun cost anywhere in the data, so it is left
+  // alone rather than guessed at.
+  const CONVEYOR_GROUPS = {
+    'sustained:mid': [
+      'akee', 'bambooshoot', 'bamboozle', 'bloomerang', 'bloominghearts', 'bonkchoy',
+      'bowlingbulb', 'cactus', 'chomper', 'coldsnapdragon', 'doomshroom', 'dragonbruit',
+      'dusklobber', 'electricblueberry', 'electriccurrant', 'electricpeashooter',
+      'firegourd', 'firepeashooter', 'hotdate', 'iceweed', 'jackolantern', 'laser_bean',
+      'lychee', 'parsnip', 'peanut', 'pepperpult', 'phatbeet', 'primalpeashooter',
+      'pumpkin', 'pvine', 'redstinger', 'repeater', 'skyshooter', 'snapdragon',
+      'snowdrop', 'snowpea', 'sporeshroom', 'starfruit', 'sweetpotato', 'torchwood'
+    ],
+    'sustained:low': [
+      'cabbagepult', 'chardguard', 'cranjelly', 'endurian', 'fumeshroom', 'gloomvine',
+      'guacodile', 'intensivecarrot', 'kernelpult', 'lightningreed', 'magnetshroom',
+      'nightshade', 'peach', 'peapod', 'peashooter', 'primalwallnut', 'sapfling',
+      'spikeweed', 'splitpea', 'tallnut', 'umbrellaleaf', 'vamporcini'
+    ],
+    'single-use:budget': [
+      'blover', 'chilibean', 'empea', 'escaperoot', 'goldbloom', 'goldleaf',
+      'gravebuster', 'hotpotato', 'iceburg', 'potatomine', 'primalpotatomine',
+      'shadowshroom', 'shrinkingviolet', 'solarsage', 'squash', 'stallia', 'stunion',
+      'sunbean', 'tanglekelp'
+    ],
+    'sustained:high': [
+      'applemortar', 'banana', 'cantaloupe', 'citron', 'coconutcannon', 'dandelion',
+      'gatling', 'glaciershroom', 'gloomshroom', 'homingthistle', 'melonpult',
+      'meteorflower', 'missiletoe', 'shootingstarfruit', 'spikerock', 'strawburst',
+      'threepeater', 'wintermelon'
+    ],
+    'sustained:budget': [
+      'buttercup', 'celerystalker', 'explodeonut', 'garlic', 'imitater', 'lilypad',
+      'moonflower', 'puffshroom', 'scaredyshroom', 'seashroom', 'springbean', 'turnip',
+      'wallnut'
+    ],
+    'single-use:low': [
+      'ghostpepper', 'grimrose', 'hurrikale', 'hypnoshroom', 'jalapeno', 'lavaguava',
+      'solartomato', 'thymewarp'
+    ],
+    'single-use:mid': [
+      'cherry_bomb', 'grapeshot', 'perfumeshroom', 'powerlily'
+    ],
+    'sun:budget': [
+      'magnifyinggrass', 'moonbean', 'sunflower', 'sunshroom'
+    ],
+    'sun:low': [
+      'plantern', 'primalsunflower', 'twinsunflower'
+    ],
+    'sun:mid': [
+      'toadstool'
+    ]
+  };
+
   // Conveyor randomization pool, also exposed for the hook in that IIFE.
   // Neither of these two is a plant you would hand a player off a belt:
   // powerplant is what a power tile turns into, and holonut is Infi-nut's
@@ -511,6 +582,19 @@ window.electron = electron;
   const CONVEYOR_EXCLUDE = new Set(['powerplant', 'holonut']);
   window._AP_conveyorPool  = Object.values(ID_TO_CN).filter(cn => !CONVEYOR_EXCLUDE.has(cn));
   window._AP_conveyorKnown = new Set(window._AP_conveyorPool);
+
+  // codename -> the list of plants it may be swapped for. Built here rather
+  // than stored per plant so CONVEYOR_GROUPS above stays readable as groups.
+  // A plant whose group has fewer than two usable members is left out
+  // entirely, which the hook reads as "do not swap this one" -- swapping a
+  // plant for itself is churn, and there is nothing else in its power band to
+  // reach for. That is currently toadstool, the only mid-cost sun producer.
+  window._AP_conveyorSwaps = {};
+  for (const key of Object.keys(CONVEYOR_GROUPS)) {
+    const members = CONVEYOR_GROUPS[key].filter(cn => !CONVEYOR_EXCLUDE.has(cn));
+    if (members.length < 2) continue;
+    for (const cn of members) window._AP_conveyorSwaps[cn] = members;
+  }
 
   // Mirrors the conveyor slot_data onto window for that hook. Persisted on st
   // so a page reload keeps randomizing before the socket is back up, and read

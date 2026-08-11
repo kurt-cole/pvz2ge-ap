@@ -98,29 +98,37 @@ CHEAP_ATTACKER_PLANTS = [
 # per entry onto that world's key requirement, so adding a world here is all
 # it takes to gate it -- and its plants are picked up by LOGIC_PLANTS below
 # automatically.
-# Single-use plants: consumed the moment they go off (or, for Ghost Pepper,
-# after a short timer). They are perfectly good attackers, which is why they
-# stay in CHEAP_ATTACKER_PLANTS for the Ancient Egypt logic gate -- but they
-# are a poor GUARANTEED STARTING PLANT, which exists so a player always has
-# something that can hold a lane. A run whose only plant is Potato Mine has to
-# replant on every single zombie.
-# The game has no data flag for this: nothing in PlantProperties distinguishes
-# a plant that dies on use, and Family does not track it either (Explode-O-Nut
-# is Explosive but is a wall). So this is curated, like the lists above.
+# Plants that do not stay on the lawn: consumed when they go off, or gone on a
+# timer. They are perfectly good attackers, which is why they stay in
+# CHEAP_ATTACKER_PLANTS for the Ancient Egypt logic gate -- but they are a poor
+# GUARANTEED STARTING PLANT, which exists so a player always has something that
+# can hold a lane. A run whose only plant is Potato Mine has to replant on
+# every single zombie.
+#
+# DERIVED FROM GAME DATA, not judgement. Every plant here is one the game's own
+# _PLANTPROPERTIES sheet marks `IsConsumable` (consumed on use) or gives a
+# `Lifetime` (expires on its own -- this is what catches Ghost Pepper, which is
+# not consumable but does vanish). Peashooter has neither; Squash has
+# IsConsumable; Ghost Pepper has Lifetime.
+#
+# To regenerate after a game update, read
+# assets/resources/import/3d/3d9ce08d-*.json (the _PLANTPROPERTIES table) and
+# intersect those two flags with CHEAP_ATTACKER_PLANTS. Three of the plants
+# below have no sheet at all -- Scaredy-shroom, Vamporcini and Skyshooter --
+# and are treated as persistent, which matches what they do.
 SINGLE_USE_PLANTS = [
-    "Cherry Bomb", "Chili Bean", "E.M. Peach", "Electric Blueberry",
-    "Escape Root", "Ghost Pepper", "Grapeshot", "Hypno-shroom",
-    "Intensive Carrot", "Jalapeno", "Lava Guava", "Potato Mine",
-    "Primal Potato Mine", "Shadow-shroom", "Squash",
+    "Cherry Bomb", "Chili Bean", "E.M. Peach", "Escape Root", "Ghost Pepper",
+    "Grapeshot", "Hypno-shroom", "Jalapeno", "Lava Guava", "Potato Mine",
+    "Primal Potato Mine", "Shadow-shroom", "Shrinking Violet", "Squash",
 ]
 
-# Plants that persist but deal no damage of their own -- support, defence and
-# utility. Also unfit as the sole starting plant for the same reason: the
-# guarantee is meant to be something that can actually kill a zombie.
+# Plants that persist but deal no damage of their own -- support and defence.
+# Also unfit as the sole starting plant for the same reason: the guarantee is
+# meant to be something that can actually kill a zombie. Judgement rather than
+# data; the game has no "deals no damage" flag.
 NON_DAMAGING_PLANTS = [
     "Explode-O-Nut",    # a wall; only hurts what is already eating it
     "Moonflower",       # shadow support, powers other plants
-    "Shrinking Violet", # shrinks zombies rather than damaging them
 ]
 
 # What generate_early() may hand a player for free. A cheap attacker that
