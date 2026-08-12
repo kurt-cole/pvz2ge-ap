@@ -225,20 +225,18 @@ class PvZ2GardendlessWorld(World):
         starter = self.random.choice(STARTER_PLANTS)
         self.multiworld.push_precollected(self.create_item(starter))
 
-        # No sun producer is requested or granted here. It used to be nudged
-        # into sphere 1 with multiworld.early_items, because Egypt's ungated
-        # opening ran all the way to egypt9 and logic thought nine levels were
-        # playable on falling sun alone. The gate now starts at egypt3 instead
-        # (see locations.py), so that expectation is expressed as a rule rather
-        # than as a request fill was free to ignore.
+        # No sun producer is requested or granted here, and none needs to be.
+        # It used to be nudged into sphere 1 with multiworld.early_items, which
+        # was only ever a request -- fill warns and places normally when it
+        # cannot honour one.
         #
-        # Note this does NOT guarantee a sun producer turns up early. The Egypt
-        # gate is not the only exit from sphere 1: a world key opens its world
-        # with no plant requirement at all, so fill can legitimately route a
-        # seed through Pirate Seas first and place every sun producer behind it.
-        # What the gate buys is that logic no longer CLAIMS egypt3-9 are
-        # playable without one. If a seed should also be guaranteed to find sun
-        # early, that is a separate mechanism and wants early_items back.
+        # It is now structural. Sphere 1 is egypt1-2, the tutorial, the shop and
+        # the standalone side paths, and every exit from it runs through a sun
+        # producer: Egypt's own gate starts at egypt3, and rules.py requires one
+        # to enter every other world on top of its key. So fill has to place a
+        # sun producer in sphere 1 or the seed does not open at all. sphere_test
+        # proves this by brute force over the whole pool rather than by
+        # assertion -- see "no item other than a sun producer opens anything".
 
     def _choose_worlds(self) -> Set[str]:
         """Resolve world_count and enabled_worlds into one set of worlds.

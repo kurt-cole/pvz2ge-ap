@@ -156,9 +156,12 @@ from pvz2gardendless.constants import WORLD_ENTRY_PLANTS, SUN_PRODUCER_PLANTS, J
 
 print("\n=== world entry requirements ===")
 mw, w = build()
+# WORLD_ENTRY_PLANTS holds only a world's OWN extra asks. Every world also
+# needs a sun producer now (rules.py), which is not listed there, so it is
+# carried in the baseline here -- these cases are about the per-world plants.
 for world_name, groups in WORLD_ENTRY_PLANTS.items():
     key = f"{world_name} Key"
-    base = [i.name for i in mw.precollected] + [key]
+    base = [i.name for i in mw.precollected] + [key, "Sunflower"]
 
     def opens(extra):
         st = state_with(mw, base + extra)
@@ -167,7 +170,7 @@ for world_name, groups in WORLD_ENTRY_PLANTS.items():
     if opens([]):
         fail(f"{world_name} opens on its key alone, ignoring its plant requirements")
     else:
-        ok(f"{world_name}: key alone is not enough ({len(groups)} plant requirement(s))")
+        ok(f"{world_name}: key + sun is not enough ({len(groups)} more requirement(s))")
 
     # each requirement must be independently necessary
     for i, g in enumerate(groups):
@@ -179,6 +182,14 @@ for world_name, groups in WORLD_ENTRY_PLANTS.items():
         fail(f"{world_name}: one plant from each requirement still does not open it")
     else:
         ok(f"{world_name}: opens with one plant from each requirement")
+
+    # ...and the universal sun requirement must bite here too: drop it and the
+    # world must close again, however many of its own plants are held.
+    st_nosun = state_with(mw, [i.name for i in mw.precollected] + [key] + one_from_each)
+    if any(r.name == world_name for r in st_nosun._reachable):
+        fail(f"{world_name} opens with no sun producer")
+    else:
+        ok(f"{world_name}: still closed without a sun producer")
 
 # Dark Ages spelled out, since it is the first world to carry two asks
 mw, w = build()
@@ -207,7 +218,7 @@ for label, extra in cases:
 # Frostbite Caves wants a standing heat source, not just any fire plant.
 from pvz2gardendless.constants import FIRE_AURA_PLANTS
 mw, w = build()
-fbase = [i.name for i in mw.precollected] + ["Frostbite Caves Key"]
+fbase = [i.name for i in mw.precollected] + ["Frostbite Caves Key", "Sunflower"]
 print()
 for label, extra, want in [
     ("key only", [], False),
@@ -294,16 +305,34 @@ for _p in SUN_PRODUCER_PLANTS:
 else:
     ok(f'all {len(SUN_PRODUCER_PLANTS)} sun producers satisfy the gate')
 
-# The honest limit of the gate, pinned so nobody reads more into it than it
-# does: a world key opens its world with no plant requirement, so a sun
-# producer is NOT forced into sphere 1 and can legitimately be found late.
-_key_only = {l.name for l in state_with(_mw, _pre + ['Pirate Seas Key']).reachable_locations()}
-if len(_key_only) <= len(_no_sun):
-    fail('a world key no longer opens anything without a sun producer -- '
-         'the comments in rules.py and generate_early() now overclaim')
+# THE structural guarantee, and the reason no early_items nudge is needed:
+# a sun producer is the ONLY way out of sphere 1. Every world's entrance wants
+# one on top of its key, and Egypt's own gate wants one at egypt3, so fill has
+# to place a sun producer in sphere 1 or the seed never opens.
+#
+# Checked by brute force over the whole pool rather than by spot-checking a
+# key, because the claim is about every item there is. This is what the
+# comments in rules.py assert; if it ever stops holding, they overclaim and a
+# seed can bury every sun producer behind a world key again.
+_escapes = sorted(
+    n for n in {i.name for i in _mw.itempool}
+    if n not in SUN_PRODUCER_PLANTS
+    and len(state_with(_mw, _pre + [n]).reachable_locations()) > len(_no_sun)
+)
+if _escapes:
+    fail(f'{len(_escapes)} non-sun item(s) open locations on their own, so a sun '
+         f'producer is not forced into sphere 1: {_escapes[:6]}')
 else:
-    ok(f'a world key still opens {len(_key_only) - len(_no_sun)} locations with no '
-       f'sun producer (the gate bounds logic, it does not force an early find)')
+    ok('no item other than a sun producer opens anything from sphere 1, so fill '
+       'must place one there')
+
+# ...and each sun producer on its own really does open it, or that is a wall.
+_stuck = [p for p in SUN_PRODUCER_PLANTS
+          if len(state_with(_mw, _pre + [p]).reachable_locations()) <= len(_no_sun)]
+if _stuck:
+    fail(f'sun producers that open nothing: {_stuck}')
+else:
+    ok(f'each of the {len(SUN_PRODUCER_PLANTS)} sun producers opens sphere 1 on its own')
 
 print()
 print(f"progression plants available: {len(PROG_PLANTS)}")

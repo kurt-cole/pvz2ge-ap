@@ -13,9 +13,18 @@ let you use one until Archipelago actually sends it to you. You are guaranteed o
 plant at the start of the run so you always have something to place.
 
 Each world other than Ancient Egypt is locked behind its own **World Key** item, so the order you see
-the game in is decided by the multiworld rather than by the map. Ancient Egypt is split into four
-sequential stretches, each one wanting at least one sun-producing plant and one cheap attacker before
-the logic considers it survivable.
+the game in is decided by the multiworld rather than by the map. A key on its own is not enough
+though: **every world needs a sun-producing plant** before logic will send you into it, because no
+world is playable on falling sun alone. Some worlds ask for more on top — Big Wave Beach wants a Lily
+Pad, Frostbite Caves a standing heat source, Jurassic Marsh a Perfume-shroom, Dark Ages an answer to
+the Jester.
+
+Ancient Egypt is the exception and the place every run starts. Its first two levels need nothing but
+the plant you begin with; from **Egypt level 3** onward it also wants a sun producer and a cheap
+attacker, and its later stretches want a growing number of plants on top.
+
+Between those two rules, a sun producer is the only thing that can open up a fresh run — so one is
+always findable in the handful of levels you can reach at the start.
 
 Modern Day is the exception: it has no key. It opens once you have met a configurable number of world
 goals — world trophies, world completions, or world keys, whichever you pick.

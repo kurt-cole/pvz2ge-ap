@@ -42,10 +42,9 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         # seed with nowhere to start.
         # Mid1 starts at egypt3, so has_sun_and_attacker above is what makes
         # "you are expected to have a sun producer by Egypt level 3" true in
-        # logic. It is NOT the only exit from sphere 1 -- a world key opens its
-        # world with no plant requirement -- so it does not force a sun producer
-        # to be found early; it only stops logic claiming egypt3-9 are playable
-        # without one. See generate_early() for what this replaced.
+        # logic. Together with the universal world rule below it is also one of
+        # the only two exits from sphere 1, and both want a sun producer -- see
+        # generate_early() for why that matters and what it replaced.
         need = EGYPT_STRETCH_PLANTS.get(checkpoint_name)
         if need:
             add_rule(multiworld.get_entrance(f"Enter {checkpoint_name}", player),
@@ -72,6 +71,27 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # to the Jester, and those are separate asks, not alternatives.
     # The lists live in constants.WORLD_ENTRY_PLANTS so items.py can force
     # every one of them to progression -- see LOGIC_PLANTS.
+    # Every world except Ancient Egypt needs a sun producer on top of whatever
+    # else lets you in. No world is playable on falling sun alone -- the same
+    # judgement Egypt's own checkpoints already made -- and holding a key was
+    # letting a player walk into a world with no way to build an economy.
+    #
+    # This is also what makes the sun producer a STRUCTURAL guarantee rather
+    # than a hope. Sphere 1 is egypt1-2, the tutorial, the shop and the
+    # standalone side paths; every exit from it now runs through a sun producer
+    # (Egypt's own gate at egypt3, or any world's entrance), so fill has to
+    # place one in sphere 1 or the seed does not open at all. That is what the
+    # old early_items request was reaching for and could not enforce.
+    #
+    # Ancient Egypt is excluded and has no named entrance to rule on anyway:
+    # regions.py connects it to Tutorial unnamed, deliberately, because it is
+    # the one world playable with no items and is what sphere 1 is made of.
+    for world_name in sorted(world.enabled_worlds):
+        if world_name == "Ancient Egypt":
+            continue
+        add_rule(multiworld.get_entrance(f"Enter {world_name}", player),
+                 lambda state: state.has_any(SUN_PRODUCER_PLANTS, player))
+
     for world_name, requirements in WORLD_ENTRY_PLANTS.items():
         if world_name not in world.enabled_worlds:
             continue

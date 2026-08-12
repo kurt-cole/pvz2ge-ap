@@ -306,11 +306,13 @@ WORLD_ENTRY_PLANTS = {
     # FIRE_AURA_PLANTS for why Hot Potato and Pepper-pult no longer count.
     "Frostbite Caves": [FIRE_AURA_PLANTS],
     "Jurassic Marsh":  [["Perfume-shroom"]],
-    # Dark Ages is permanently night: no sun falls, so a sun producer is the
-    # difference between playing the world and standing still. On top of that
-    # the Jester returns straight-line shots, so something that gets round him
-    # is needed too.
-    "Dark Ages":       [SUN_PRODUCER_PLANTS, JESTER_COUNTER_PLANTS],
+    # Dark Ages is permanently night, so no sun falls at all and a sun producer
+    # is the difference between playing the world and standing still. That is
+    # no longer listed here: rules.py requires a sun producer to enter EVERY
+    # world, so naming it again would only evaluate the same has_any twice.
+    # What stays is the Jester, who returns straight-line shots, so something
+    # that gets round him is needed on top.
+    "Dark Ages":       [JESTER_COUNTER_PLANTS],
 }
 
 # Every plant named by an access rule anywhere in rules.py. items.py forces
