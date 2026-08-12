@@ -128,13 +128,17 @@ SUN_PRODUCER_PLANTS = [
 # Scaredy-shroom, Vamporcini and Skyshooter have no _PLANTPROPERTIES sheet at
 # all. They are listed by hand because no sheet means unknown, not harmless --
 # all three plainly attack.
+#
+# Magnifying Grass is held out by hand despite passing every test above: it
+# spends sun to fire, so as the only plant on a sun-starved opening lawn it
+# cannot be relied on to kill anything.
 CHEAP_ATTACKER_PLANTS = [
     "Blooming Heart", "Bonk Choy", "Buttercup", "Cabbage-pult",
     "Celery Stalker", "Chard Guard", "Cherry Bomb", "Chili Bean", "Chomper",
     "Dusk Lobber", "Electric Blueberry", "Electric Currant", "Endurian",
     "Escape Root", "Fume-Shroom", "Ghost Pepper", "Gloom Vine", "Grapeshot",
     "Grimrose", "Guacodile", "Iceweed", "Jalapeno", "Kernel-pult",
-    "Lava Guava", "Lightning Reed", "Magnifying Grass", "Nightshade",
+    "Lava Guava", "Lightning Reed", "Nightshade",
     "Parsnip", "Pea Pod", "Pea Vine", "Pea-nut", "Peashooter", "Phat Beet",
     "Potato Mine", "Primal Potato Mine", "Puff-shroom", "Red Stinger",
     "Shadow-shroom", "Snap Dragon", "Snow Pea", "Spikeweed", "Split Pea",

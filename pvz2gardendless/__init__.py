@@ -16,7 +16,7 @@ import settings
 
 from .constants import (
     ALWAYS_ENABLED_WORLDS, GAME_NAME, OPTIONAL_WORLDS, SELECTABLE_WORLDS,
-    STARTER_PLANTS, WORLD_REGIONS,
+    STARTER_PLANTS, SUN_PRODUCER_PLANTS, WORLD_REGIONS,
 )
 from .options import PvZ2Options
 from .items import (
@@ -223,6 +223,23 @@ class PvZ2GardendlessWorld(World):
         # non-damaging support. Those still count for the Egypt logic gate.
         starter = self.random.choice(STARTER_PLANTS)
         self.multiworld.push_precollected(self.create_item(starter))
+
+        # ...and force a sun producer into sphere 1. Ancient Egypt's opening
+        # stretch is deliberately ungated, so sphere 1 is whatever the starting
+        # plant alone reaches, and nothing made a sun producer part of it. A
+        # spoiler log with no sun plant anywhere in sphere 1 means opening the
+        # run on falling sun alone, with no way to build toward the
+        # sun-and-attacker gate that leads out of Egypt.
+        #
+        # early_items rather than push_precollected: handing the plant over at
+        # the start would satisfy every sun requirement in the seed before it
+        # was ever asked. The Egypt Mid1 gate is exactly "a sun producer and an
+        # attacker", and both halves would then be free, opening Egypt's middle
+        # in sphere 1 and undoing the split into stretches. Dark Ages would
+        # likewise collapse to its Jester requirement alone. This instead
+        # guarantees the plant is FOUND early, leaving each gate meaningful.
+        self.multiworld.early_items[self.player][
+            self.random.choice(SUN_PRODUCER_PLANTS)] = 1
 
     def _choose_worlds(self) -> Set[str]:
         """Resolve world_count and enabled_worlds into one set of worlds.
