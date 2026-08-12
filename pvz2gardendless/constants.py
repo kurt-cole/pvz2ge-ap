@@ -147,11 +147,30 @@ SINGLE_USE_PLANTS = [
 
 # Plants that persist but deal no damage of their own -- support and defence.
 # Also unfit as the sole starting plant for the same reason: the guarantee is
-# meant to be something that can actually kill a zombie. Judgement rather than
-# data; the game has no "deals no damage" flag.
+# meant to be something that can actually kill a zombie.
+#
+# DERIVED FROM GAME DATA. A plant is here when its _PLANTPROPERTIES sheet shows
+# no damage by ANY of these measures: an almanac `damage` PlantStat, a
+# ChewDamage / ContactDamage / ExplodeDamage field, an Action with Damage > 0,
+# or a `special` (instant-kill) Action.
+#
+# All four measures are needed, because the almanac stat alone is a rating for
+# display and some plants that plainly kill do not carry one -- Chomper has no
+# `damage` stat but does have ChewDamage 200, and dropping it would be wrong.
+# Conversely Family is NOT a damage signal: it is a theme tag, and the whole
+# "Magic" family (Intensive Carrot, Hypno-shroom, Shrinking Violet, Caulipower,
+# Enchant-mint, Zoybean Pod, Marigold) is utility. Intensive Carrot reached the
+# starter pool that way -- Family=Magic, SunCost 100, so CHEAP_ATTACKER_PLANTS
+# took it for an attacker when all it does is revive a dead plant
+# (PercentageOfHealthForRaisedPlant, no damage of any kind).
+#
+# To regenerate after a game update, read the same _PLANTPROPERTIES table
+# SINGLE_USE_PLANTS uses and keep the cheap attackers with no damage evidence.
 NON_DAMAGING_PLANTS = [
     "Explode-O-Nut",    # a wall; only hurts what is already eating it
+    "Intensive Carrot", # revives a destroyed plant, no attack at all
     "Moonflower",       # shadow support, powers other plants
+    "Shrinking Violet", # shrinks zombies; already single-use, listed for completeness
 ]
 
 # What generate_early() may hand a player for free. A cheap attacker that
