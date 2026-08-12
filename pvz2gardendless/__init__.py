@@ -16,7 +16,7 @@ import settings
 
 from .constants import (
     ALWAYS_ENABLED_WORLDS, GAME_NAME, OPTIONAL_WORLDS, SELECTABLE_WORLDS,
-    STARTER_PLANTS, SUN_PRODUCER_PLANTS, WORLD_REGIONS,
+    STARTER_PLANTS, WORLD_REGIONS,
 )
 from .options import PvZ2Options
 from .items import (
@@ -225,22 +225,20 @@ class PvZ2GardendlessWorld(World):
         starter = self.random.choice(STARTER_PLANTS)
         self.multiworld.push_precollected(self.create_item(starter))
 
-        # ...and force a sun producer into sphere 1. Ancient Egypt's opening
-        # stretch is deliberately ungated, so sphere 1 is whatever the starting
-        # plant alone reaches, and nothing made a sun producer part of it. A
-        # spoiler log with no sun plant anywhere in sphere 1 means opening the
-        # run on falling sun alone, with no way to build toward the
-        # sun-and-attacker gate that leads out of Egypt.
+        # No sun producer is requested or granted here. It used to be nudged
+        # into sphere 1 with multiworld.early_items, because Egypt's ungated
+        # opening ran all the way to egypt9 and logic thought nine levels were
+        # playable on falling sun alone. The gate now starts at egypt3 instead
+        # (see locations.py), so that expectation is expressed as a rule rather
+        # than as a request fill was free to ignore.
         #
-        # early_items rather than push_precollected: handing the plant over at
-        # the start would satisfy every sun requirement in the seed before it
-        # was ever asked. The Egypt Mid1 gate is exactly "a sun producer and an
-        # attacker", and both halves would then be free, opening Egypt's middle
-        # in sphere 1 and undoing the split into stretches. Dark Ages would
-        # likewise collapse to its Jester requirement alone. This instead
-        # guarantees the plant is FOUND early, leaving each gate meaningful.
-        self.multiworld.early_items[self.player][
-            self.random.choice(SUN_PRODUCER_PLANTS)] = 1
+        # Note this does NOT guarantee a sun producer turns up early. The Egypt
+        # gate is not the only exit from sphere 1: a world key opens its world
+        # with no plant requirement at all, so fill can legitimately route a
+        # seed through Pirate Seas first and place every sun producer behind it.
+        # What the gate buys is that logic no longer CLAIMS egypt3-9 are
+        # playable without one. If a seed should also be guaranteed to find sun
+        # early, that is a separate mechanism and wants early_items back.
 
     def _choose_worlds(self) -> Set[str]:
         """Resolve world_count and enabled_worlds into one set of worlds.

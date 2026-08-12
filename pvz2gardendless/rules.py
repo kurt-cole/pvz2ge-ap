@@ -40,6 +40,12 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         # The first gate is deliberately left alone: Egypt is the only world
         # playable with no items, and tightening its opening would leave a
         # seed with nowhere to start.
+        # Mid1 starts at egypt3, so has_sun_and_attacker above is what makes
+        # "you are expected to have a sun producer by Egypt level 3" true in
+        # logic. It is NOT the only exit from sphere 1 -- a world key opens its
+        # world with no plant requirement -- so it does not force a sun producer
+        # to be found early; it only stops logic claiming egypt3-9 are playable
+        # without one. See generate_early() for what this replaced.
         need = EGYPT_STRETCH_PLANTS.get(checkpoint_name)
         if need:
             add_rule(multiworld.get_entrance(f"Enter {checkpoint_name}", player),

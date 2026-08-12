@@ -75,21 +75,21 @@ def run(label, **kw):
                                            SUN_PRODUCER_PLANTS)
     assert len(mw.precollected) == 1, "expected exactly one starting plant"
     starter = mw.precollected[0].name
-    # A sun producer is forced into sphere 1 as an EARLY ITEM, not granted.
-    # Granting it would satisfy every sun requirement in the seed before it was
-    # ever asked -- the Egypt Mid1 gate is "a sun producer and an attacker",
-    # and both halves would be free from the start.
-    early = mw.early_items[1]
-    assert len(early) == 1, f"expected one early item, got {early}"
-    (early_name, early_count), = early.items()
-    assert early_name in SUN_PRODUCER_PLANTS, f"early item {early_name} is not a sun producer"
-    assert early_count == 1, f"early item count {early_count} != 1"
-    # It has to actually be in the pool, or fill has nothing to place early.
-    assert any(i.name == early_name for i in mw.itempool), \
-        f"early item {early_name} is not in the item pool"
-    # ...and it must NOT be a starting item, or the gates go vacuous.
-    assert early_name not in [i.name for i in mw.precollected], \
-        f"{early_name} was granted outright, defeating the early-item logic"
+    # The sun producer is guaranteed STRUCTURALLY, not requested. Nothing is
+    # nudged into sphere 1 any more: the Egypt gate starts at egypt3, so a sun
+    # producer is the only way out of sphere 1 and fill has to place one there
+    # for the seed to open at all. An early_items entry here would mean the old
+    # nudge came back, which fill was free to ignore.
+    assert not mw.early_items[1], \
+        f"nothing should be requested early any more, got {dict(mw.early_items[1])}"
+    # ...and no sun producer may be granted outright, or every sun requirement
+    # in the seed is satisfied before it is ever asked and the gates go vacuous.
+    assert not (set(SUN_PRODUCER_PLANTS) & {i.name for i in mw.precollected}), \
+        "a sun producer was granted outright, defeating the Egypt gate"
+    # Every sun producer has to actually be in the pool, or the gate is a wall.
+    _pool_names = {i.name for i in mw.itempool}
+    assert set(SUN_PRODUCER_PLANTS) <= _pool_names, \
+        f"sun producers missing from the pool: {sorted(set(SUN_PRODUCER_PLANTS) - _pool_names)}"
     assert starter in STARTER_PLANTS, f"starter {starter} not in STARTER_PLANTS"
     assert starter not in SINGLE_USE_PLANTS, f"starter {starter} is single-use"
     assert starter not in NON_DAMAGING_PLANTS, f"starter {starter} deals no damage"

@@ -247,6 +247,64 @@ else:
     ok(f"shuffle_zombies leaves every sphere identical "
        f"({', '.join(str(len(s)) for s in _off)} locations at 3 depths)")
 
+# ── the Egypt sun gate starts at egypt3 ─────────────────────────────────────
+# "By Egypt level 3 you are expected to have a sun producing plant", expressed
+# as a rule. egypt1 and egypt2 stay playable with nothing but the free starting
+# plant -- they are what sphere 1 is made of, and gating them would leave a
+# seed with nowhere to begin.
+#
+# Location names rather than level codes because that is what the regions hold;
+# the mapping is the client's own LOC_LEVELS (egypt1 = Map Unlock,
+# egypt2 = Cabbagepult Unlock, egypt3 = Bloomerang Unlock ... egypt9).
+_mw, _w = build()
+_pre = [i.name for i in _mw.precollected]
+_open_egypt = ['Map Unlock', 'Cabbagepult Unlock']          # egypt1-2
+_gated_egypt = ['Bloomerang Unlock', 'Powerupgadget Unlock', 'Iceburg Unlock',
+                'Branch Unlock Egypt 6', 'Note Egypt Unlock',
+                'World Key - Ancient Egypt', 'Gravebuster Unlock']  # egypt3-9
+
+_no_sun = {l.name for l in state_with(_mw, _pre).reachable_locations()}
+_with_sun = {l.name for l in state_with(_mw, _pre + ['Sunflower']).reachable_locations()}
+
+_missing = [n for n in _open_egypt if n not in _no_sun]
+if _missing:
+    fail(f"egypt1-2 need more than the starting plant: {_missing}")
+else:
+    ok('egypt1-2 are playable with only the free starting plant')
+
+_leaked = [n for n in _gated_egypt if n in _no_sun]
+if _leaked:
+    fail(f"reachable with no sun producer, so the gate does not start at egypt3: {_leaked}")
+else:
+    ok(f'all {len(_gated_egypt)} of egypt3-9 need a sun producer')
+
+_still = [n for n in _gated_egypt if n not in _with_sun]
+if _still:
+    fail(f"a sun producer does not open egypt3-9: {_still}")
+else:
+    ok('a sun producer opens egypt3-9')
+
+# Every sun producer must work, not just Sunflower -- the gate is has_any() and
+# a seed may only ever offer one of the six.
+for _p in SUN_PRODUCER_PLANTS:
+    _r = {l.name for l in state_with(_mw, _pre + [_p]).reachable_locations()}
+    if any(n not in _r for n in _gated_egypt):
+        fail(f'{_p} does not satisfy the Egypt sun gate')
+        break
+else:
+    ok(f'all {len(SUN_PRODUCER_PLANTS)} sun producers satisfy the gate')
+
+# The honest limit of the gate, pinned so nobody reads more into it than it
+# does: a world key opens its world with no plant requirement, so a sun
+# producer is NOT forced into sphere 1 and can legitimately be found late.
+_key_only = {l.name for l in state_with(_mw, _pre + ['Pirate Seas Key']).reachable_locations()}
+if len(_key_only) <= len(_no_sun):
+    fail('a world key no longer opens anything without a sun producer -- '
+         'the comments in rules.py and generate_early() now overclaim')
+else:
+    ok(f'a world key still opens {len(_key_only) - len(_no_sun)} locations with no '
+       f'sun producer (the gate bounds logic, it does not force an early find)')
+
 print()
 print(f"progression plants available: {len(PROG_PLANTS)}")
 print("\n" + (f"{failed} FAILURE(S)" if failed else "SPHERE LOGIC OK"))
