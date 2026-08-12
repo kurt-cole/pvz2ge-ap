@@ -100,6 +100,9 @@ removes the levels of the worlds it leaves out.
 - **Lawn Mower Trap** — sets off every lawn mower on the field at once. They roll out and are spent,
   leaving those lanes with no last line of defence for the rest of the level. A trap received while
   you are not in a level is held and applied when the next one starts.
+- **Costume Shuffle Trap** — re-rolls what every dressed plant is wearing, including taking some
+  costumes back off. It never takes a costume away from you: only what is worn changes, so anything
+  scrambled can be put back on from the almanac.
 
 ## Which items can be in another player's world?
 

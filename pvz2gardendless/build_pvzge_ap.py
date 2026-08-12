@@ -1530,7 +1530,7 @@ window.electron = electron;
 
   let cfg   = { server:'localhost:38281', slot:'', password:'' };
   let st    = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
-                upgradeCounts:{}, costumes:{}, pendingCostumes:0, runKey:'' };
+                upgradeCounts:{}, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey:'' };
   let sessionActive = false; // set true only after explicit Connect + server ack
   // Whether this session has told the server the goal is met. Session state,
   // not persisted: it is reset on every disconnect so a reconnect re-sends,
@@ -1683,9 +1683,9 @@ window.electron = electron;
       // is rebuilt from scratch every poll, so anything the game wrote here
       // is about to be discarded. costume is the one being worn -- the most
       // recently granted, matching what unlockPlantCostume() does.
-      const worn = ownedCostumes(pid);
+      const owned = ownedCostumes(pid);
       if(cn) cp.plantProps[cn] = {progress:1,medal:false,tutorialLevel:1,boost:0,
-        costume: worn.length ? worn[worn.length-1] : -1, costumes: worn.slice()};
+        costume: wornCostume(pid), costumes: owned.slice()};
     }
 
     // 2b. Same treatment for the permanent upgrades, when this seed shuffles
@@ -1892,7 +1892,7 @@ window.electron = electron;
           // so it has to be cleared here explicitly -- carrying it into a new
           // seed would grant upgrades that seed never sent.
           st = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
-                 upgradeCounts:{}, costumes:{}, pendingCostumes:0, runKey };
+                 upgradeCounts:{}, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey };
           window._AP_grantedPlantIds = new Set();
           window._AP_grantedUpgrades = new Set();
           svSt();
@@ -2046,6 +2046,13 @@ window.electron = electron;
     // Counting here is safe against the post-connect replay for the same
     // reason the coin/gem running totals are: applyItem() is only reached for
     // items at or past st.lastIdx, so a replayed item is never counted twice.
+    if(name === COSTUME_TRAP){
+      // Applied straight away rather than queued like the mower trap: it only
+      // rewrites saved state, so it does not need a level to be running, and
+      // a player with no costumes yet simply has nothing to scramble.
+      if(!shuffleCostumes()) toast('🎭 Costume Shuffle — nothing to scramble', '#f66');
+      return;
+    }
     if(name === RANDOM_COSTUME){
       // Banked first, then drained: grantRandomCostume() can legitimately fail
       // (no plants yet, or every costume already worn) and the bank is what
@@ -2209,8 +2216,47 @@ window.electron = electron;
   // rebuild restores from it.
   const RANDOM_COSTUME = 'Random Plant Costume';
 
+  const COSTUME_TRAP = 'Costume Shuffle Trap';
+
   function ownedCostumes(pid){
     return (st.costumes || {})[pid] || [];
+  }
+
+  // Which costume a plant is actually wearing. Separate from what it owns so
+  // the shuffle trap can move it around without ever costing the player a
+  // costume -- st.costumes is the collection, st.wornCostume is the outfit.
+  // Absent means "wear the most recent", which is what granting one does.
+  function wornCostume(pid){
+    const owned = ownedCostumes(pid);
+    if(!owned.length) return -1;
+    const worn = (st.wornCostume || {})[pid];
+    // -1 is a real choice the trap can make: it means wearing none.
+    if(worn === -1) return -1;
+    if(worn === undefined || owned.indexOf(worn) < 0) return owned[owned.length-1];
+    return worn;
+  }
+
+  // The Costume Shuffle Trap. Re-rolls what every dressed plant is wearing,
+  // "none" included, so a collection the player has arranged gets scrambled.
+  // Nothing is taken away: only st.wornCostume changes, so every costume can
+  // be put back on from the almanac.
+  function shuffleCostumes(){
+    const owned = st.costumes || {};
+    const pids = Object.keys(owned).filter(pid => owned[pid].length);
+    if(!pids.length) return false;
+    if(!st.wornCostume) st.wornCostume = {};
+    let moved = 0;
+    for(const pid of pids){
+      // The choices are everything that plant owns, plus taking it off.
+      const choices = owned[pid].concat([-1]);
+      const before = wornCostume(pid);
+      const pick = choices[Math.floor(Math.random() * choices.length)];
+      st.wornCostume[pid] = pick;
+      if(pick !== before) moved++;
+    }
+    svSt();
+    toast('🎭 Costume Shuffle — ' + moved + ' plant' + (moved===1?'':'s') + ' redressed', '#f66');
+    return true;
   }
 
   // Returns true if it managed to grant one.
@@ -2416,7 +2462,7 @@ window.electron = electron;
     };
     document.getElementById('ap-reset').onclick=()=>{
       if(!confirm('Reset all AP progress for this slot? This clears checked locations, received items, and run state.')) return;
-      st={checked:[],lastIdx:0,receivedKeys:[],receivedItems:[],upgradeCounts:{},costumes:{},pendingCostumes:0,runKey:''};
+      st={checked:[],lastIdx:0,receivedKeys:[],receivedItems:[],upgradeCounts:{},costumes:{},wornCostume:{},pendingCostumes:0,runKey:''};
       // The victory location is no longer checked, so clearing goalSent lets
       // re-earning it send the goal again.
       goalSent=false;

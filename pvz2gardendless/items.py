@@ -256,8 +256,23 @@ COSTUME_ITEMS: List[PvZ2ItemData] = [
 # its IDs were assigned from.
 FILLER_POOL: List[PvZ2ItemData] = FILLER_ITEMS + COSTUME_ITEMS
 
+# Re-rolls which costume every dressed plant is wearing, including taking some
+# back off. Appended past the costume filler for the same reason that was
+# appended past the upgrades: TRAP_ITEMS is the block the upgrade IDs are
+# numbered from, so it cannot grow.
+COSTUME_SHUFFLE_TRAP = "Costume Shuffle Trap"
+COSTUME_TRAP_ITEMS: List[PvZ2ItemData] = [
+    PvZ2ItemData(COSTUME_SHUFFLE_TRAP, ItemClassification.trap,
+                 _upgrade_base + len(UPGRADE_ITEMS) + len(COSTUME_ITEMS)),
+]
+
+# Every trap the pool builder deals out, and the order it rotates through.
+TRAP_POOL: List[PvZ2ItemData] = TRAP_ITEMS + COSTUME_TRAP_ITEMS
+TRAP_CYCLE = [t.name for t in TRAP_POOL]
+
 ALL_ITEMS: List[PvZ2ItemData] = (PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS
-                                 + TRAP_ITEMS + UPGRADE_ITEMS + COSTUME_ITEMS)
+                                 + TRAP_ITEMS + UPGRADE_ITEMS + COSTUME_ITEMS
+                                 + COSTUME_TRAP_ITEMS)
 ITEM_NAME_TO_ITEM: Dict[str, PvZ2ItemData] = {item.name: item for item in ALL_ITEMS}
 ITEM_NAME_TO_ID: Dict[str, int]        = {item.name: item.code for item in ALL_ITEMS}
 
@@ -273,7 +288,7 @@ if len(ITEM_NAME_TO_ITEM) != len(ALL_ITEMS):
 ITEM_NAME_GROUPS: Dict[str, set] = {
     "Plants":     {i.name for i in PLANT_ITEMS},
     "World Keys": {i.name for i in KEY_ITEMS},
-    "Traps":      {i.name for i in TRAP_ITEMS},
+    "Traps":      {i.name for i in TRAP_POOL},
     "Upgrades":   {i.name for i in UPGRADE_ITEMS},
 }
 
@@ -339,8 +354,10 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
             f"item pool ({len(pool)} keys and plants) exceeds the "
             f"{pool_size} locations this slot builds; enable more worlds")
     trap_count = remaining * world.options.trap_percentage.value // 100
-    for _ in range(trap_count):
-        pool.append(world.create_item(LAWN_MOWER_TRAP))
+    # Rotated rather than picked at random, so a slot's trap mix is the same
+    # every generation and does not depend on how the RNG happened to fall.
+    for i in range(trap_count):
+        pool.append(world.create_item(TRAP_CYCLE[i % len(TRAP_CYCLE)]))
     remaining -= trap_count
 
     for i in range(remaining):
