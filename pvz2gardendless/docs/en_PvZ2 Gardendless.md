@@ -50,6 +50,26 @@ than plants, and swapping those out would make the level unplayable.
 This does not leak progression. Conveyor levels already hand out plants regardless of what
 Archipelago has sent you, and you do not keep what comes down the belt.
 
+## What does Shuffle Zombies do?
+
+Every level fields a different set of zombies. A level that sent Mummies might send Cowboys, Pirates
+or Jetpack Zombies instead.
+
+Swaps stay inside a tier, so a level keeps the difficulty it was built around. The tier comes from the
+game's own wave-point price for each zombie — what its wave generator pays to field one — so a basic
+zombie is traded for another basic zombie, never for a Gargantuar. Gargantuars only become
+Gargantuars, water zombies only become water zombies, and Zombosses are never touched, so every boss
+fight is the one the level intended.
+
+Zombies that need a specific plant to answer them stay where they are. The Jester still only turns up
+where a Jester turned up, and the ice-block carriers only where they already were. That is what keeps
+Dark Ages' Jester requirement and Frostbite Caves' warmth requirement meaningful — the shuffle cannot
+drop a threat into a world you have no answer for, and it cannot take one out of a world whose logic
+is built on it. Nothing about item placement or logic changes when this is on.
+
+The roll is fixed per level, so retrying is not a reroll, and two players on the same seed get
+different lawns.
+
 ## What is the goal?
 
 Clear one specific Modern Day level, chosen by the **Modern Day Victory** option:

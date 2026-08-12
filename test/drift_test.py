@@ -20,7 +20,8 @@ CLIENT_SRC = os.path.join(REPO, "pvz2gardendless", "build_pvzge_ap.py")
 
 # Harness scaffolding, not client logic: these exist only so the copied
 # functions have something to call. They are expected NOT to match.
-STUBS = {"svSt", "toast", "log", "installStoreHook_stub"}
+STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
+         "makeZombiesClass", "setLevel"}
 
 _ws = re.compile(r"\s+")
 norm = lambda s: _ws.sub(" ", s).strip()

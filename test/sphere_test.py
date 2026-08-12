@@ -143,6 +143,7 @@ def report(label, **kw):
 
 
 report("all worlds, default")
+report("all worlds + shuffle_zombies", shuffle_zombies=1)
 report("all worlds + shopsanity", shopsanity=1)
 report("3 worlds", world_count=3, worlds_required=11)
 report("1 world (Egypt only)", world_count=1, worlds_required=11)
@@ -221,6 +222,30 @@ for label, extra, want in [
     if got != want:
         failed += 1
     print(f"  {mark} Frostbite Caves, {label:<24} reachable={got}  (expected {want})")
+
+# shuffle_zombies must not move a single location between spheres. It is a
+# client-side swap confined to tiers that keep every threat mechanic in the
+# world it started in, so no access rule can change -- and the sphere shape is
+# a design target (sphere 1 is deliberately ~7% of locations), so a silent
+# shift here is the failure mode worth catching.
+def sphere_shape(**kw):
+    mw, w = build(**kw)
+    pre = [i.name for i in mw.precollected]
+    out = []
+    for extra in ([], ["Sunflower"], [f"{n} Key" for n in
+                       ("Pirate Seas", "Wild West", "Dark Ages")]):
+        st = state_with(mw, pre + extra)
+        out.append(sorted(l.name for l in st.reachable_locations()))
+    return out
+
+
+_off, _on = sphere_shape(shuffle_zombies=0), sphere_shape(shuffle_zombies=1)
+if _off != _on:
+    _diff = next(sorted(set(a) ^ set(b)) for a, b in zip(_off, _on) if a != b)
+    fail(f"shuffle_zombies moved {len(_diff)} locations between spheres: {_diff[:5]}")
+else:
+    ok(f"shuffle_zombies leaves every sphere identical "
+       f"({', '.join(str(len(s)) for s in _off)} locations at 3 depths)")
 
 print()
 print(f"progression plants available: {len(PROG_PLANTS)}")

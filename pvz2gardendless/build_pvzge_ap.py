@@ -244,6 +244,10 @@ window.electron = electron;
     // mower.
     'Square':    function(v) { window._AP_Square    = v; },
     'StoreCommodity': function(v) { installStoreHook(v); },
+    // Lower-case z on purpose: Zombies.ts exports the static resolver class as
+    // 'zombies'. The capitalised 'Zombies' export in the same module is the
+    // Cocos component and carries none of the type-resolution statics.
+    'zombies':   function(v) { window._AP_zombies = v; installZombieHook(v); },
   };
 
   // Shopsanity: unlockCommodity() is the single point every completed store
@@ -395,10 +399,96 @@ window.electron = electron;
     LC._ap_hooked_conveyor = true;
   }
 
+  // Zombie shuffle. zombies.getZombieEnumWithPropByZombieTypes() is the one
+  // place every spawn path turns a zombie codename into the enum and property
+  // sheet it spawns from -- wave spawners, gravestones, dropships, the level's
+  // zombie preview cards and the generic lawn/lawn_armor placeholders all
+  // resolve through it -- so rewriting the codename on the way in changes what
+  // a level fields without touching wave timing, counts, lanes or objectives.
+  //
+  // The swap is confined to the codename's own tier (see _AP_zombieTiers, sent
+  // from slot_data), so the trade is between zombies the game prices the same.
+  // Anything with no tier is returned untouched: a Zomboss, a type no shipped
+  // level spawns, or a lawn placeholder, which has no properties of its own and
+  // is meant to resolve to the current stage's zombie -- that resolution
+  // re-enters this hook with a real codename, so placeholders still shuffle.
+  //
+  // Keyed off the level ID and the ORIGINAL codename rather than any counter,
+  // so the roll needs no stored state, a level always fields the same zombies,
+  // and a retry is not a reroll.
+  function _apLevelKey() {
+    try {
+      const ids = window._AP_levelController && window._AP_levelController.thisLevelsID;
+      if (ids && ids.length) return ids.join(',');
+    } catch (e) { /* fall through to the shared key */ }
+    // Levels with no ID -- local test levels, Level of the Day -- share one
+    // key. They still roll deterministically, just not per level.
+    return '';
+  }
+
+  let _apZombieCacheKey = null;
+  let _apZombieCache = {};
+
+  function _apZombieSwap(type) {
+    const tierOf = window._AP_zombieTierOf;
+    if (!tierOf) return type;
+    const tier = tierOf[type];
+    if (!tier) return type;
+    const pool = window._AP_zombieTiers[tier];
+    // A tier of one has nothing to trade for, so the level keeps what it had.
+    if (!pool || pool.length < 2) return type;
+    const levelKey = _apLevelKey();
+    // Cache per level: this runs on every spawn, and the answer cannot change
+    // within a level. Dropped wholesale when the level changes rather than
+    // grown forever.
+    if (_apZombieCacheKey !== levelKey) {
+      _apZombieCacheKey = levelKey;
+      _apZombieCache = {};
+    }
+    let pick = _apZombieCache[type];
+    if (pick === undefined) {
+      const rnd = _apRng(_apHash(String(window._AP_zombieSeed || 0) + '|' +
+                                 levelKey + '|' + type));
+      pick = pool[Math.floor(rnd() * pool.length)];
+      _apZombieCache[type] = pick;
+    }
+    return pick;
+  }
+
+  // The original recurses through itself to resolve lawn placeholders and
+  // ZombieRedirection entries, and each of those re-enters this hook. The
+  // depth cap is insurance only: the swap is a pure function of the codename,
+  // so it cannot introduce a cycle the game did not already have, but this is
+  // a per-spawn hot path and a runaway here would hang the level rather than
+  // just look wrong.
+  let _apZombieDepth = 0;
+
+  function installZombieHook(Z) {
+    if (!Z || Z._ap_hooked_zombies ||
+        typeof Z.getZombieEnumWithPropByZombieTypes !== 'function') return;
+    const _origGetZombieEnum = Z.getZombieEnumWithPropByZombieTypes;
+    Z.getZombieEnumWithPropByZombieTypes = function (type) {
+      const args = Array.prototype.slice.call(arguments);
+      try {
+        if (window._AP_shuffleZombies && typeof type === 'string' &&
+            _apZombieDepth < 8) {
+          args[0] = _apZombieSwap(type);
+        }
+      } catch (e) { /* never stop a zombie from spawning over this */ }
+      _apZombieDepth++;
+      try {
+        return _origGetZombieEnum.apply(this, args);
+      } finally {
+        _apZombieDepth--;
+      }
+    };
+    Z._ap_hooked_zombies = true;
+  }
+
   const _origRegister = System.register.bind(System);
   System.register = function(name, deps, declare) {
     if (typeof name === 'string' &&
-        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity|levelController)\.ts/.test(name)) {
+        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity|levelController|Zombies)\.ts/.test(name)) {
       const _origDeclare = declare;
       declare = function(_export, _context) {
         return _origDeclare(function(exportName, value) {
@@ -618,6 +708,21 @@ window.electron = electron;
   function syncConveyorConfig() {
     window._AP_randomizeConveyor = !!st.randomizeConveyor;
     window._AP_conveyorSeed      = st.conveyorSeed || 0;
+  }
+
+  // Same idea for the zombie shuffle. The tiers come from slot_data rather
+  // than being duplicated here, so generation and the client cannot disagree
+  // about which trades are legal; the codename -> tier index is inverted once
+  // on arrival because the hook runs on every spawn.
+  function syncZombieConfig() {
+    window._AP_shuffleZombies = !!st.shuffleZombies;
+    window._AP_zombieSeed     = st.zombieSeed || 0;
+    window._AP_zombieTiers    = st.zombieTiers || {};
+    const tierOf = {};
+    for (const tier of Object.keys(window._AP_zombieTiers)) {
+      for (const cn of window._AP_zombieTiers[tier]) tierOf[cn] = tier;
+    }
+    window._AP_zombieTierOf = tierOf;
   }
 
   // AP item name -> plant enum ID
@@ -1565,6 +1670,7 @@ window.electron = electron;
     syncGrantedPlants();
     syncGrantedUpgrades();
     syncConveyorConfig();
+    syncZombieConfig();
   })();
 
   // ── Save guard ────────────────────────────────────────────────────────────
@@ -1914,6 +2020,14 @@ window.electron = electron;
           st.randomizeConveyor = !!pkt.slot_data.randomize_conveyor;
           st.conveyorSeed      = pkt.slot_data.conveyor_seed || 0;
           syncConveyorConfig();
+          // Absent on seeds predating the option, which reads as off. The
+          // tiers are persisted on st alongside the flag so a page reload can
+          // keep shuffling before the socket is back up, the same way the
+          // conveyor config does.
+          st.shuffleZombies = !!pkt.slot_data.shuffle_zombies;
+          st.zombieSeed     = pkt.slot_data.zombie_seed || 0;
+          st.zombieTiers    = pkt.slot_data.zombie_tiers || {};
+          syncZombieConfig();
           svSt();
           // DeathLink isn't known until slot_data arrives (after the initial
           // Connect), so it's applied via ConnectUpdate rather than being in

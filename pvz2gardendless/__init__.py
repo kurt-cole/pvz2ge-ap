@@ -29,6 +29,7 @@ from .locations import (
 )
 from .regions import create_regions as build_regions
 from .rules import set_rules as apply_rules
+from .zombie_data import ZOMBIE_TIERS
 
 # ── Launcher ──────────────────────────────────────────────────────────────────
 
@@ -331,6 +332,21 @@ class PvZ2GardendlessWorld(World):
             # plants. The client folds the level's own plant list into it, so
             # each level rolls differently and a retry is not a reroll.
             "conveyor_seed":     self.random.getrandbits(32),
+            "shuffle_zombies":   bool(self.options.shuffle_zombies),
+            # The swap tiers, sent rather than duplicated in the client so the
+            # two cannot drift. Each tier is a set of zombies the game itself
+            # prices the same (see zombie_data for the derivation); the client
+            # trades a zombie only for another in its own list, which is what
+            # keeps a level's difficulty and every world's threat footprint
+            # intact. ~6KB, and only sent when the option is on.
+            "zombie_tiers":      (ZOMBIE_TIERS
+                                  if self.options.shuffle_zombies else {}),
+            # Per-slot seed for the client's zombie roll, for the same reason
+            # conveyor_seed exists: the belt and the waves should differ
+            # between slots on one seed, and the client folds the level's own
+            # zombie list into it so each level rolls differently and a retry
+            # is not a reroll.
+            "zombie_seed":       self.random.getrandbits(32),
             # Informational for now -- worlds left out simply never receive a
             # key, which is what keeps them locked. Sorted so the value is
             # stable for a given seed rather than varying with set order.

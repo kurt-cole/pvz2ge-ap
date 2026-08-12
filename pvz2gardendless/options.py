@@ -186,6 +186,37 @@ class RandomizeConveyorPlants(Toggle):
     display_name = "Randomize Conveyor Plants"
 
 
+class ShuffleZombies(Toggle):
+    """
+    Shuffle which zombies each level sends at you.
+
+    Swaps stay inside a tier, so a level keeps the difficulty it was built
+    around. The tier is the game's own `WavePointCost` -- the price its wave
+    generator pays to field that zombie -- so a 100-point Mummy is traded for
+    another 100-point zombie, never for a Gargantuar. Gargantuars only become
+    Gargantuars, and Zombosses are never touched, so every boss fight is the
+    one the level intended.
+
+    Zombies that need a specific plant to answer them stay put: the Jester
+    still only appears where a Jester appeared, and ice-block carriers only
+    where ice-block carriers did. That is what keeps Dark Ages' Jester
+    requirement and Frostbite Caves' warmth requirement honest -- the shuffle
+    cannot move a threat into a world with no answer for it, nor take one out
+    of a world whose access rule is built on it. Nothing about generation
+    logic changes when this is on.
+
+    Water zombies and land zombies are kept apart, since a land zombie
+    dropped in a deep-water lane drowns.
+
+    The roll is fixed per level, so retrying a level gives the same zombies
+    rather than rerolling until you like them. Rolls differ between slots on
+    the same seed.
+
+    Off matches how seeds generated before this option existed behave.
+    """
+    display_name = "Shuffle Zombies"
+
+
 class EarlyWorldKeys(Toggle):
     """
     Keep World Keys out of the later stretches of every world, so all of them
@@ -238,6 +269,7 @@ class PvZ2Options(PerGameCommonOptions):
     shopsanity:       Shopsanity
     shuffle_upgrades: ShuffleUpgrades
     randomize_conveyor_plants: RandomizeConveyorPlants
+    shuffle_zombies:  ShuffleZombies
     early_world_keys: EarlyWorldKeys
     trap_percentage:  TrapPercentage
     death_link:       DeathLink

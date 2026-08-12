@@ -13,7 +13,7 @@ from pvz2gardendless import constants as C
 from pvz2gardendless.options import (
     WorldCount, EnabledWorlds, GoalType, WorldsRequired, ModernDayVictory,
     SkipTutorial, Shopsanity, TrapPercentage, ShuffleUpgrades,
-    RandomizeConveyorPlants, EarlyWorldKeys,
+    RandomizeConveyorPlants, EarlyWorldKeys, ShuffleZombies,
 )
 from apstub import DeathLink
 
@@ -30,6 +30,7 @@ class Opts:
         self.shuffle_upgrades = ShuffleUpgrades(kw.get("shuffle_upgrades", ShuffleUpgrades.default))
         self.randomize_conveyor_plants = RandomizeConveyorPlants(
             kw.get("randomize_conveyor_plants", RandomizeConveyorPlants.default))
+        self.shuffle_zombies = ShuffleZombies(kw.get("shuffle_zombies", 0))
         self.early_world_keys = EarlyWorldKeys(kw.get("early_world_keys", 0))
         self.trap_percentage = TrapPercentage(kw.get("trap_percentage", 5))
         self.death_link = DeathLink(0)
@@ -181,6 +182,108 @@ _b, _sd_on  = run("conveyor on",  randomize_conveyor_plants=1)
 assert _sd_off["randomize_conveyor"] is False and _sd_on["randomize_conveyor"] is True
 assert isinstance(_sd_on["conveyor_seed"], int) and 0 <= _sd_on["conveyor_seed"] < 2**32
 assert _sd_off["goal_locations"] == _sd_on["goal_locations"], "conveyor changed logic"
+
+# ── shuffle_zombies ─────────────────────────────────────────────────────────
+# Also pure client behaviour: generation carries the flag, a per-slot seed and
+# the tier table, and must leave the pool, the locations and the logic alone.
+from pvz2gardendless.zombie_data import (ZOMBIE_TIERS, ZOMBIE_TIER_OF,
+                                         THREAT_TAGS, swap_pool, tier_of)
+
+_z_off_w, _z_off = run("zombies off", shuffle_zombies=0)
+_z_on_w,  _z_on  = run("zombies on",  shuffle_zombies=1)
+assert _z_off["shuffle_zombies"] is False and _z_on["shuffle_zombies"] is True
+assert isinstance(_z_on["zombie_seed"], int) and 0 <= _z_on["zombie_seed"] < 2**32
+assert _z_off["goal_locations"] == _z_on["goal_locations"], "zombie shuffle changed logic"
+assert len(_z_off_w.active_locations()) == len(_z_on_w.active_locations())
+assert sorted(i.name for i in _z_off_w.multiworld.itempool) == \
+       sorted(i.name for i in _z_on_w.multiworld.itempool), "zombie shuffle changed the pool"
+
+# The tiers are only worth sending when the client will use them: ~6KB in
+# every Connected packet otherwise.
+assert _z_off["zombie_tiers"] == {}, "tiers sent with the option off"
+assert _z_on["zombie_tiers"] == ZOMBIE_TIERS
+
+# slot_data is append-only: an older client reads only the keys it knows, so
+# removing or renaming one silently breaks every build already out there. The
+# three zombie keys are additive, and a seed predating them sends none of the
+# three -- which the client reads as off.
+_SLOT_DATA_BEFORE_ZOMBIES = {
+    "conveyor_seed", "death_link", "enabled_worlds", "game_version",
+    "goal_locations", "goal_type", "modern_day_victory", "randomize_conveyor",
+    "shopsanity", "shuffle_upgrades", "skip_tutorial", "upgrade_items",
+    "victory_locations", "worlds_required",
+}
+assert _SLOT_DATA_BEFORE_ZOMBIES <= set(_z_on), \
+    f"slot_data lost keys: {sorted(_SLOT_DATA_BEFORE_ZOMBIES - set(_z_on))}"
+assert set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES == \
+    {"shuffle_zombies", "zombie_tiers", "zombie_seed"}, \
+    f"unexpected new slot_data keys: {sorted(set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES)}"
+
+# Every tier must be non-empty and every zombie in exactly one tier, or the
+# client's inverted index disagrees with this side about what may swap.
+assert all(ZOMBIE_TIERS.values()), "an empty tier would make its zombies unswappable"
+assert sum(len(v) for v in ZOMBIE_TIERS.values()) == len(ZOMBIE_TIER_OF), \
+    "a zombie appears in more than one tier"
+
+# THE load-bearing invariant, and the reason this option needs no new access
+# rule: a zombie that needs a specific plant to answer it can only ever become
+# another zombie needing the same plant. Dark Ages keeps its Jester and
+# Frostbite Caves keeps its ice blocks, so the requirements in
+# WORLD_ENTRY_PLANTS stay exactly as true as they were. Let a threat roam and
+# nearly every world ends up gated on the Jester counter, flattening the
+# sphere layering this world works to protect.
+#
+# Note "the swap pool of a threat zombie contains only threat zombies" is NOT
+# worth asserting -- tiers partition the zombies and swap_pool() hands back
+# the whole tier, so it is true by construction and can never fail. What can
+# actually go wrong is MEMBERSHIP: a regenerated table that tags the wrong
+# zombie, or stops tagging one at all. So the membership is pinned by name,
+# and each set is exactly what its game property yields (see zombie_data).
+THREAT_MEMBERS = {
+    # MoveSpeedMultiplierWhileJuggling -- returns your own projectiles
+    "jester": {"birthday_juggler", "dark_juggler", "foodfight_chefster"},
+    # NumberOfIceblocksToSpawnWith -- arrives carrying ice blocks
+    "iceblock": {"birthday_troglobite", "birthday_troglobite_1block",
+                 "birthday_troglobite_2block", "iceage_troglobite",
+                 "iceage_troglobite_1block", "iceage_troglobite_2block",
+                 "iceage_troglobite_veteran"},
+}
+for _tag, _expected in THREAT_MEMBERS.items():
+    _tiers = [t for t in ZOMBIE_TIERS if t.endswith("-" + _tag)]
+    assert _tiers, f"no tier carries the {_tag} tag any more"
+    _members = {z for t in _tiers for z in ZOMBIE_TIERS[t]}
+    assert _members == _expected, (
+        f"{_tag} membership drifted: "
+        f"gained {sorted(_members - _expected)}, lost {sorted(_expected - _members)}")
+
+# air and blocker have no counter-plant list to gate on, so they are pinned by
+# size only -- they are partitioned to stop them spreading, not to gate on.
+for _tag in THREAT_TAGS:
+    assert any(t.endswith("-" + _tag) for t in ZOMBIE_TIERS), \
+        f"no tier carries the {_tag} tag any more"
+print(f"zombie tiers: {len(ZOMBIE_TIERS)} tiers over {len(ZOMBIE_TIER_OF)} zombies, "
+      f"{len(THREAT_TAGS)} threat classes partitioned")
+
+# Named regressions on the derivation, so a regenerated table cannot quietly
+# drop a partition. Each of these was picked because getting it wrong breaks
+# something specific rather than just looking odd.
+assert tier_of("zomboss_egypt") == "" and swap_pool("zomboss_egypt") == [], \
+    "a Zomboss became swappable -- boss fights would stop being the built fight"
+assert tier_of("lawn") == "", "the lawn placeholder must resolve, not swap"
+assert "dark_juggler" in swap_pool("dark_juggler"), "the Jester left its own pool"
+assert set(swap_pool("dark_juggler")) == \
+       {"dark_juggler", "foodfight_chefster", "birthday_juggler"}, \
+    "the Jester pool changed -- check MoveSpeedMultiplierWhileJuggling"
+assert all("garg" in tier_of(z) for z in swap_pool("dark_gargantuar")), \
+    "a Gargantuar can become something that is not a Gargantuar"
+assert all("water" in tier_of(z) for z in swap_pool("beach_snorkel")), \
+    "a water zombie can become a land zombie, which drowns it"
+assert all("land" in tier_of(z) for z in swap_pool("mummy")), \
+    "a land zombie can become a water zombie"
+# Mummy is the plainest sphere-1 zombie in the game; if its band ever collapses
+# to itself the option silently stops doing anything in Ancient Egypt.
+assert len(swap_pool("mummy")) > 20, "the basic zombie band has collapsed"
+print("zombie tier regressions hold")
 
 from pvz2gardendless.items import (UPGRADE_ITEMS, ALL_ITEMS, UPGRADE_ITEM_TO_CNS,
                                    COSTUME_ITEMS, FILLER_POOL, FILLER_CYCLE)
