@@ -53,10 +53,14 @@ function _apLevelKey() {
   return '';
 }
 
+const _AP_RTID = /^RTID\(([^@()]+)@([^()]*)\)$/;
+
 function _apZombieSwap(type) {
   const tierOf = window._AP_zombieTierOf;
   if (!tierOf) return type;
-  const tier = tierOf[type];
+  const wrapped = _AP_RTID.exec(type);
+  const codename = wrapped ? wrapped[1] : type;
+  const tier = tierOf[codename];
   if (!tier) return type;
   const pool = window._AP_zombieTiers[tier];
   // A tier of one has nothing to trade for, so the level keeps what it had.
@@ -64,19 +68,26 @@ function _apZombieSwap(type) {
   const levelKey = _apLevelKey();
   // Cache per level: this runs on every spawn, and the answer cannot change
   // within a level. Dropped wholesale when the level changes rather than
-  // grown forever.
+  // grown forever. Keyed by CODENAME, so the same zombie resolves the same
+  // way whether the caller named it bare or as an RTID -- the level's zombie
+  // preview cards and its actual spawns come through both ways.
   if (_apZombieCacheKey !== levelKey) {
     _apZombieCacheKey = levelKey;
     _apZombieCache = {};
   }
-  let pick = _apZombieCache[type];
+  let pick = _apZombieCache[codename];
   if (pick === undefined) {
     const rnd = _apRng(_apHash(String(window._AP_zombieSeed || 0) + '|' +
-                               levelKey + '|' + type));
+                               levelKey + '|' + codename));
     pick = pool[Math.floor(rnd() * pool.length)];
-    _apZombieCache[type] = pick;
+    _apZombieCache[codename] = pick;
   }
-  return pick;
+  // Always re-wrapped as @ZombieTypes rather than the scope it arrived in.
+  // Every codename in the tier table is an alias in the game's global
+  // ZombieTypes table, so that scope always resolves; a level that defines
+  // its own type (RTID(x@CurrentLevel), 69 of those) has no entry for the
+  // replacement under its local scope and would resolve to nothing.
+  return wrapped ? 'RTID(' + pick + '@ZombieTypes)' : pick;
 }
 
 function installZombieHook(Z) {

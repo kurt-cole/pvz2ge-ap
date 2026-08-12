@@ -63,6 +63,61 @@ st.zombieSeed     = 987654321;
 st.zombieTiers    = TEST_TIERS;
 syncZombieConfig();
 
+// ── the form the game actually passes ────────────────────────────────────────
+// THE regression this file exists for. Wave data names zombies as
+// RTID(codename@ZombieTypes), not bare -- 57855 of the ~62000 type references
+// in the shipped levels are wrapped, and only ~4800 are bare. An earlier
+// version matched the raw string against a table keyed by bare codename, so
+// every wave spawn missed and the option looked like it did nothing at all.
+// This whole suite passed, because every case in it used bare names.
+{
+  const Z = fresh();
+  setLevel('egypt10');
+  const rtid = z => `RTID(${z}@ZombieTypes)`;
+
+  // Not "every one changed" -- a pool contains the zombie itself, so landing
+  // back on it is a legitimate roll and that check would be flaky. The bug
+  // being guarded against left EVERY wrapped name byte-identical.
+  const swappable = ALL.filter(z => TEST_TIERS[TIER_OF[z]].length > 1);
+  const changed = swappable.filter(z => resolve(Z, rtid(z)) !== rtid(z));
+  if (!changed.length)
+    fail('not one RTID-wrapped zombie was swapped -- the wrapper is not being ' +
+         'stripped before the tier lookup, so every wave spawn misses');
+  else ok(`${changed.length} of ${swappable.length} RTID-wrapped zombies swapped ` +
+          `(the rest rolled back onto themselves, which is legal)`);
+
+  // the result has to come back wrapped, or the game cannot resolve it
+  const out = resolve(Z, rtid('mummy'));
+  const m = /^RTID\(([^@]+)@ZombieTypes\)$/.exec(out);
+  if (!m) fail(`an RTID went in and "${out}" came out -- it must stay wrapped`);
+  else if (TIER_OF[m[1]] !== TIER_OF['mummy']) fail(`RTID swap left the tier: ${out}`);
+  else ok('an RTID goes in and a correctly wrapped RTID of the same tier comes out');
+
+  // both spellings of one zombie must agree, or a level's preview cards show
+  // different zombies from the ones that actually walk on
+  const disagree = ALL.filter(z => {
+    const bare = resolve(Z, z);
+    const w = /^RTID\(([^@]+)@/.exec(resolve(Z, rtid(z)));
+    return !w || w[1] !== bare;
+  });
+  if (disagree.length)
+    fail(`${disagree.length} zombies resolve differently bare vs wrapped, e.g. ${disagree[0]}`);
+  else ok('bare and RTID spellings of a zombie resolve to the same replacement');
+
+  // a level-local type is re-scoped to @ZombieTypes, which always resolves;
+  // the replacement has no entry under the level's own scope
+  const local = resolve(Z, 'RTID(dark_juggler@CurrentLevel)');
+  if (!/^RTID\([^@]+@ZombieTypes\)$/.test(local))
+    fail(`a @CurrentLevel type came back as "${local}"`);
+  else ok('a level-local RTID is re-scoped to @ZombieTypes so it resolves');
+
+  // an unknown codename inside a wrapper is still left exactly as it came
+  const untouched = resolve(Z, 'RTID(zomboss_egypt@ZombieTypes)');
+  if (untouched !== 'RTID(zomboss_egypt@ZombieTypes)')
+    fail(`a wrapped Zomboss was swapped: ${untouched}`);
+  else ok('a wrapped untiered codename passes through unchanged');
+}
+
 // ── swaps stay inside the tier ───────────────────────────────────────────────
 {
   let checked = 0;
