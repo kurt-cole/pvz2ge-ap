@@ -149,3 +149,9 @@ and sends the check.
 The repeatable gem, coin and sprout bundles are excluded because they can be bought over and over,
 and four ticket-priced plants are excluded because tickets have no Archipelago source and would be
 pure grind.
+
+Because a card is a location rather than a purchase, each one is **labelled with the item the
+multiworld actually has there** instead of with the plant pictured on it. Your own items show as just
+the item name; another player's show as `player: item`. The client scouts these on connect without
+spending or announcing hints. A card falls back to its normal name if the scout has not come back
+yet.

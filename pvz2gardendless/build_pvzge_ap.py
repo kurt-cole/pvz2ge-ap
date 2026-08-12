@@ -289,7 +289,28 @@ window.electron = electron;
             return Promise.resolve();
           }
         } catch (e) { /* fall through and build the card as normal */ }
-        return _origReadCommodity.apply(this, arguments);
+        // Under shopsanity the card is a location, not a purchase: buying it
+        // sends the check and grants nothing, so the plant on the front of it
+        // is not what the player is paying for. Relabel it with the item the
+        // multiworld actually has there.
+        //
+        // Has to run AFTER the original, which sets nameLabel partway through
+        // its own async body -- writing first would just be overwritten. The
+        // label is left alone when there is nothing scouted yet, so the card
+        // reads as the game built it rather than going blank.
+        const _card = this;
+        const _relabel = function (result) {
+          try {
+            const label = props && props.CommodityName &&
+                          window._AP_shopRewardLabel &&
+                          window._AP_shopRewardLabel(props.CommodityName);
+            if (label && _card.nameLabel) _card.nameLabel.string = label;
+          } catch (e) { /* a card with the old label beats no card */ }
+          return result;
+        };
+        const done = _origReadCommodity.apply(this, arguments);
+        return (done && typeof done.then === 'function')
+          ? done.then(_relabel) : _relabel(done);
       };
     }
 
@@ -1915,6 +1936,76 @@ window.electron = electron;
   // ── WebSocket / AP Protocol ───────────────────────────────────────────────
   let ws=null, conn=false, rtimer=null, rdelay=5000;
   let locIds={}, itemNames={}, idToLoc={};
+
+  // Shopsanity card labels. A shop card is a location, so what the player is
+  // buying is whatever the multiworld put there -- which may belong to another
+  // slot, and to another game entirely.
+  //
+  // Three pieces have to line up: LocationScouts says which item id sits on
+  // each shop location, slot_info says which game that item's owner plays, and
+  // that game's DataPackage turns the id into a name. They arrive in that
+  // order, so the label is computed lazily on read rather than baked once.
+  //
+  // All three are persisted on st, so reopening the store after a reload shows
+  // the labels straight away instead of waiting on a reconnect. Seeded from st
+  // right here rather than from the startup block further up: these are `let`
+  // bindings, so a call from up there would hit the temporal dead zone and
+  // throw at load -- taking the whole client with it. st is already restored
+  // from localStorage by the time this line runs.
+  let itemNamesByGame = st.itemNamesByGame || {};   // game -> { item id: name }
+  let slotGame        = st.slotGame        || {};   // slot id -> game name
+  let slotName        = st.slotName        || {};   // slot id -> player name
+  let shopScout       = st.shopScout       || {};   // commodity -> {item, player}
+
+  function saveShopLabelCache(){
+    st.itemNamesByGame = itemNamesByGame;
+    st.slotGame        = slotGame;
+    st.slotName        = slotName;
+    st.shopScout       = shopScout;
+    svSt();
+  }
+
+  // Ask for every shop location at once, with create_as_hint 0 so this reveals
+  // the items to us without spending anyone's hints or announcing them.
+  // Read straight off locIds by prefix rather than from a copy of the
+  // commodity list -- location_name_to_id is the server's own answer to which
+  // shop locations exist, so this cannot drift from constants.py.
+  function scoutShopLocations(){
+    if(!st.shopsanity) return;
+    const ids = Object.keys(locIds)
+      .filter(n => n.startsWith('Shop: '))
+      .map(n => locIds[n]);
+    if(!ids.length) return;   // DataPackage not in yet; it re-runs this on arrival
+    send([{cmd:'LocationScouts', locations:ids, create_as_hint:0}]);
+  }
+
+  // Fetch the DataPackage for the games the scouted items actually belong to,
+  // and nothing else. Asking for every game in the room would pull megabytes
+  // in a large async multiworld to name at most 39 items.
+  function fetchScoutedGames(){
+    const wanted = new Set();
+    for(const cn of Object.keys(shopScout)){
+      const game = slotGame[shopScout[cn].player];
+      if(game && !itemNamesByGame[game]) wanted.add(game);
+    }
+    if(wanted.size) send([{cmd:'GetDataPackage', games:[...wanted]}]);
+  }
+
+  // commodity name -> what to show on the card, or null to leave it as the
+  // game built it (nothing scouted, or the owning game's names not in yet).
+  function shopRewardLabel(commodityName){
+    if(!st.shopsanity) return null;
+    const scouted = shopScout[commodityName];
+    if(!scouted) return null;
+    const names = itemNamesByGame[slotGame[scouted.player]];
+    const item  = names && names[scouted.item];
+    if(!item) return null;
+    // Own slot: just the item. Someone else's: whose it is matters more than
+    // anything else on the card, so it leads.
+    return scouted.player === apSlotId ? item
+         : (slotName[scouted.player] || 'Player ' + scouted.player) + ': ' + item;
+  }
+  window._AP_shopRewardLabel = shopRewardLabel;
   let apTeam=0, apSlotId=0; // set from Connected; namespaces DataStorage keys
 
   function connect() {
@@ -2001,8 +2092,23 @@ window.electron = electron;
                  upgradeCounts:{}, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey };
           window._AP_grantedPlantIds = new Set();
           window._AP_grantedUpgrades = new Set();
+          // st was replaced wholesale, so the in-memory shop label maps are
+          // now the previous seed's placements. Dropping them here stops a
+          // card being labelled with an item this seed never put there.
+          itemNamesByGame = {}; slotGame = {}; slotName = {}; shopScout = {};
           svSt();
           toast('New seed detected — state reset','#fa0');
+        }
+        // Who plays what, so a scouted item id can be turned into a name and
+        // attributed. slot_info is keyed by slot id as a string.
+        slotGame = {}; slotName = {};
+        for(const [sid, info] of Object.entries(pkt.slot_info || {})){
+          slotGame[sid] = info && info.game;
+          slotName[sid] = (info && info.name) || '';
+        }
+        // Aliases beat slot names when a player has set one.
+        for(const p of (pkt.players || [])){
+          if(p && p.alias) slotName[p.slot] = p.alias;
         }
         if(pkt.slot_data){
           st.goalLocs  = pkt.slot_data.goal_locations  || [];
@@ -2044,6 +2150,9 @@ window.electron = electron;
         if(ids.length) send([{cmd:'LocationChecks',locations:ids}]);
         send([{cmd:'Sync'}]);
         fetchCurrencyFromServer();
+        // Needs locIds, so this no-ops if the DataPackage has not landed yet
+        // -- its handler calls this too, and the two can arrive either way round.
+        scoutShopLocations();
         break;
       case 'RoomUpdate':
         // Checks can also land mid-session (another client on this slot, or
@@ -2070,18 +2179,48 @@ window.electron = electron;
         svSt();
         rebuildAPSave();
         break;
-      case 'DataPackage':
-        const gd=pkt.data&&pkt.data.games&&pkt.data.games[GAME_NAME];
+      case 'DataPackage': {
+        const allGames=(pkt.data&&pkt.data.games)||{};
+        // Every game in the payload, not just ours: the follow-up request for
+        // the games owning scouted shop items comes back through here too.
+        for(const[game,data] of Object.entries(allGames)){
+          const byId={};
+          for(const[n,id] of Object.entries(data.item_name_to_id||{})) byId[id]=n;
+          itemNamesByGame[game]=byId;
+        }
+        const gd=allGames[GAME_NAME];
         if(gd){
           locIds=gd.location_name_to_id||{};
-          itemNames={};
-          for(const[n,id] of Object.entries(gd.item_name_to_id||{})) itemNames[id]=n;
+          itemNames=itemNamesByGame[GAME_NAME]||{};
           idToLoc={};
           for(const[n,id] of Object.entries(locIds)) idToLoc[id]=n;
           // Connected may have landed first, with ids we couldn't name yet.
           mergeServerChecks();
+          // ...and the scout needs locIds, so it may have been skipped there.
+          scoutShopLocations();
+        }
+        saveShopLabelCache();
+        break;
+      }
+      case 'LocationInfo': {
+        // Answers our LocationScouts. Only the shop locations were asked for,
+        // but filter by name anyway so a scout from anywhere else cannot end
+        // up labelling a card.
+        let found=0;
+        for(const it of (pkt.locations||[])){
+          const name=idToLoc[it.location];
+          if(!name||!name.startsWith('Shop: ')) continue;
+          shopScout[name.slice(6)]={item:it.item,player:it.player};
+          found++;
+        }
+        if(found){
+          saveShopLabelCache();
+          // Names for the owning games, which are usually not ours. Comes
+          // back through the DataPackage case above.
+          fetchScoutedGames();
         }
         break;
+      }
       case 'Bounced':
         if(deathLinkEnabled && pkt.tags && pkt.tags.includes('DeathLink') &&
            pkt.data && pkt.data.source !== cfg.slot) {

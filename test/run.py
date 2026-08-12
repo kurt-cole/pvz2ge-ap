@@ -21,6 +21,10 @@ PY_SUITES = [
     ("drift",      "drift_test.py",  "client JS copies match the real client"),
 ]
 JS_SUITES = [
+    # First: the others require *_fn.js copies, so none of them ever runs the
+    # client as one program. This one does, and a client that dies on load
+    # makes every other result meaningless.
+    ("load",     "load_test.js",     "the whole client survives being loaded"),
     ("upgrades", "upgrade_test.js",  "progressive upgrade grants"),
     ("store",    "store_test.js",    "bought store cards stay gone"),
     ("conveyor", "conveyor_test.js", "belt swaps stay in power band"),

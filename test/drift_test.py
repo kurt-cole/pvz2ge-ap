@@ -21,7 +21,11 @@ CLIENT_SRC = os.path.join(REPO, "pvz2gardendless", "build_pvzge_ap.py")
 # Harness scaffolding, not client logic: these exist only so the copied
 # functions have something to call. They are expected NOT to match.
 STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
-         "makeZombiesClass", "setLevel"}
+         "makeZombiesClass", "setLevel",
+         # store_fn.js harness: stand-ins for the client's socket and module
+         # scope, plus applyLocationInfo, which mirrors a switch arm rather
+         # than a function and so has nothing to match verbatim.
+         "send", "resetShopState", "setLocations", "applyLocationInfo"}
 
 _ws = re.compile(r"\s+")
 norm = lambda s: _ws.sub(" ", s).strip()
