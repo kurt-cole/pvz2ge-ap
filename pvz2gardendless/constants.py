@@ -200,12 +200,37 @@ JESTER_COUNTER_PLANTS = [
     "Strawburst",
 ]
 
+# Plants that give off heat, for Frostbite Caves. Its ice blocks freeze plants
+# solid and its winds blow them off the lawn, and only a standing source of
+# warmth keeps a lawn workable.
+#
+# These are the plants the game gives a WarmingRadius: a 1.5-square aura that
+# pulses every 6 seconds, deals 200 fire damage to grid items (the ice blocks)
+# and applies "thaw_whole_stage" to plants. That property is the mechanic, so
+# it is the definition used here.
+#
+# Six plants have it; Wasabi Whip is the one with no Archipelago item, so it
+# is left out. Deliberately absent are Hot Potato and Pepper-pult, which the
+# old version of this rule accepted: neither has a warming radius. Hot Potato
+# thaws one plant once and is gone, and Pepper-pult only deals fire damage.
+# Both help, but neither keeps a lawn warm, which is what the world asks for.
+FIRE_AURA_PLANTS = [
+    "Fire Peashooter",
+    "Hot Date",
+    "Jack O' Lantern",
+    "Lava Guava",
+    "Torchwood",
+]
+
 # Plants a world needs on top of its key, as a list of requirements: the
 # player needs at least one plant from EACH list, so a world can ask for more
 # than one thing at once. rules.py ANDs them onto that world's entrance.
 WORLD_ENTRY_PLANTS = {
     "Big Wave Beach":  [["Lily Pad"]],
-    "Frostbite Caves": [["Hot Potato", "Pepper-pult", "Fire Peashooter"]],
+    # Frostbite Caves freezes plants and blows them away, so it wants a
+    # standing source of heat rather than any fire plant -- see
+    # FIRE_AURA_PLANTS for why Hot Potato and Pepper-pult no longer count.
+    "Frostbite Caves": [FIRE_AURA_PLANTS],
     "Jurassic Marsh":  [["Perfume-shroom"]],
     # Dark Ages is permanently night: no sun falls, so a sun producer is the
     # difference between playing the world and standing still. On top of that
