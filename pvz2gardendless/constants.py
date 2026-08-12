@@ -169,10 +169,40 @@ if _unknown_excluded:
     raise ValueError("excluded starter plants are not cheap attackers: "
                      f"{sorted(_unknown_excluded)}")
 
+# Plants that answer the Jester (dark_juggler), who returns projectiles at
+# your own lawn. Two kinds qualify, and both come out of the game's data:
+#
+#  - anything that lobs. The projectile DamageFlags split every attack into
+#    "shooter" (straight down the lane, which is what he reverses) and
+#    "lobbed" (arcs over him). Lobbers are not in the reversible set at all.
+#  - the handful of straight shooters the game explicitly marks
+#    CannotBeReversedByJester on their projectile: electricpea and
+#    magnifying_grass are the two with an Archipelago item.
+#
+# Only entries that exist as items are listed. Thirteen more qualify in the
+# game -- Holly Knight, Tumbleweed, Turkey-pult and friends -- but they are
+# not in the item pool, so naming them would gate on something unobtainable.
+JESTER_COUNTER_PLANTS = [
+    "A.K.E.E.", "Apple Mortar", "Banana Launcher", "Bloomerang",
+    "Blooming Heart", "Bowling Bulb", "Buttercup", "Cabbage-pult",
+    "Coconut Cannon", "Dandelion", "Dusk Lobber", "Electric Peashooter",
+    "Escape Root", "Grapeshot", "Kernel-pult", "Magnifying Grass",
+    "Melon-Pult", "Missile Toe", "Pepper-pult", "Sap-fling", "Spore-shroom",
+    "Strawburst", "Winter Melon",
+]
+
+# Plants a world needs on top of its key, as a list of requirements: the
+# player needs at least one plant from EACH list, so a world can ask for more
+# than one thing at once. rules.py ANDs them onto that world's entrance.
 WORLD_ENTRY_PLANTS = {
-    "Big Wave Beach":  ["Lily Pad"],
-    "Frostbite Caves": ["Hot Potato", "Pepper-pult", "Fire Peashooter"],
-    "Jurassic Marsh":  ["Perfume-shroom"],
+    "Big Wave Beach":  [["Lily Pad"]],
+    "Frostbite Caves": [["Hot Potato", "Pepper-pult", "Fire Peashooter"]],
+    "Jurassic Marsh":  [["Perfume-shroom"]],
+    # Dark Ages is permanently night: no sun falls, so a sun producer is the
+    # difference between playing the world and standing still. On top of that
+    # the Jester returns straight-line shots, so something that gets round him
+    # is needed too.
+    "Dark Ages":       [SUN_PRODUCER_PLANTS, JESTER_COUNTER_PLANTS],
 }
 
 # Every plant named by an access rule anywhere in rules.py. items.py forces
@@ -186,7 +216,10 @@ WORLD_ENTRY_PLANTS = {
 LOGIC_PLANTS = (
     set(SUN_PRODUCER_PLANTS)
     | set(CHEAP_ATTACKER_PLANTS)
-    | {plant for plants in WORLD_ENTRY_PLANTS.values() for plant in plants}
+    | {plant
+       for requirements in WORLD_ENTRY_PLANTS.values()
+       for group in requirements
+       for plant in group}
 )
 
 # Shop commodities, taken verbatim from the game's store data. Only the

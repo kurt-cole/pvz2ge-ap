@@ -57,17 +57,21 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         set_rule(multiworld.get_entrance(f"Enter {w}", player),
                  lambda state, k=key_name: state.has(k, player))
 
-    # A few worlds need a specific plant beyond their key. add_rule ANDs onto
+    # A few worlds need specific plants beyond their key. add_rule ANDs onto
     # the entrance's existing key requirement, which is equivalent to gating
     # every location inside the region individually but without the
-    # per-location loop. The plant lists live in constants.WORLD_ENTRY_PLANTS
-    # so items.py can force every one of them to progression -- see
-    # LOGIC_PLANTS.
-    for world_name, plants in WORLD_ENTRY_PLANTS.items():
+    # per-location loop. Each world carries a LIST of requirements and needs
+    # one plant from each, so a world can ask for more than one thing --
+    # Dark Ages wants a sun producer (it is permanently night) and an answer
+    # to the Jester, and those are separate asks, not alternatives.
+    # The lists live in constants.WORLD_ENTRY_PLANTS so items.py can force
+    # every one of them to progression -- see LOGIC_PLANTS.
+    for world_name, requirements in WORLD_ENTRY_PLANTS.items():
         if world_name not in world.enabled_worlds:
             continue
-        add_rule(multiworld.get_entrance(f"Enter {world_name}", player),
-                 lambda state, p=plants: state.has_any(p, player))
+        entrance = multiworld.get_entrance(f"Enter {world_name}", player)
+        for group in requirements:
+            add_rule(entrance, lambda state, p=group: state.has_any(p, player))
 
     # Sequential stretches inside each world (regions.py cuts them). Gated on
     # progression plants held, so a world key opens the start of a world and
