@@ -66,6 +66,27 @@ STRETCH_PLANTS = {" Mid": 6, " Late": 12}
 # plant count to the later two, on top of the sun-and-attacker requirement.
 EGYPT_STRETCH_PLANTS = {"Ancient Egypt Mid2": 3, "Ancient Egypt Late": 6}
 
+# Region-name suffixes that mark a stretch past the opening of its world.
+# Covers both the generic cut above (" Mid", " Late") and Ancient Egypt's
+# bespoke four-region split (" Mid1", " Mid2", " Late").
+LATE_REGION_SUFFIXES = (" Mid", " Mid1", " Mid2", " Late")
+
+
+def is_early_region(name: str) -> bool:
+    """Is this region reachable without grinding deeper into a world?
+
+    True for a world's opening stretch, the side paths, the Danger Rooms, the
+    tutorial and the store. Entering a world's opening costs only its key --
+    the plant-count gates sit on the later stretches -- so anything in an early
+    region is reachable as soon as the key for it turns up.
+
+    Used by the early_world_keys option to keep World Keys from hiding behind
+    each other's endgames. Modern Day is excluded as well: it opens only once
+    the world-goal requirement is already met, so it is the latest place in any
+    seed and a key there would be found after it was needed.
+    """
+    return not name.endswith(LATE_REGION_SUFFIXES) and name != "Modern Day"
+
 # Worlds every seed keeps, whatever the world-selection options say. Ancient
 # Egypt is the only world reachable with no items at all, so it is what
 # sphere 1 is made of; Modern Day holds the victory location. A seed missing

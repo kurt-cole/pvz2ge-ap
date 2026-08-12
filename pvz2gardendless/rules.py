@@ -8,11 +8,11 @@ compose predictably and stay consistent with the rest of Archipelago.
 
 from typing import TYPE_CHECKING
 
-from worlds.generic.Rules import add_rule, set_rule
+from worlds.generic.Rules import add_rule, forbid_items_for_player, set_rule
 
 from .constants import (
     CHEAP_ATTACKER_PLANTS, EGYPT_STRETCH_PLANTS, KEYED_WORLDS, STRETCH_PLANTS,
-    SUN_PRODUCER_PLANTS, WORLD_ENTRY_PLANTS,
+    SUN_PRODUCER_PLANTS, WORLD_ENTRY_PLANTS, is_early_region,
 )
 from .locations import goal_locations_for
 
@@ -86,6 +86,26 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
             except KeyError:
                 continue
             set_rule(entrance, lambda state, n=need: state.has_group("Plants", player, n))
+
+    # Keys out of the late stretches, when the option asks for it. This is an
+    # item rule rather than an access rule: it does not change what any
+    # location requires, only what fill is allowed to put there.
+    #
+    # Without it a key can sit behind another world's key AND that world's
+    # mid-stretch plant count, so the chain to the last key runs long. Opening
+    # a world costs only its key, so restricting keys to early regions makes
+    # them chain through world openings and stay shallow.
+    #
+    # Every key name is forbidden, including this seed's disabled worlds and
+    # Modern Day: neither is in the pool, so naming them costs nothing and the
+    # set does not have to track which worlds the seed kept.
+    if world.options.early_world_keys:
+        key_names = {f"{w} Key" for w in KEYED_WORLDS}
+        for region in multiworld.get_regions(player):
+            if is_early_region(region.name):
+                continue
+            for location in region.locations:
+                forbid_items_for_player(location, key_names, player)
 
     # Modern Day — unlocked once enough world goals (trophies / completions /
     # keys, per the goal_type option) are reachable.

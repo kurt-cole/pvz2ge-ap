@@ -186,6 +186,30 @@ class RandomizeConveyorPlants(Toggle):
     display_name = "Randomize Conveyor Plants"
 
 
+class EarlyWorldKeys(Toggle):
+    """
+    Keep World Keys out of the later stretches of every world, so all of them
+    can be found in the front half of the run.
+
+    Without this a key can be placed deep inside another world -- behind that
+    world's own key AND the plant count its middle stretch wants -- so the
+    chain to the last key runs long. A seed generated this way put the Pirate
+    Seas key inside Jurassic Marsh's middle stretch, which needed the Jurassic
+    Marsh key and a stack of plants first.
+
+    With it on, keys may only land in a world's opening stretch, a side path,
+    the Danger Rooms, the tutorial or the store. Opening a world needs only its
+    key (the plant-count gates are on the middle and late stretches), so keys
+    chain through world openings and stay shallow.
+
+    This does not make the run shorter. Every world still has to be played
+    through; the keys just stop hiding behind each other's endgames.
+
+    Off matches how seeds generated before this option existed behave.
+    """
+    display_name = "Early World Keys"
+
+
 class TrapPercentage(Range):
     """
     Percentage of the filler item pool (coins and gems) to replace with traps.
@@ -214,5 +238,6 @@ class PvZ2Options(PerGameCommonOptions):
     shopsanity:       Shopsanity
     shuffle_upgrades: ShuffleUpgrades
     randomize_conveyor_plants: RandomizeConveyorPlants
+    early_world_keys: EarlyWorldKeys
     trap_percentage:  TrapPercentage
     death_link:       DeathLink
