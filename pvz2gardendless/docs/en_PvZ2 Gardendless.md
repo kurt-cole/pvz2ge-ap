@@ -93,6 +93,10 @@ removes the levels of the worlds it leaves out.
   | Plant Food Refresh | 1 | — |
   | Sky Shield | 1 | — |
 - **Coins and gems** — filler, and the currency the store runs on.
+- **Random Plant Costume** — filler. Each one dresses a plant you already own in
+  a costume you do not have yet, picked at random from the 309 the game has
+  across 120 plants. Purely cosmetic. One arriving before you own any plant is
+  held and applied once you do.
 - **Lawn Mower Trap** — sets off every lawn mower on the field at once. They roll out and are spent,
   leaving those lanes with no last line of defence for the rest of the level. A trap received while
   you are not in a level is held and applied when the next one starts.

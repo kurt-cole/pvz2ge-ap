@@ -510,6 +510,22 @@ window.electron = electron;
   window._AP_CN_TO_ID = {};
   for (const pid in ID_TO_CN) window._AP_CN_TO_ID[ID_TO_CN[pid]] = Number(pid);
 
+  // How many costumes each plant has, from the game's PlantFeatures table
+  // (its COSTUME field). Costume indices for a plant run 0..count-1, which is
+  // how getAvailablePlantCostumeList() enumerates them. Only the plants
+  // Archipelago manages are listed: 120 of them, 309 costumes between them.
+  const PLANT_COSTUMES = {
+    0:10, 1:8, 2:9, 3:3, 4:6, 5:3, 6:5, 7:10, 8:9, 10:2, 11:2, 12:3, 13:1, 14:1, 16:1, 17:3,
+    18:2, 19:2, 20:1, 21:2, 23:1, 24:4, 25:8, 27:1, 28:5, 29:5, 30:5, 32:3, 33:1, 34:4,
+    35:4, 36:3, 37:4, 38:3, 39:1, 41:2, 42:1, 43:1, 44:3, 45:3, 46:2, 49:4, 50:1, 51:2,
+    54:2, 55:2, 56:3, 57:3, 58:2, 59:5, 60:1, 61:3, 62:3, 63:6, 64:1, 65:2, 66:1, 67:3,
+    69:3, 70:2, 71:1, 72:2, 73:1, 74:2, 75:2, 76:1, 77:3, 78:2, 79:3, 80:2, 81:2, 82:3,
+    84:1, 85:1, 86:1, 87:3, 88:3, 89:3, 90:2, 96:3, 97:4, 106:1, 107:2, 108:1, 109:1, 110:1,
+    114:2, 120:1, 127:2, 128:1, 129:4, 130:1, 131:2, 132:3, 133:2, 134:2, 135:2, 136:2,
+    137:2, 138:2, 139:2, 142:2, 143:2, 144:2, 145:2, 146:2, 148:2, 149:1, 150:2, 151:2,
+    152:2, 153:2, 154:2, 155:1, 156:1, 157:1, 160:2, 161:1, 164:2, 165:1
+  };
+
   // Conveyor swap groups: which plants count as interchangeable when the belt
   // is randomized. Keyed role:tier, where role separates plants that stay on
   // the lawn from those consumed or timed out, and sun producers from both --
@@ -1514,7 +1530,7 @@ window.electron = electron;
 
   let cfg   = { server:'localhost:38281', slot:'', password:'' };
   let st    = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
-                upgradeCounts:{}, runKey:'' };
+                upgradeCounts:{}, costumes:{}, pendingCostumes:0, runKey:'' };
   let sessionActive = false; // set true only after explicit Connect + server ack
   // Whether this session has told the server the goal is met. Session state,
   // not persisted: it is reset on every disconnect so a reconnect re-sends,
@@ -1663,7 +1679,13 @@ window.electron = electron;
       // the "first placement" description tip -- since this object is
       // recreated from scratch every poll, tutorialLevel:0 here would make
       // the game re-show the tip every time a plant is placed, not just once.
-      if(cn) cp.plantProps[cn] = {progress:1,medal:false,tutorialLevel:1,boost:0,costume:-1,costumes:[]};
+      // Costumes come from st, not from whatever was in the save: this object
+      // is rebuilt from scratch every poll, so anything the game wrote here
+      // is about to be discarded. costume is the one being worn -- the most
+      // recently granted, matching what unlockPlantCostume() does.
+      const worn = ownedCostumes(pid);
+      if(cn) cp.plantProps[cn] = {progress:1,medal:false,tutorialLevel:1,boost:0,
+        costume: worn.length ? worn[worn.length-1] : -1, costumes: worn.slice()};
     }
 
     // 2b. Same treatment for the permanent upgrades, when this seed shuffles
@@ -1870,7 +1892,7 @@ window.electron = electron;
           // so it has to be cleared here explicitly -- carrying it into a new
           // seed would grant upgrades that seed never sent.
           st = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
-                 upgradeCounts:{}, runKey };
+                 upgradeCounts:{}, costumes:{}, pendingCostumes:0, runKey };
           window._AP_grantedPlantIds = new Set();
           window._AP_grantedUpgrades = new Set();
           svSt();
@@ -2024,6 +2046,15 @@ window.electron = electron;
     // Counting here is safe against the post-connect replay for the same
     // reason the coin/gem running totals are: applyItem() is only reached for
     // items at or past st.lastIdx, so a replayed item is never counted twice.
+    if(name === RANDOM_COSTUME){
+      // Banked first, then drained: grantRandomCostume() can legitimately fail
+      // (no plants yet, or every costume already worn) and the bank is what
+      // makes that recoverable on a later poll.
+      st.pendingCostumes = (st.pendingCostumes || 0) + 1;
+      svSt();
+      applyPendingCostumes();
+      return;
+    }
     const upgradeCns = (st.upgradeItems||{})[name];
     if(upgradeCns){
       if(!st.upgradeCounts) st.upgradeCounts = {};
@@ -2167,6 +2198,57 @@ window.electron = electron;
     fireCheck('Shop: ' + commodityName);
   };
 
+  // ── Random Plant Costume ──────────────────────────────────────────────────
+  // A cosmetic filler. Each one grants a costume the player does not own yet,
+  // for a plant they DO own -- a costume for a plant Archipelago has not sent
+  // is not something anyone can look at.
+  //
+  // The roll is stored, not recomputed. rebuildAPSave() rewrites plantProps
+  // from scratch every poll, so a costume that only existed in the game's save
+  // would be wiped within two seconds; st.costumes is the record and the
+  // rebuild restores from it.
+  const RANDOM_COSTUME = 'Random Plant Costume';
+
+  function ownedCostumes(pid){
+    return (st.costumes || {})[pid] || [];
+  }
+
+  // Returns true if it managed to grant one.
+  function grantRandomCostume(){
+    const granted = window._AP_grantedPlantIds || new Set();
+    const options = [];
+    for(const pid of granted){
+      const total = PLANT_COSTUMES[pid] || 0;
+      if(!total) continue;
+      const have = ownedCostumes(pid);
+      for(let i = 0; i < total; i++) if(have.indexOf(i) < 0) options.push([pid, i]);
+    }
+    if(!options.length) return false;
+    const [pid, idx] = options[Math.floor(Math.random() * options.length)];
+    if(!st.costumes) st.costumes = {};
+    if(!st.costumes[pid]) st.costumes[pid] = [];
+    st.costumes[pid].push(idx);
+    svSt();
+    const cn = ID_TO_CN[pid];
+    toast('👕 Costume for ' + (cn || ('plant ' + pid)), '#f0abfc');
+    return true;
+  }
+
+  // Costumes received before the player owned any plant -- or before any plant
+  // still had an unworn costume -- are banked rather than dropped, and retried
+  // on the poll. Without this, a costume that arrived early would simply
+  // vanish, which is the same bug the trap queue exists to avoid.
+  function applyPendingCostumes(){
+    let pending = st.pendingCostumes || 0;
+    if(pending <= 0) return;
+    let granted = 0;
+    while(pending > 0 && grantRandomCostume()){ pending--; granted++; }
+    if(granted){
+      st.pendingCostumes = pending;
+      svSt();
+    }
+  }
+
   // Whether the store should still be offering a commodity.
   //
   // The game hides a store card by asking whether the thing is already owned
@@ -2238,6 +2320,8 @@ window.electron = electron;
     // Fires once a level is actually running, for traps banked while the
     // player was on the world map or reconnecting.
     applyPendingTraps();
+    // Costumes banked before the player owned a plant to put one on.
+    applyPendingCostumes();
   }
 
   function fireCheck(loc){
@@ -2332,7 +2416,7 @@ window.electron = electron;
     };
     document.getElementById('ap-reset').onclick=()=>{
       if(!confirm('Reset all AP progress for this slot? This clears checked locations, received items, and run state.')) return;
-      st={checked:[],lastIdx:0,receivedKeys:[],receivedItems:[],upgradeCounts:{},runKey:''};
+      st={checked:[],lastIdx:0,receivedKeys:[],receivedItems:[],upgradeCounts:{},costumes:{},pendingCostumes:0,runKey:''};
       // The victory location is no longer checked, so clearing goalSent lets
       // re-earning it send the goal again.
       goalSent=false;

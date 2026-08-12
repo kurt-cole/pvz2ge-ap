@@ -240,8 +240,24 @@ for i, (name, _codenames) in enumerate(UPGRADE_GROUPS):
 UPGRADE_ITEM_TO_CNS: Dict[str, List[str]] = {name: list(cns)
                                              for name, cns in UPGRADE_GROUPS}
 
+# A cosmetic filler: grants one costume, for a random plant you already hold,
+# out of the 309 the game has across the 120 plants Archipelago manages.
+# Appended after every other block so no existing item ID moves. It is NOT
+# added to FILLER_ITEMS, which would have shifted the trap and upgrade blocks
+# that are numbered from the end of it.
+COSTUME_FILLER = "Random Plant Costume"
+COSTUME_ITEMS: List[PvZ2ItemData] = [
+    PvZ2ItemData(COSTUME_FILLER, ItemClassification.filler,
+                 _upgrade_base + len(UPGRADE_ITEMS)),
+]
+
+# Everything get_filler_item_name() and the pool builder may hand out. Kept
+# separate from FILLER_ITEMS so that list can stay exactly the currency block
+# its IDs were assigned from.
+FILLER_POOL: List[PvZ2ItemData] = FILLER_ITEMS + COSTUME_ITEMS
+
 ALL_ITEMS: List[PvZ2ItemData] = (PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS
-                                 + TRAP_ITEMS + UPGRADE_ITEMS)
+                                 + TRAP_ITEMS + UPGRADE_ITEMS + COSTUME_ITEMS)
 ITEM_NAME_TO_ITEM: Dict[str, PvZ2ItemData] = {item.name: item for item in ALL_ITEMS}
 ITEM_NAME_TO_ID: Dict[str, int]        = {item.name: item.code for item in ALL_ITEMS}
 
@@ -261,18 +277,19 @@ ITEM_NAME_GROUPS: Dict[str, set] = {
     "Upgrades":   {i.name for i in UPGRADE_ITEMS},
 }
 
-# Order filler is dealt out in. It deliberately interleaves the two currencies
+# Order filler is dealt out in. It deliberately interleaves the currencies
 # instead of reusing FILLER_ITEMS order, which is grouped by type and would
-# hand out a long run of coins followed by a long run of gems.
-FILLER_CYCLE = ["100 Coins", "500 Coins", "10 Gems",
+# hand out a long run of coins followed by a long run of gems. The costume
+# sits once in the rotation, so it is roughly one filler slot in seven.
+FILLER_CYCLE = ["100 Coins", "500 Coins", "10 Gems", COSTUME_FILLER,
                 "1000 Coins", "20 Gems", "50 Gems"]
 
 # The two lists drifting apart would not raise: a name here that is not a real
 # item reaches create_item() as an unknown, which builds it with code=None --
 # and AP reads a None code as an event, not a pool item.
-if set(FILLER_CYCLE) != {f.name for f in FILLER_ITEMS}:
-    raise ValueError("FILLER_CYCLE and FILLER_ITEMS disagree: "
-                     f"{sorted(set(FILLER_CYCLE) ^ {f.name for f in FILLER_ITEMS})}")
+if set(FILLER_CYCLE) != {f.name for f in FILLER_POOL}:
+    raise ValueError("FILLER_CYCLE and FILLER_POOL disagree: "
+                     f"{sorted(set(FILLER_CYCLE) ^ {f.name for f in FILLER_POOL})}")
 
 
 def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item]:

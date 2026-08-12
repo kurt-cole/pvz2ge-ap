@@ -20,7 +20,7 @@ from .constants import (
 )
 from .options import PvZ2Options
 from .items import (
-    FILLER_ITEMS, ITEM_NAME_GROUPS, ITEM_NAME_TO_ID, ITEM_NAME_TO_ITEM,
+    FILLER_POOL, ITEM_NAME_GROUPS, ITEM_NAME_TO_ID, ITEM_NAME_TO_ITEM,
     UPGRADE_ITEM_TO_CNS, PvZ2Item, create_item_pool,
 )
 from .locations import (
@@ -257,7 +257,7 @@ class PvZ2GardendlessWorld(World):
         # (e.g. start_inventory_from_pool) -- without this, AP has nothing to
         # call to replace a removed item, leaving that pool slot permanently
         # short and causing "more locations than items" fill failures.
-        return self.random.choice(FILLER_ITEMS).name
+        return self.random.choice(FILLER_POOL).name
 
     def active_locations(self) -> List[PvZ2LocationData]:
         """Locations actually built for this slot's options."""
