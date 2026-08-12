@@ -1,0 +1,304 @@
+import sys, os, collections
+
+# This directory (for apstub) and the repo root (for the pvz2gardendless
+# package), resolved off __file__ so the suite runs from any working dir.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _HERE)
+sys.path.insert(0, os.path.dirname(_HERE))
+import apstub
+from apstub import MultiWorld
+
+import pvz2gardendless as W
+from pvz2gardendless import constants as C
+from pvz2gardendless.options import (
+    WorldCount, EnabledWorlds, GoalType, WorldsRequired, ModernDayVictory,
+    SkipTutorial, Shopsanity, TrapPercentage, ShuffleUpgrades,
+    RandomizeConveyorPlants, EarlyWorldKeys,
+)
+from apstub import DeathLink
+
+
+class Opts:
+    def __init__(self, **kw):
+        self.world_count = WorldCount(kw.get("world_count", WorldCount.default))
+        self.enabled_worlds = EnabledWorlds(frozenset(kw.get("enabled_worlds", ())))
+        self.goal_type = GoalType(kw.get("goal_type", GoalType.default))
+        self.worlds_required = WorldsRequired(kw.get("worlds_required", 7))
+        self.modern_day_victory = ModernDayVictory(kw.get("modern_day_victory", 1))
+        self.skip_tutorial = SkipTutorial(kw.get("skip_tutorial", 0))
+        self.shopsanity = Shopsanity(kw.get("shopsanity", 0))
+        self.shuffle_upgrades = ShuffleUpgrades(kw.get("shuffle_upgrades", ShuffleUpgrades.default))
+        self.randomize_conveyor_plants = RandomizeConveyorPlants(
+            kw.get("randomize_conveyor_plants", RandomizeConveyorPlants.default))
+        self.early_world_keys = EarlyWorldKeys(kw.get("early_world_keys", 0))
+        self.trap_percentage = TrapPercentage(kw.get("trap_percentage", 5))
+        self.death_link = DeathLink(0)
+
+
+def run(label, **kw):
+    mw = MultiWorld()
+    w = W.PvZ2GardendlessWorld(mw, 1)
+    w.options = Opts(**kw)
+    w.generate_early()
+    w.create_regions()
+    w.set_rules()
+    w.create_items()
+    sd = w.fill_slot_data()
+
+    locs = w.active_locations()
+    keys = [i.name for i in mw.itempool if i.name.endswith(" Key")]
+    built = {r.name for r in mw.regions}
+    dead = {r for r in C.ALL_WORLD_REGIONS if r not in w.enabled_regions}
+
+    print(f"\n=== {label} ===")
+    print(f"  worlds({len(w.enabled_worlds)}): {sorted(w.enabled_worlds)}")
+    print(f"  locations={len(locs)}  itempool={len(mw.itempool)}  keys={len(keys)}")
+    print(f"  goal_type={sd['goal_type']} worlds_required={sd['worlds_required']}"
+          f" goal_locations={len(sd['goal_locations'])}")
+    assert len(locs) == len(mw.itempool), "pool must exactly fill locations"
+    assert not (built & dead), f"built a disabled region: {built & dead}"
+    # every location built lands in a region that exists
+    for loc in locs:
+        assert loc.region in built, f"{loc.name} -> missing region {loc.region}"
+    # no key for a disabled world
+    for k in keys:
+        assert C.KEY_NAME_TO_WORLD[k] in w.enabled_worlds, f"stray key {k}"
+    assert "Modern Day Key" not in keys
+    # goal locations all exist and are reachable-by-name
+    for name in sd["goal_locations"]:
+        mw.get_location(name, 1)
+    # the free starting plant must be able to hold a lane: no single-use
+    # instants, no non-damaging support
+    from pvz2gardendless.constants import (STARTER_PLANTS, SINGLE_USE_PLANTS,
+                                           NON_DAMAGING_PLANTS,
+                                           SUN_PRODUCER_PLANTS)
+    assert len(mw.precollected) == 1, "expected exactly one starting plant"
+    starter = mw.precollected[0].name
+    # A sun producer is forced into sphere 1 as an EARLY ITEM, not granted.
+    # Granting it would satisfy every sun requirement in the seed before it was
+    # ever asked -- the Egypt Mid1 gate is "a sun producer and an attacker",
+    # and both halves would be free from the start.
+    early = mw.early_items[1]
+    assert len(early) == 1, f"expected one early item, got {early}"
+    (early_name, early_count), = early.items()
+    assert early_name in SUN_PRODUCER_PLANTS, f"early item {early_name} is not a sun producer"
+    assert early_count == 1, f"early item count {early_count} != 1"
+    # It has to actually be in the pool, or fill has nothing to place early.
+    assert any(i.name == early_name for i in mw.itempool), \
+        f"early item {early_name} is not in the item pool"
+    # ...and it must NOT be a starting item, or the gates go vacuous.
+    assert early_name not in [i.name for i in mw.precollected], \
+        f"{early_name} was granted outright, defeating the early-item logic"
+    assert starter in STARTER_PLANTS, f"starter {starter} not in STARTER_PLANTS"
+    assert starter not in SINGLE_USE_PLANTS, f"starter {starter} is single-use"
+    assert starter not in NON_DAMAGING_PLANTS, f"starter {starter} deals no damage"
+    # Named regressions. Each of these reached the starter pool at some point
+    # because CHEAP_ATTACKER_PLANTS is derived from SunCost + Family, and
+    # Family is a theme tag rather than a damage flag -- the entire "Magic"
+    # family is utility. Intensive Carrot was actually handed out in a seed.
+    for _bad in ("Intensive Carrot", "Explode-O-Nut", "Moonflower",
+                 "Shrinking Violet", "Hypno-shroom", "Potato Mine",
+                 "Chili Bean", "E.M. Peach", "Squash", "Magnifying Grass"):
+        assert _bad not in STARTER_PLANTS, f"{_bad} is back in the starter pool"
+    # Chomper has no almanac `damage` stat but does have ChewDamage 200, so a
+    # naive "no damage stat" filter would wrongly drop it. It must stay.
+    assert "Chomper" in STARTER_PLANTS, "Chomper wrongly dropped from starters"
+    # CHEAP_ATTACKER_PLANTS gates every Ancient Egypt stretch, so nothing that
+    # deals no damage may be in it -- holding only Sunflower + Moonflower used
+    # to read as a survivable lawn.
+    from pvz2gardendless.constants import CHEAP_ATTACKER_PLANTS
+    _overlap = set(NON_DAMAGING_PLANTS) & set(CHEAP_ATTACKER_PLANTS)
+    assert not _overlap, f"non-damaging plants count as attackers: {_overlap}"
+    # Water-only plants cannot be placed on Ancient Egypt's terrain.
+    for _wet in ("Tangle Kelp", "Lily Pad"):
+        assert _wet not in CHEAP_ATTACKER_PLANTS, f"{_wet} is water-only"
+    # Real attackers the old Family heuristic wrongly dropped.
+    for _good in ("Puff-shroom", "Pea-nut", "Chard Guard", "Endurian"):
+        assert _good in CHEAP_ATTACKER_PLANTS, f"{_good} should be an attacker"
+    # Sheetless plants are attackers by inspection, not omissions.
+    for _ns in ("Scaredy-shroom", "Vamporcini", "Skyshooter"):
+        assert _ns in CHEAP_ATTACKER_PLANTS, f"{_ns} dropped for having no sheet"
+    assert sd["worlds_required"] <= len(sd["goal_locations"])
+    assert sd["worlds_required"] >= 1, "goal must stay satisfiable"
+    # indirect conditions registered for every goal
+    assert len(mw.indirect) == len(sd["goal_locations"])
+    from pvz2gardendless.items import UPGRADE_ITEMS
+    from pvz2gardendless.constants import UPGRADE_GROUPS, UPGRADE_ITEM_COUNT
+    upnames = {u.name for u in UPGRADE_ITEMS}
+    ups = [i.name for i in mw.itempool if i.name in upnames]
+    want = UPGRADE_ITEM_COUNT if w.options.shuffle_upgrades else 0
+    assert len(ups) == want, f"upgrade copies in pool {len(ups)} != {want}"
+    if w.options.shuffle_upgrades:
+        got = collections.Counter(ups)
+        for name, cns in UPGRADE_GROUPS:
+            assert got[name] == len(cns), f"{name}: {got[name]} copies != {len(cns)}"
+    assert sd["shuffle_upgrades"] is bool(w.options.shuffle_upgrades)
+    assert len(sd["upgrade_items"]) == len(UPGRADE_GROUPS)
+    dupes = [n for n, c in collections.Counter(l.name for l in locs).items() if c > 1]
+    assert not dupes, dupes
+    return w, sd
+
+
+run("default (all worlds)")
+run("3 worlds, want 4 keys", world_count=3, worlds_required=4)
+run("1 world (Egypt only)", world_count=1, worlds_required=11)
+run("explicit list only", world_count=1,
+    enabled_worlds=["Pirate Seas", "Wild West"], worlds_required=11)
+run("explicit + topup", world_count=5, enabled_worlds=["Big Wave Beach"])
+run("trophies, 3 worlds", world_count=3, goal_type=0, worlds_required=11)
+run("completions, 2 worlds", world_count=2, goal_type=1, worlds_required=11)
+run("3 worlds + shopsanity", world_count=3, shopsanity=1, worlds_required=11)
+run("all worlds + shopsanity + traps", shopsanity=1, trap_percentage=50)
+
+# explicit beats a lower count
+w, _ = run("explicit 4 vs count 2", world_count=2,
+           enabled_worlds=["Pirate Seas", "Wild West", "Far Future", "Dark Ages"])
+assert {"Pirate Seas", "Wild West", "Far Future", "Dark Ages"} <= w.enabled_worlds
+assert "Ancient Egypt" in w.enabled_worlds and "Modern Day" in w.enabled_worlds
+
+# Egypt counts toward world_count: 3 => Egypt + 2 others (+ Modern Day)
+w, _ = run("count semantics", world_count=3)
+assert len(w.enabled_worlds - {"Modern Day"}) == 3, w.enabled_worlds
+
+# determinism for a given slot seed
+a, _ = run("determinism A", world_count=4)
+b, _ = run("determinism B", world_count=4)
+assert a.enabled_worlds == b.enabled_worlds
+
+# Frostbite Caves entry-plant rule only when the world is in
+w, _ = run("BWB forced in", world_count=1, enabled_worlds=["Big Wave Beach"])
+assert "Big Wave Beach" in w.enabled_worlds
+
+run("upgrades off", shuffle_upgrades=0)
+run("upgrades off, 3 worlds", shuffle_upgrades=0, world_count=3)
+run("upgrades on, 1 world", world_count=1)
+run("upgrades on + shopsanity", shopsanity=1)
+
+# conveyor randomization: pure client behaviour, so all generation has to do is
+# carry the flag and a per-slot seed. It must not disturb the pool or locations.
+_a, _sd_off = run("conveyor off", randomize_conveyor_plants=0)
+_b, _sd_on  = run("conveyor on",  randomize_conveyor_plants=1)
+assert _sd_off["randomize_conveyor"] is False and _sd_on["randomize_conveyor"] is True
+assert isinstance(_sd_on["conveyor_seed"], int) and 0 <= _sd_on["conveyor_seed"] < 2**32
+assert _sd_off["goal_locations"] == _sd_on["goal_locations"], "conveyor changed logic"
+
+from pvz2gardendless.items import (UPGRADE_ITEMS, ALL_ITEMS, UPGRADE_ITEM_TO_CNS,
+                                   COSTUME_ITEMS, FILLER_POOL, FILLER_CYCLE)
+from pvz2gardendless.constants import UPGRADE_GROUPS, UPGRADE_ITEM_COUNT
+
+# item IDs are append-only, block by block: every block sits entirely above
+# every block added before it. Declared in the order blocks were introduced,
+# so adding a new one only means appending it here.
+from pvz2gardendless.items import (PLANT_ITEMS, KEY_ITEMS, FILLER_ITEMS,
+                                   TRAP_ITEMS, COSTUME_TRAP_ITEMS)
+BLOCKS = [
+    ("plants+keys+filler+traps", PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS + TRAP_ITEMS),
+    ("upgrades", UPGRADE_ITEMS),
+    ("costume filler", COSTUME_ITEMS),
+    ("costume trap", COSTUME_TRAP_ITEMS),
+]
+for bi in range(1, len(BLOCKS)):
+    name, block = BLOCKS[bi]
+    earlier = [i.code for _, b in BLOCKS[:bi] for i in b]
+    assert min(i.code for i in block) > max(earlier),         f"{name} block overlaps an earlier block"
+assert sum(len(b) for _, b in BLOCKS) == len(ALL_ITEMS), "a block is unaccounted for"
+# the costume filler must be reachable from both the cycle and get_filler_item_name
+assert set(FILLER_CYCLE) == {f.name for f in FILLER_POOL}
+assert any(i.name == "Random Plant Costume" for i in COSTUME_ITEMS)
+assert len({i.code for i in ALL_ITEMS}) == len(ALL_ITEMS), "duplicate item IDs"
+_allcn = [cn for _, cns in UPGRADE_GROUPS for cn in cns]
+assert len(set(_allcn)) == 14 == UPGRADE_ITEM_COUNT, "codenames not 14 distinct"
+assert len(UPGRADE_ITEM_TO_CNS) == 8, "expected 8 distinct upgrade item names"
+# codenames must match the game's UpgradeEnum exactly
+GAME_UPGRADES = {
+    "upgrade_starting_sun_lvl1", "upgrade_starting_sun_lvl2",
+    "upgrade_pf_slots_lvl1", "upgrade_pf_slots_lvl2", "upgrade_wallnut_firstaid",
+    "upgrade_pf_refresh", "upgrade_sunshovel_lvl1", "upgrade_sunshovel_lvl2",
+    "upgrade_sunshovel_lvl3", "upgrade_7_slots", "upgrade_8_slots",
+    "upgrade_manual_mowers_1", "upgrade_manual_mowers_2", "upgrade_sky_shield",
+}
+assert set(_allcn) == GAME_UPGRADES, set(_allcn) ^ GAME_UPGRADES
+# the 5 shop-only upgrades must still be items
+from pvz2gardendless.constants import SHOP_UPGRADE_COMMODITIES
+assert set(SHOP_UPGRADE_COMMODITIES) <= set(_allcn)
+# a progressive prefix must be a valid partial state: every group's codenames
+# are interchangeable in effect, so any prefix length is legal by construction
+for _n, _c in UPGRADE_GROUPS:
+    assert len(_c) >= 1 and len(set(_c)) == len(_c), _n
+print("progressive groups:", {n: len(c) for n, c in UPGRADE_GROUPS})
+print("\nupgrade item IDs:", min(i.code for i in UPGRADE_ITEMS),
+      "-", max(i.code for i in UPGRADE_ITEMS))
+
+print("\nALL CHECKS PASSED")
+
+# ── early_world_keys ────────────────────────────────────────────────────────
+# An ITEM rule, not an access rule: it must change where fill may put keys and
+# nothing else. Locations, pool size and logic all have to come out identical.
+from pvz2gardendless.constants import is_early_region, KEYED_WORLDS
+from apstub import MultiWorld as _MW
+
+
+def _key_placement(**kw):
+    mw = _MW()
+    w = W.PvZ2GardendlessWorld(mw, 1)
+    w.options = Opts(**kw)
+    w.generate_early(); w.create_regions(); w.set_rules(); w.create_items()
+    # A synthetic key rather than one drawn from the pool: a 1-world seed has
+    # no keys in its pool at all, and `all()` over an empty set is vacuously
+    # true, which would silently pass the whole probe.
+    probe_key = w.create_item("Pirate Seas Key")
+    allowed = denied = 0
+    late_open = []
+    for r in mw.regions:
+        for loc in r.locations:
+            ok = loc.item_rule(probe_key)
+            if ok:
+                allowed += 1
+                if not is_early_region(r.name):
+                    late_open.append(f"{r.name}/{loc.name}")
+            else:
+                denied += 1
+    return mw, allowed, denied, late_open
+
+
+# off: nothing is forbidden anywhere
+_mw, _allowed, _denied, _late = _key_placement(early_world_keys=0)
+assert _denied == 0, f"option off still forbade {_denied} locations"
+print(f"\nearly_world_keys off: all {_allowed} locations accept keys")
+
+# on: every late location refuses keys, every early one still takes them
+_mw, _allowed, _denied, _late = _key_placement(early_world_keys=1)
+assert not _late, f"late locations still accept keys: {_late[:5]}"
+assert _denied > 0, "option on forbade nothing"
+_keys_needed = sum(1 for i in _mw.itempool if i.name.endswith(" Key"))
+assert _allowed >= _keys_needed, \
+    f"only {_allowed} spots left for {_keys_needed} keys -- fill would fail"
+print(f"early_world_keys on:  {_allowed} legal spots, {_denied} closed off, "
+      f"{_keys_needed} keys to place")
+
+# Modern Day is the latest place in any seed, so it must refuse keys too.
+for _r in _mw.regions:
+    if _r.name == "Modern Day":
+        for _loc in _r.locations:
+            assert not all(_loc.item_rule(i) for i in _mw.itempool
+                           if i.name.endswith(" Key")), \
+                f"Modern Day location {_loc.name} accepts a key"
+
+# The rule must not touch anything that is not a key.
+_plant = next(i for i in _mw.itempool if i.name == "Peashooter")
+_blocked = [l for r in _mw.regions for l in r.locations if not l.item_rule(_plant)]
+assert not _blocked, f"non-key items were forbidden too: {_blocked[:3]}"
+
+# ...and it must not disturb the seed's shape or its logic.
+_a, _sda = run("keys anywhere", early_world_keys=0, world_count=4)
+_b, _sdb = run("keys early", early_world_keys=1, world_count=4)
+assert _a.enabled_worlds == _b.enabled_worlds
+assert _sda["goal_locations"] == _sdb["goal_locations"], "key rule changed logic"
+assert len(_a.active_locations()) == len(_b.active_locations())
+
+# Smallest seeds still have somewhere to put their keys.
+for _wc in (1, 2, 3):
+    _mw2, _al, _dn, _lt = _key_placement(early_world_keys=1, world_count=_wc)
+    _need = sum(1 for i in _mw2.itempool if i.name.endswith(" Key"))
+    assert not _lt and _al >= _need, f"world_count={_wc}: {_al} spots for {_need} keys"
+print("early_world_keys holds down to a 1-world seed")
