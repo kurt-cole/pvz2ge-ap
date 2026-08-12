@@ -99,22 +99,48 @@ SUN_PRODUCER_PLANTS = [
     "Solar Tomato", "Solar Sage",
 ]
 
-# SunCost <= 150 among damage-dealing Family types. Excludes a handful of
-# 0-cost/utility plants the game misclassifies as attackers (Iceberg
-# Lettuce, Hot Potato, Sea-shroom, Puff-shroom, Garlic, Grimrose) and
-# Tangle Kelp, which is water-only and unusable on Ancient Egypt's terrain.
+# Cheap plants that can actually kill a zombie. rules.py gates every Ancient
+# Egypt stretch on has_any() over this list, so a name here is a name the
+# generator will accept as "the player can fight".
+#
+# DERIVED FROM GAME DATA. A plant qualifies on all three of:
+#   1. Damage evidence -- an almanac `damage` PlantStat, a ChewDamage /
+#      ContactDamage / ExplodeDamage field, or an Action carrying Damage >= 20.
+#   2. SunCost <= 150.
+#   3. Not `IsZenGardenWaterPlant` (Lily Pad and Tangle Kelp), which cannot be
+#      placed on Ancient Egypt's dry terrain.
+#
+# This list used to be SunCost + Family, and Family is a theme tag rather than
+# a damage flag. That let six plants that cannot hurt anything satisfy the
+# Egypt gate: Moonflower, Intensive Carrot, Explode-O-Nut, Shrinking Violet,
+# Hypno-shroom and E.M. Peach. Holding only Sunflower and Moonflower read as
+# a survivable lawn.
+#
+# Three thresholds here are load-bearing and were each got wrong once:
+#   - Damage >= 20, not > 0. 20 is one NDS, the game's normal damage shot (one
+#     pea). Spring Bean's launch carries Damage 1 and Stunion's stun Damage 0;
+#     neither is an attack.
+#   - Action Type == "special" is NOT damage evidence. It only means "triggered
+#     effect" -- Sunflower, Blover and Thyme Warp all have one.
+#   - The almanac `damage` stat alone is not enough. It is a display rating and
+#     Chomper carries none despite ChewDamage 200.
+#
+# Scaredy-shroom, Vamporcini and Skyshooter have no _PLANTPROPERTIES sheet at
+# all. They are listed by hand because no sheet means unknown, not harmless --
+# all three plainly attack.
 CHEAP_ATTACKER_PLANTS = [
-    "E.M. Peach", "Potato Mine", "Scaredy-shroom", "Celery Stalker",
-    "Chili Bean", "Escape Root", "Explode-O-Nut", "Moonflower",
-    "Primal Potato Mine", "Shadow-shroom", "Shrinking Violet", "Squash",
-    "Ghost Pepper", "Lava Guava", "Nightshade", "Cabbage-pult",
-    "Intensive Carrot", "Kernel-pult", "Peashooter", "Spikeweed",
-    "Vamporcini", "Fume-Shroom", "Gloom Vine", "Guacodile", "Hypno-shroom",
-    "Jalapeno", "Lightning Reed", "Pea Pod", "Pea Vine", "Split Pea",
-    "Blooming Heart", "Bonk Choy", "Cherry Bomb", "Chomper", "Dusk Lobber",
-    "Electric Blueberry", "Electric Currant", "Grapeshot", "Iceweed",
-    "Parsnip", "Phat Beet", "Red Stinger", "Skyshooter", "Snap Dragon",
-    "Snow Pea", "Spore-shroom", "Star Fruit",
+    "Blooming Heart", "Bonk Choy", "Buttercup", "Cabbage-pult",
+    "Celery Stalker", "Chard Guard", "Cherry Bomb", "Chili Bean", "Chomper",
+    "Dusk Lobber", "Electric Blueberry", "Electric Currant", "Endurian",
+    "Escape Root", "Fume-Shroom", "Ghost Pepper", "Gloom Vine", "Grapeshot",
+    "Grimrose", "Guacodile", "Iceweed", "Jalapeno", "Kernel-pult",
+    "Lava Guava", "Lightning Reed", "Magnifying Grass", "Nightshade",
+    "Parsnip", "Pea Pod", "Pea Vine", "Pea-nut", "Peashooter", "Phat Beet",
+    "Potato Mine", "Primal Potato Mine", "Puff-shroom", "Red Stinger",
+    "Shadow-shroom", "Snap Dragon", "Snow Pea", "Spikeweed", "Split Pea",
+    "Spore-shroom", "Squash", "Star Fruit",
+    # no data sheet; attackers by inspection
+    "Scaredy-shroom", "Skyshooter", "Vamporcini",
 ]
 
 # Plants a world needs on top of its key item. rules.py ANDs one has_any()
@@ -140,37 +166,28 @@ CHEAP_ATTACKER_PLANTS = [
 # below have no sheet at all -- Scaredy-shroom, Vamporcini and Skyshooter --
 # and are treated as persistent, which matches what they do.
 SINGLE_USE_PLANTS = [
-    "Cherry Bomb", "Chili Bean", "E.M. Peach", "Escape Root", "Ghost Pepper",
-    "Grapeshot", "Hypno-shroom", "Jalapeno", "Lava Guava", "Potato Mine",
-    "Primal Potato Mine", "Shadow-shroom", "Shrinking Violet", "Squash",
+    "Cherry Bomb", "Chili Bean", "Escape Root", "Ghost Pepper", "Grapeshot",
+    "Grimrose", "Jalapeno", "Lava Guava", "Potato Mine",
+    "Primal Potato Mine", "Shadow-shroom", "Squash",
 ]
 
 # Plants that persist but deal no damage of their own -- support and defence.
 # Also unfit as the sole starting plant for the same reason: the guarantee is
 # meant to be something that can actually kill a zombie.
 #
-# DERIVED FROM GAME DATA. A plant is here when its _PLANTPROPERTIES sheet shows
-# no damage by ANY of these measures: an almanac `damage` PlantStat, a
-# ChewDamage / ContactDamage / ExplodeDamage field, an Action with Damage > 0,
-# or a `special` (instant-kill) Action.
-#
-# All four measures are needed, because the almanac stat alone is a rating for
-# display and some plants that plainly kill do not carry one -- Chomper has no
-# `damage` stat but does have ChewDamage 200, and dropping it would be wrong.
-# Conversely Family is NOT a damage signal: it is a theme tag, and the whole
-# "Magic" family (Intensive Carrot, Hypno-shroom, Shrinking Violet, Caulipower,
-# Enchant-mint, Zoybean Pod, Marigold) is utility. Intensive Carrot reached the
-# starter pool that way -- Family=Magic, SunCost 100, so CHEAP_ATTACKER_PLANTS
-# took it for an attacker when all it does is revive a dead plant
-# (PercentageOfHealthForRaisedPlant, no damage of any kind).
-#
-# To regenerate after a game update, read the same _PLANTPROPERTIES table
-# SINGLE_USE_PLANTS uses and keep the cheap attackers with no damage evidence.
+# Every one of these was in CHEAP_ATTACKER_PLANTS at some point, because the
+# old SunCost + Family derivation read a theme tag as a damage flag. They are
+# kept as a named regression guard rather than as a filter: the derivation
+# above already excludes them, and the assertion below now checks exactly that.
+# If one reappears in CHEAP_ATTACKER_PLANTS, the Ancient Egypt gate has gone
+# back to passing on a lawn that cannot kill anything.
 NON_DAMAGING_PLANTS = [
+    "E.M. Peach",       # stuns and disarms, Damage 0
     "Explode-O-Nut",    # a wall; only hurts what is already eating it
+    "Hypno-shroom",     # converts a zombie, Damage 0
     "Intensive Carrot", # revives a destroyed plant, no attack at all
     "Moonflower",       # shadow support, powers other plants
-    "Shrinking Violet", # shrinks zombies; already single-use, listed for completeness
+    "Shrinking Violet", # shrinks zombies, no damage
 ]
 
 # What generate_early() may hand a player for free. A cheap attacker that
@@ -180,10 +197,16 @@ STARTER_PLANTS = [
     if plant not in set(SINGLE_USE_PLANTS) | set(NON_DAMAGING_PLANTS)
 ]
 
-# Both lists must be drawn from CHEAP_ATTACKER_PLANTS -- a name that is not
-# would filter nothing and quietly leave the plant it was meant to exclude in
-# the starter pool.
-_unknown_excluded = (set(SINGLE_USE_PLANTS) | set(NON_DAMAGING_PLANTS)) - set(CHEAP_ATTACKER_PLANTS)
+# No plant that cannot deal damage may count as an attacker.
+_bad_attackers = set(NON_DAMAGING_PLANTS) & set(CHEAP_ATTACKER_PLANTS)
+if _bad_attackers:
+    raise ValueError("plants that deal no damage are being counted as "
+                     f"attackers: {sorted(_bad_attackers)}")
+
+# Single-use plants stay in CHEAP_ATTACKER_PLANTS on purpose -- they kill, so
+# they satisfy the Egypt gate -- but a name that is not one would filter
+# nothing and quietly leave that plant in the starter pool.
+_unknown_excluded = set(SINGLE_USE_PLANTS) - set(CHEAP_ATTACKER_PLANTS)
 if _unknown_excluded:
     raise ValueError("excluded starter plants are not cheap attackers: "
                      f"{sorted(_unknown_excluded)}")
