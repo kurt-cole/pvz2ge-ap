@@ -170,25 +170,34 @@ if _unknown_excluded:
                      f"{sorted(_unknown_excluded)}")
 
 # Plants that answer the Jester (dark_juggler), who returns projectiles at
-# your own lawn. Two kinds qualify, and both come out of the game's data:
+# your own lawn.
 #
-#  - anything that lobs. The projectile DamageFlags split every attack into
-#    "shooter" (straight down the lane, which is what he reverses) and
-#    "lobbed" (arcs over him). Lobbers are not in the reversible set at all.
-#  - the handful of straight shooters the game explicitly marks
-#    CannotBeReversedByJester on their projectile: electricpea and
-#    magnifying_grass are the two with an Archipelago item.
+# Lobbing is NOT an answer: he returns Cabbage-pult and Melon-pult like
+# anything else. Their projectiles carry DamageFlags ["lobbed","catapult"] and
+# no jester flag at all, so the arc buys nothing. An earlier version of this
+# list assumed otherwise and let every pult through.
 #
-# Only entries that exist as items are listed. Thirteen more qualify in the
-# game -- Holly Knight, Tumbleweed, Turkey-pult and friends -- but they are
-# not in the item pool, so naming them would gate on something unobtainable.
+# What actually qualifies is the projectile the game explicitly marks
+# CannotBeReversedByJester, checked on the plant's FIRST projectile action --
+# its normal attack. Checking any projectile would wrongly admit Guacodile,
+# whose ordinary shot is reversible and whose flagged projectile is the child
+# it leaves behind, and Iceweed, whose flagged one is its plant food.
+#
+# Six plants qualify and are in the item pool. Others do in the game --
+# Caulipower, Holly Knight, Anthurium, Dark Matter Dragonfruit -- but have no
+# item, so naming them would gate on something the multiworld cannot send.
+#
+# Deliberately NOT included: the 62 plants that damage without a projectile at
+# all, which he also has nothing to reverse. Most are melee, one-shots or
+# utility rather than something to hold a Dark Ages lane with, and folding
+# them in would make this requirement nearly free.
 JESTER_COUNTER_PLANTS = [
-    "A.K.E.E.", "Apple Mortar", "Banana Launcher", "Bloomerang",
-    "Blooming Heart", "Bowling Bulb", "Buttercup", "Cabbage-pult",
-    "Coconut Cannon", "Dandelion", "Dusk Lobber", "Electric Peashooter",
-    "Escape Root", "Grapeshot", "Kernel-pult", "Magnifying Grass",
-    "Melon-Pult", "Missile Toe", "Pepper-pult", "Sap-fling", "Spore-shroom",
-    "Strawburst", "Winter Melon",
+    "Banana Launcher",
+    "Electric Peashooter",
+    "Magnifying Grass",
+    "Missile Toe",
+    "Sap-fling",
+    "Strawburst",
 ]
 
 # Plants a world needs on top of its key, as a list of requirements: the
