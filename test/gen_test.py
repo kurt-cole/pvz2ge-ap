@@ -269,6 +269,27 @@ print(f"zombie tiers: {len(ZOMBIE_TIERS)} tiers over {len(ZOMBIE_TIER_OF)} zombi
 # something specific rather than just looking odd.
 assert tier_of("zomboss_egypt") == "" and swap_pool("zomboss_egypt") == [], \
     "a Zomboss became swappable -- boss fights would stop being the built fight"
+# Camels are a chain driven by CamelMinigameProperties, and in egypt7, egypt16
+# and egypt23 you win by MATCHING them on hump count. Shuffling them left those
+# three levels literally unbeatable -- found in play testing, not by this
+# suite, which is why the whole family is named here rather than spot-checked.
+_CAMELS = [
+    "camel_onehump", "camel_twohump", "camel_threehump", "camel_manyhump",
+    "camel_onehump_touch", "camel_twohump_touch", "camel_threehump_touch",
+    "camel_manyhump_touch",
+    "easter_camel_onehump", "easter_camel_twohump", "easter_camel_manyhump",
+    "feastivus_camel_onehump", "feastivus_camel_twohump",
+    "feastivus_camel_manyhump",
+    "lunar_camel_onehump", "lunar_camel_twohump", "lunar_camel_manyhump",
+]
+_swappable_camels = [c for c in _CAMELS if tier_of(c)]
+assert not _swappable_camels, (
+    f"camels are shuffled again, which makes egypt7/16/23 unwinnable: "
+    f"{_swappable_camels}")
+# ...and nothing may turn INTO a camel either, or the same levels get camels
+# they cannot match plus a lawn full of strangers.
+_camel_targets = sorted(z for z in ZOMBIE_TIER_OF if "camel" in z)
+assert not _camel_targets, f"a camel is reachable as a swap target: {_camel_targets}"
 assert tier_of("lawn") == "", "the lawn placeholder must resolve, not swap"
 assert "dark_juggler" in swap_pool("dark_juggler"), "the Jester left its own pool"
 assert set(swap_pool("dark_juggler")) == \
