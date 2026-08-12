@@ -81,13 +81,48 @@ const sandbox = {
   location: { href: 'file:///game', protocol: 'file:', hostname: '' },
   WebSocket: function () { this.close = noop; this.send = noop; },
   fetch: () => Promise.resolve({ json: () => Promise.resolve({}), text: () => Promise.resolve('') }),
-  System: { register: noop },
+  // Enough of the Cocos module for the logo builder to run its real path
+  // rather than bailing at the first feature check. Anything it constructs is
+  // inert; the point is that the code executes.
+  System: {
+    register: noop,
+    import: (id) => Promise.resolve(id === 'cc' ? sandbox.__cc : {}),
+  },
+  Image: function () { this.onload = null; Object.defineProperty(this, 'src', {
+    set() { if (this.onload) this.onload(); }, configurable: true }); },
   requestAnimationFrame: (fn) => { deferred.push(fn); return deferred.length; },
   cancelAnimationFrame: noop,
   performance: { now: () => 0 },
   atob: (s) => Buffer.from(s, 'base64').toString('binary'),
   btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
 };
+// Stand-in for the SystemJS 'cc' module. Only the classes the client actually
+// feature-detects; if it ever reaches for something new, the detection fails
+// closed and this test says so rather than the game silently losing its art.
+function CCNode(name) {
+  this.name = name; this.children = []; this.active = true; this.parent = null;
+  this.comps = [];
+}
+CCNode.prototype.addComponent = function (C) { const c = new C(); this.comps.push(c); return c; };
+CCNode.prototype.getChildByName = function (n) { return this.children.find(c => c.name === n) || null; };
+CCNode.prototype.setPosition = noop;
+
+function CCSprite() { this.spriteFrame = null; this.sizeMode = null; }
+CCSprite.SizeMode = { CUSTOM: 0, TRIMMED: 1, RAW: 2 };
+
+// Counted so the test can tell that the client actually walked the whole
+// image path, rather than bailing at a feature check and leaving no trace.
+let spriteFramesMade = 0;
+
+sandbox.__cc = {
+  Node: CCNode,
+  Sprite: CCSprite,
+  SpriteFrame: function () { this.texture = null; spriteFramesMade++; },
+  Texture2D: function () { this.image = null; },
+  ImageAsset: function (img) { this.img = img; },
+  UITransform: function () { this.setContentSize = noop; },
+};
+
 sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
 sandbox.self = sandbox;
@@ -119,12 +154,25 @@ try {
 // level ran but one of these never got installed, the client is loaded and
 // still does nothing.
 for (const name of ['_AP_shopRewardLabel', '_AP_isShopCommodityChecked',
-                    '_AP_onShopPurchase']) {
+                    '_AP_onShopPurchase', '_AP_initApLogo']) {
   if (typeof sandbox[name] !== 'function') fail(`window.${name} was not installed`);
 }
 if (!failed) ok('the window hooks the game calls into are all installed');
 
-if (deferred.length) ok(`${deferred.length} deferred callback(s) left unrun, as intended`);
+// The logo is built off System.import('cc'), so it resolves a microtask later.
+// Asserting it here is what stops a renamed or missing Cocos class from
+// silently costing every card its art -- the client fails closed on purpose,
+// so nothing else would report it.
+if (typeof sandbox._AP_initApLogo === 'function') sandbox._AP_initApLogo();
 
-console.log(failed ? `\n${failed} FAILURE(S)` : '\nCLIENT LOADS CLEAN');
-process.exit(failed ? 1 : 0);
+Promise.resolve().then().then(() => {
+  if (!spriteFramesMade)
+    fail('the logo SpriteFrame was never built -- a Cocos class the client ' +
+         'feature-detects is missing or renamed, and every card would ' +
+         'silently keep its own art');
+  else ok('the logo sprite is built from the cc module (fails closed if not)');
+
+  if (deferred.length) ok(`${deferred.length} deferred callback(s) left unrun, as intended`);
+  console.log(failed ? `\n${failed} FAILURE(S)` : '\nCLIENT LOADS CLEAN');
+  process.exit(failed ? 1 : 0);
+});

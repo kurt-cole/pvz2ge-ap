@@ -228,6 +228,107 @@ st.shopsanity = true;
   else if (!boom.built) fail('a throwing label lookup stopped the card being built');
   else ok('a throwing label lookup cannot stop a card being built');
 
+  // ── the AP logo replaces the card art ──────────────────────────────────────
+  const { dressCardWithLogo, setLogoDeps } = require('./store_fn.js');
+
+  // Cocos stand-ins. Nodes track active/parent because the whole correctness
+  // question is what happens to the game's existing art.
+  function CCNode(name) {
+    this.name = name; this.children = []; this.active = true;
+    this.destroyed = false;
+    Object.defineProperty(this, 'parent', {
+      get() { return this._p || null; },
+      set(p) { this._p = p; if (p) p.children.push(this); },
+    });
+  }
+  CCNode.prototype.addComponent = function (C) { const c = new C(); this.comps = (this.comps||[]).concat(c); return c; };
+  CCNode.prototype.getChildByName = function (n) { return this.children.find(c => c.name === n) || null; };
+  CCNode.prototype.setPosition = function (x, y) { this.pos = [x, y]; };
+  CCNode.prototype.destroy = function () { this.destroyed = true; };
+  function CCSprite() { this.spriteFrame = null; this.sizeMode = null; }
+  CCSprite.SizeMode = { CUSTOM: 0, TRIMMED: 1, RAW: 2 };
+  const CC = {
+    Node: CCNode, Sprite: CCSprite,
+    UITransform: function () { this.setContentSize = (w, h) => { this.size = [w, h]; }; },
+  };
+  const FRAME = { texture: {} };
+
+  // A card whose art the game already built, as instantiatePooly() would.
+  function cardWithArt() {
+    const slot = new CCNode('displaySlot');
+    const art = new CCNode('plant-art');
+    art.parent = slot;
+    return { displaySlot: slot, art };
+  }
+
+  setLogoDeps(CC, FRAME);
+  window._AP_shopsanity = true;
+
+  {
+    const c = cardWithArt();
+    dressCardWithLogo(c);
+    const logo = c.displaySlot.getChildByName('ap-logo');
+    if (!logo) fail('no logo node was added to the card');
+    else if (c.art.active) fail("the game's own art was left visible under the logo");
+    else if (logo.comps.find(x => x instanceof CCSprite).spriteFrame !== FRAME)
+      fail('the logo node has no sprite frame');
+    else ok('the logo replaces the card art and hides the original');
+
+    // Pooled nodes: hiding is correct, destroying corrupts the pool for every
+    // later card the game builds.
+    if (c.art.destroyed) fail('the pooled art node was destroyed instead of hidden');
+    else ok('the pooled art node is hidden, never destroyed');
+  }
+
+  // Cards get rebuilt on every store refresh; the logo must not stack up.
+  {
+    const c = cardWithArt();
+    for (let i = 0; i < 5; i++) dressCardWithLogo(c);
+    const logos = c.displaySlot.children.filter(n => n.name === 'ap-logo');
+    if (logos.length !== 1) fail(`${logos.length} logo nodes after 5 refreshes`);
+    else ok('refreshing a card five times leaves exactly one logo');
+  }
+
+  // shopsanity off: the store is a normal store, so the art is the game's
+  window._AP_shopsanity = false;
+  {
+    const c = cardWithArt();
+    dressCardWithLogo(c);
+    if (c.displaySlot.getChildByName('ap-logo')) fail('logo added with shopsanity off');
+    else if (!c.art.active) fail("the game's art was hidden with shopsanity off");
+    else ok('shopsanity off leaves the card art alone');
+  }
+  window._AP_shopsanity = true;
+
+  // Fails closed: if the engine did not give us what we needed, the card keeps
+  // the art the game drew rather than ending up empty.
+  // The order matters as much as the outcome: bailing must happen BEFORE the
+  // existing art is hidden. Hide first and throw second and the player gets an
+  // empty card, so a throw here is a failure even though the real caller
+  // catches it.
+  {
+    setLogoDeps(null, null);
+    const c = cardWithArt();
+    let threw = null;
+    try { dressCardWithLogo(c); } catch (e) { threw = e; }
+    if (threw && !c.art.active)
+      fail('hid the art and then threw -- the card would be empty: ' + threw.message);
+    else if (threw) fail('threw with no cc module: ' + threw.message);
+    else if (c.displaySlot.children.length !== 1) fail('changed the card with no cc module');
+    else if (!c.art.active) fail('hid the art without having a logo to put there');
+    else ok('no cc module or sprite leaves the card exactly as the game drew it');
+    setLogoDeps(CC, FRAME);
+  }
+
+  // A card with no display slot at all must not throw.
+  {
+    let threw = null;
+    try { dressCardWithLogo({}); dressCardWithLogo(null); }
+    catch (e) { threw = e; }
+    if (threw) fail('a card with no display slot threw: ' + threw.message);
+    else ok('a card with no display slot is handled');
+  }
+
   console.log(failed ? `\n${failed} FAILURE(S)` : '\nSTORE HOOK OK');
   process.exit(failed ? 1 : 0);
 })();

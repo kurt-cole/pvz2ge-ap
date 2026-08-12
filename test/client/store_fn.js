@@ -44,18 +44,22 @@ function installStoreHook(SC) {
       // label is left alone when there is nothing scouted yet, so the card
       // reads as the game built it rather than going blank.
       const _card = this;
-      const _relabel = function (result) {
+      const _dress = function (result) {
         try {
           const label = props && props.CommodityName &&
                         window._AP_shopRewardLabel &&
                         window._AP_shopRewardLabel(props.CommodityName);
           if (label && _card.nameLabel) _card.nameLabel.string = label;
         } catch (e) { /* a card with the old label beats no card */ }
+        // Separate try: a failure to swap the art must not cost the label,
+        // and neither may stop the card being built.
+        try { dressCardWithLogo(_card); }
+        catch (e) { /* the game's own art is a fine fallback */ }
         return result;
       };
       const done = _origReadCommodity.apply(this, arguments);
       return (done && typeof done.then === 'function')
-        ? done.then(_relabel) : _relabel(done);
+        ? done.then(_dress) : _dress(done);
     };
   }
 
@@ -172,3 +176,36 @@ module.exports = {
   setSlots: (games, names) => { slotGame = games; slotName = names || {}; },
   getScout: () => shopScout,
 };
+
+// ── AP logo on the card ──────────────────────────────────────────────────────
+let _apCC = null;
+let _apLogoFrame = null;
+const AP_LOGO_NODE = 'ap-logo';
+const AP_LOGO_SIZE = 110;
+const AP_LOGO_Y    = -40;
+
+function dressCardWithLogo(card) {
+  if (!window._AP_shopsanity || !_apCC || !_apLogoFrame) return;
+  const slot = card && card.displaySlot;
+  if (!slot || !slot.children) return;
+  for (const child of slot.children.slice()) {
+    if (child && child.name !== AP_LOGO_NODE) child.active = false;
+  }
+  let node = slot.getChildByName && slot.getChildByName(AP_LOGO_NODE);
+  if (!node) {
+    node = new _apCC.Node(AP_LOGO_NODE);
+    const transform = node.addComponent(_apCC.UITransform);
+    if (transform.setContentSize) transform.setContentSize(AP_LOGO_SIZE, AP_LOGO_SIZE);
+    const sprite = node.addComponent(_apCC.Sprite);
+    // CUSTOM, or Sprite sizes itself from the 128px source and ignores the
+    // content size set above.
+    if (_apCC.Sprite.SizeMode) sprite.sizeMode = _apCC.Sprite.SizeMode.CUSTOM;
+    sprite.spriteFrame = _apLogoFrame;
+    node.parent = slot;
+  }
+  if (node.setPosition) node.setPosition(0, AP_LOGO_Y, 0);
+  node.active = true;
+}
+
+module.exports.dressCardWithLogo = dressCardWithLogo;
+module.exports.setLogoDeps = (cc, frame) => { _apCC = cc; _apLogoFrame = frame; };

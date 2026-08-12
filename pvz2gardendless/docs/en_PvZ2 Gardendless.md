@@ -151,7 +151,8 @@ and four ticket-priced plants are excluded because tickets have no Archipelago s
 pure grind.
 
 Because a card is a location rather than a purchase, each one is **labelled with the item the
-multiworld actually has there** instead of with the plant pictured on it. Your own items show as just
-the item name; another player's show as `player: item`. The client scouts these on connect without
-spending or announcing hints. A card falls back to its normal name if the scout has not come back
-yet.
+multiworld actually has there** instead of with the plant pictured on it, and the plant or trophy
+artwork is replaced with the Archipelago logo for the same reason — the plant on the card is not what
+you are buying. Your own items show as just the item name; another player's show as `player: item`.
+The client scouts these on connect without spending or announcing hints. A card falls back to its
+normal name and artwork if the scout has not come back yet.

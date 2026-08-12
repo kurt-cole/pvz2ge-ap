@@ -23,6 +23,15 @@ import tkinter as tk
 from tkinter import filedialog
 import queue
 
+# The Archipelago logo, inlined so the injected client stays a single
+# self-contained file -- devrun.py rewrites only tmpPatch.js, so a sibling
+# image would go missing on the fast path. 128x128 PNG, downscaled from the
+# 512x512 icon.png that ships with the Archipelago install
+# (C:/ProgramData/Archipelago/data/icon.png on Windows). Substituted into the
+# client below, rather than pasted into it, to keep ~180 lines of base64 out
+# of the JS.
+AP_LOGO_PNG = "data:image/png;base64,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"
+
 # ── AP client code to inject into tmpPatch.js ────────────────────────────────
 # This replaces the original tmpPatch.js entirely.
 TMPPATCH_CONTENT = r"""
@@ -299,18 +308,22 @@ window.electron = electron;
         // label is left alone when there is nothing scouted yet, so the card
         // reads as the game built it rather than going blank.
         const _card = this;
-        const _relabel = function (result) {
+        const _dress = function (result) {
           try {
             const label = props && props.CommodityName &&
                           window._AP_shopRewardLabel &&
                           window._AP_shopRewardLabel(props.CommodityName);
             if (label && _card.nameLabel) _card.nameLabel.string = label;
           } catch (e) { /* a card with the old label beats no card */ }
+          // Separate try: a failure to swap the art must not cost the label,
+          // and neither may stop the card being built.
+          try { dressCardWithLogo(_card); }
+          catch (e) { /* the game's own art is a fine fallback */ }
           return result;
         };
         const done = _origReadCommodity.apply(this, arguments);
         return (done && typeof done.then === 'function')
-          ? done.then(_relabel) : _relabel(done);
+          ? done.then(_dress) : _dress(done);
       };
     }
 
@@ -333,6 +346,84 @@ window.electron = electron;
     }
 
     SC._ap_hooked_store = true;
+  }
+
+  // Archipelago logo on shopsanity store cards. With shopsanity on, a card is
+  // a location rather than a purchase -- buying it sends the check and grants
+  // nothing -- so the plant or trophy pictured on it is not what the player is
+  // getting. The art is swapped for the AP logo to say so, alongside the label
+  // swap that puts the real reward in the card's name.
+  //
+  // The image is inlined as a data URI (substituted in from AP_LOGO_PNG, see
+  // build_pvzge_ap.py) so the client stays one self-contained file.
+  const AP_LOGO_URI  = '__AP_LOGO_PNG__';
+  const AP_LOGO_NODE = 'ap-logo';
+  // The display slot is roughly square and the game hangs its own art below
+  // centre (plants at y-30 after a 1.2 scale, upgrades at y-50), so this sits
+  // between the two. Both are eyeball values -- adjust here if the logo sits
+  // badly once it is on screen.
+  const AP_LOGO_SIZE = 110;
+  const AP_LOGO_Y    = -40;
+
+  let _apCC = null;          // the real cc module, not the legacy window.cc
+  let _apLogoFrame = null;   // built once, shared by every card
+
+  // window.cc is only the legacy namespace shell in this build -- the classes
+  // live in the SystemJS 'cc' module, which import-map.json maps to
+  // cocos-js/cc.js. It is already loaded by the time any of this runs, so the
+  // import resolves immediately.
+  //
+  // Every step is feature-detected and every failure is swallowed: if the
+  // engine's shape is not what is expected here, the cards simply stay exactly
+  // as the game drew them. A missing logo is cosmetic; a throw in a store
+  // screen is not.
+  function initApLogo() {
+    if (_apLogoFrame || _apCC) return;
+    if (typeof System === 'undefined' || typeof System.import !== 'function') return;
+    try {
+      System.import('cc').then(function (cc) {
+        if (!cc || !cc.ImageAsset || !cc.Texture2D || !cc.SpriteFrame ||
+            !cc.Sprite || !cc.Node || !cc.UITransform) return;
+        _apCC = cc;
+        const img = new Image();
+        img.onload = function () {
+          try {
+            const texture = new cc.Texture2D();
+            texture.image = new cc.ImageAsset(img);
+            const frame = new cc.SpriteFrame();
+            frame.texture = texture;
+            _apLogoFrame = frame;
+          } catch (e) { /* cards keep the art the game gave them */ }
+        };
+        img.src = AP_LOGO_URI;
+      }).catch(function () { /* no cc module: nothing to draw with */ });
+    } catch (e) { /* System.import threw synchronously */ }
+  }
+
+  // Swap a card's art for the logo. Existing children are HIDDEN, never
+  // destroyed: the game builds them with instantiatePooly(), so they belong to
+  // a node pool and destroying one corrupts the pool for every later card.
+  function dressCardWithLogo(card) {
+    if (!window._AP_shopsanity || !_apCC || !_apLogoFrame) return;
+    const slot = card && card.displaySlot;
+    if (!slot || !slot.children) return;
+    for (const child of slot.children.slice()) {
+      if (child && child.name !== AP_LOGO_NODE) child.active = false;
+    }
+    let node = slot.getChildByName && slot.getChildByName(AP_LOGO_NODE);
+    if (!node) {
+      node = new _apCC.Node(AP_LOGO_NODE);
+      const transform = node.addComponent(_apCC.UITransform);
+      if (transform.setContentSize) transform.setContentSize(AP_LOGO_SIZE, AP_LOGO_SIZE);
+      const sprite = node.addComponent(_apCC.Sprite);
+      // CUSTOM, or Sprite sizes itself from the 128px source and ignores the
+      // content size set above.
+      if (_apCC.Sprite.SizeMode) sprite.sizeMode = _apCC.Sprite.SizeMode.CUSTOM;
+      sprite.spriteFrame = _apLogoFrame;
+      node.parent = slot;
+    }
+    if (node.setPosition) node.setPosition(0, AP_LOGO_Y, 0);
+    node.active = true;
   }
 
   // Conveyor randomization. levelController.module_SetConveyor() is handed the
@@ -505,6 +596,8 @@ window.electron = electron;
     };
     Z._ap_hooked_zombies = true;
   }
+
+  window._AP_initApLogo = initApLogo;
 
   const _origRegister = System.register.bind(System);
   System.register = function(name, deps, declare) {
@@ -1692,6 +1785,7 @@ window.electron = electron;
     syncGrantedUpgrades();
     syncConveyorConfig();
     syncZombieConfig();
+    syncShopConfig();
   })();
 
   // ── Save guard ────────────────────────────────────────────────────────────
@@ -1957,6 +2051,14 @@ window.electron = electron;
   let slotName        = st.slotName        || {};   // slot id -> player name
   let shopScout       = st.shopScout       || {};   // commodity -> {item, player}
 
+  // Mirrors shopsanity onto window for the store hook, which lives in the
+  // other IIFE and cannot see st. Also kicks off building the logo sprite,
+  // which is a no-op once it has one.
+  function syncShopConfig(){
+    window._AP_shopsanity = !!st.shopsanity;
+    if(window._AP_shopsanity && window._AP_initApLogo) window._AP_initApLogo();
+  }
+
   function saveShopLabelCache(){
     st.itemNamesByGame = itemNamesByGame;
     st.slotGame        = slotGame;
@@ -2134,6 +2236,7 @@ window.electron = electron;
           st.zombieSeed     = pkt.slot_data.zombie_seed || 0;
           st.zombieTiers    = pkt.slot_data.zombie_tiers || {};
           syncZombieConfig();
+          syncShopConfig();
           svSt();
           // DeathLink isn't known until slot_data arrives (after the initial
           // Connect), so it's applied via ConnectUpdate rather than being in
@@ -2809,7 +2912,7 @@ window.electron = electron;
     ? document.addEventListener('DOMContentLoaded',init)
     : setTimeout(init,100);
 })();
-""".strip()
+""".strip().replace("__AP_LOGO_PNG__", AP_LOGO_PNG)
 
 
 # ── Build steps ───────────────────────────────────────────────────────────────
