@@ -329,6 +329,64 @@ st.shopsanity = true;
     else ok('a card with no display slot is handled');
   }
 
+  // ── the logo goes on ONLY where the name was changed ────────────────────────
+  // The logo and the relabel say the same thing, so they must agree. Driving
+  // readCommodity() rather than dressCardWithLogo() directly is the point here:
+  // the coupling between the two is what is under test.
+  setGames({ 'PvZ2 Gardendless': { 77: 'Cherry Bomb' } });
+
+  // An SC card that also carries the art the game built for it.
+  async function buildCard(props) {
+    const c = new SC();
+    const art = cardWithArt();
+    c.displaySlot = art.displaySlot;
+    c.art = art.art;
+    await c.readCommodity(props);
+    return c;
+  }
+  const hasLogo = c => !!c.displaySlot.getChildByName('ap-logo');
+
+  {
+    const scouted = await buildCard({ CommodityType: 'plant', CommodityName: 'iceweed' });
+    if (scouted.nameLabel.string !== 'Cherry Bomb')
+      fail('the scouted card lost its relabel');
+    else if (!hasLogo(scouted)) fail('a relabelled card did not get the logo');
+    else if (scouted.art.active) fail('a relabelled card kept its art visible');
+    else ok('a card whose name was changed gets the logo');
+  }
+
+  {
+    // Not scouted: keeps the game's own name, so it must keep the game's art.
+    const unscouted = await buildCard({ CommodityType: 'plant', CommodityName: 'chomper' });
+    if (unscouted.nameLabel.string !== 'chomper')
+      fail('the unscouted card was relabelled after all');
+    else if (hasLogo(unscouted))
+      fail('an unscouted card got the logo -- blank logo over the game\'s own name');
+    else if (!unscouted.art.active) fail('an unscouted card lost its art');
+    else ok('a card that kept its own name keeps the game art');
+  }
+
+  {
+    // Coin/gem/sprout bundles are repeatable purchases with no CommodityName
+    // and no location behind them, so nothing about them is an AP check.
+    const bundle = await buildCard({ CommodityType: 'coin' });
+    if (hasLogo(bundle)) fail('a coin bundle got the AP logo');
+    else if (!bundle.art.active) fail('a coin bundle lost its art');
+    else ok('a currency bundle is left as the game built it');
+  }
+
+  {
+    // A label lookup that throws must leave the card fully as the game had it,
+    // art included -- relabelled stays false, so the logo never goes on.
+    const saved = window._AP_shopRewardLabel;
+    window._AP_shopRewardLabel = () => { throw new Error('boom'); };
+    const boom2 = await buildCard({ CommodityType: 'plant', CommodityName: 'iceweed' });
+    window._AP_shopRewardLabel = saved;
+    if (hasLogo(boom2)) fail('a throwing label lookup still applied the logo');
+    else if (!boom2.art.active) fail('a throwing label lookup cost the card its art');
+    else ok('a throwing label lookup leaves art and name alone together');
+  }
+
   console.log(failed ? `\n${failed} FAILURE(S)` : '\nSTORE HOOK OK');
   process.exit(failed ? 1 : 0);
 })();

@@ -45,16 +45,30 @@ function installStoreHook(SC) {
       // reads as the game built it rather than going blank.
       const _card = this;
       const _dress = function (result) {
+        // The logo goes on ONLY when the name was actually replaced. The two
+        // say the same thing -- "this card is a location, the art is not what
+        // you get" -- so a card that kept the game's own name keeps the game's
+        // own art with it. That leaves the logo off the coin, gem and sprout
+        // bundles, which are repeatable purchases with no CommodityName and no
+        // location behind them, and off a card whose reward is not scouted
+        // yet, which would otherwise read as a blank Archipelago logo with the
+        // game's plant name under it.
+        let relabelled = false;
         try {
           const label = props && props.CommodityName &&
                         window._AP_shopRewardLabel &&
                         window._AP_shopRewardLabel(props.CommodityName);
-          if (label && _card.nameLabel) _card.nameLabel.string = label;
+          if (label && _card.nameLabel) {
+            _card.nameLabel.string = label;
+            relabelled = true;
+          }
         } catch (e) { /* a card with the old label beats no card */ }
         // Separate try: a failure to swap the art must not cost the label,
         // and neither may stop the card being built.
-        try { dressCardWithLogo(_card); }
-        catch (e) { /* the game's own art is a fine fallback */ }
+        if (relabelled) {
+          try { dressCardWithLogo(_card); }
+          catch (e) { /* the game's own art is a fine fallback */ }
+        }
         return result;
       };
       const done = _origReadCommodity.apply(this, arguments);
