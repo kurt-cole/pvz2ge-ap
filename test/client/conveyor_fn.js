@@ -200,7 +200,7 @@ for(const k of Object.keys(CONVEYOR_GROUPS)){
 // Terrain gate, mirroring the client's declarations. These are const/window
 // assignments rather than named functions, so drift_test cannot check them --
 // keep them identical to build_pvzge_ap.py by hand.
-const CONVEYOR_WATER_ONLY = new Set(['lilypad', 'tanglekelp']);
+const CONVEYOR_WATER_ONLY = new Set(['lilypad', 'tanglekelp', 'seashroom']);
 const CONVEYOR_TILE_LOCKED = new Set(['goldleaf']);
 window._AP_conveyorPlantable = function (cn, hasWater) {
   if (CONVEYOR_TILE_LOCKED.has(cn)) return false;

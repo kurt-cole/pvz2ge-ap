@@ -897,11 +897,18 @@ window.electron = electron;
   // The game makes exactly this check itself before offering a plant, so this
   // mirrors it rather than inventing a rule:
   //     haveWater || TYPE.indexOf("aquatic") == -1 && TYPE.indexOf("lilypad") == -1
-  // Its two tags are the two plants below. Note the property that names them in
-  // the resource files, IsZenGardenWaterPlant, appears ZERO times in index.js
-  // and comes from a sheet the game never loads -- it happens to agree, but the
-  // live authority is the TYPE tags and the haveWater flag.
-  const CONVEYOR_WATER_ONLY = new Set(['lilypad', 'tanglekelp']);
+  // Those TYPE tags are the live authority. The property that names water
+  // plants in the resource files, IsZenGardenWaterPlant, appears ZERO times in
+  // index.js and comes from a sheet the game never loads.
+  //
+  // seashroom is here on Kurt's word, not on data, and that gap is the point:
+  // it has NO _PLANTPROPERTIES sheet at all, so the property route reported
+  // "not flagged as water" when the honest answer was "unknown". A missing
+  // sheet is not an absent property. 24 other plants in CONVEYOR_GROUPS have no
+  // sheet either, so this list is a floor rather than a proof -- the durable fix
+  // is to read each plant's own TYPE tags at runtime through
+  // Plants.ts getPlantFeature(id), keyed by the ids already in ID_TO_CN.
+  const CONVEYOR_WATER_ONLY = new Set(['lilypad', 'tanglekelp', 'seashroom']);
 
   // Needs a specific tile under it, from the live PlantProperties TileType:
   // goldleaf wants a goldtile, which only some Lost City levels lay down.
