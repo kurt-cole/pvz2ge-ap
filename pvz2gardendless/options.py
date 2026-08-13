@@ -6,7 +6,7 @@ import dataclasses
 
 from Options import (
     Choice, DefaultOnToggle, OptionSet, Range, Toggle, DeathLink,
-    PerGameCommonOptions, Visibility,
+    PerGameCommonOptions,
 )
 
 from .constants import SELECTABLE_WORLDS
@@ -184,7 +184,6 @@ class RandomizeConveyorPlants(Toggle):
     rather than rerolling until you like them.
     """
     display_name = "Randomize Conveyor Plants"
-    visibility = Visibility.none
 
 
 class ShuffleZombies(Toggle):
@@ -222,7 +221,6 @@ class ShuffleZombies(Toggle):
     Off matches how seeds generated before this option existed behave.
     """
     display_name = "Shuffle Zombies"
-    visibility = Visibility.none
 
 class EarlyWorldKeys(Toggle):
     """
