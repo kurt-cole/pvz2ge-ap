@@ -123,6 +123,20 @@ function installConveyorHook(LC) {
           // to props -- the entries are copied, see the map() further down.
           const rnd = _apRng(_apHash(String(window._AP_conveyorSeed || 0) + '|' +
                                      list.map(e => (e && e.PlantType) || '').join('|')));
+          // Does this lawn have deep water? Two signals, because the grid may
+          // not be built yet when the conveyor is set: the game's own flag, and
+          // failing that the level's own belt -- a level handing out a water
+          // plant self-evidently has water. Fails CLOSED to "no water", so an
+          // unreadable level loses aquatic swaps rather than gaining dead slots.
+          let hasWater = false;
+          try {
+            const lc = window._AP_levelController;
+            hasWater = !!(lc && lc.component && lc.component.haveWater);
+          } catch (e) { /* fall through to the belt signal */ }
+          if (!hasWater) {
+            hasWater = list.some(e => e && window._AP_conveyorTerrainLocked.has(e.PlantType) &&
+                                      e.PlantType !== 'goldleaf');
+          }
           const used = new Set();
           const newList = list.map(function (entry) {
             // Only genuine plants are swapped. A conveyor also delivers
@@ -137,9 +151,20 @@ function installConveyorHook(LC) {
             // trade it for -- is left as the level had it.
             const candidates = swaps[entry.PlantType];
             if (!candidates) return entry;
+            // A terrain-locked plant the level placed itself is left exactly as
+            // it was. Swapping a Big Wave Beach belt's Lily Pad for a Wall-nut
+            // takes away the only thing that makes its water columns usable,
+            // which is the same class of bug in the other direction.
+            if (window._AP_conveyorTerrainLocked.has(entry.PlantType)) return entry;
+            // Drop candidates this lawn cannot host, then apply the group rule
+            // that a plant with nothing left to trade for stays put -- the
+            // original is always in its own group, so fewer than two survivors
+            // means there is no alternative.
+            const usable = candidates.filter(cn => window._AP_conveyorPlantable(cn, hasWater));
+            if (usable.length < 2) return entry;
             let pick = entry.PlantType;
             for (let tries = 0; tries < 20; tries++) {
-              const candidate = candidates[Math.floor(rnd() * candidates.length)];
+              const candidate = usable[Math.floor(rnd() * usable.length)];
               // Keep one belt from being three copies of the same plant while
               // the group has alternatives. Bounded, so a small group still
               // terminates rather than spinning.
@@ -171,4 +196,26 @@ for(const k of Object.keys(CONVEYOR_GROUPS)){
   if(m.length<2) continue;
   for(const c of m) window._AP_conveyorSwaps[c]=m;
 }
-module.exports={installConveyorHook, window, CONVEYOR_GROUPS};
+
+// Terrain gate, mirroring the client's declarations. These are const/window
+// assignments rather than named functions, so drift_test cannot check them --
+// keep them identical to build_pvzge_ap.py by hand.
+const CONVEYOR_WATER_ONLY = new Set(['lilypad', 'tanglekelp']);
+const CONVEYOR_TILE_LOCKED = new Set(['goldleaf']);
+window._AP_conveyorPlantable = function (cn, hasWater) {
+  if (CONVEYOR_TILE_LOCKED.has(cn)) return false;
+  if (CONVEYOR_WATER_ONLY.has(cn)) return !!hasWater;
+  return true;
+};
+window._AP_conveyorTerrainLocked = new Set([
+  ...CONVEYOR_WATER_ONLY, ...CONVEYOR_TILE_LOCKED,
+]);
+
+// Sets the game's own per-level water flag the hook reads. Pass undefined to
+// model a level whose grid is not built yet, which must fail closed.
+function setLevelWater(haveWater) {
+  window._AP_levelController = { component: { haveWater: haveWater } };
+}
+
+module.exports={installConveyorHook, window, CONVEYOR_GROUPS, setLevelWater,
+  CONVEYOR_WATER_ONLY, CONVEYOR_TILE_LOCKED};

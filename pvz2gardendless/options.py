@@ -180,6 +180,11 @@ class RandomizeConveyorPlants(Toggle):
     projectiles and tools rather than plants, and swapping those for plants
     would make the level unplayable.
 
+    Plants the lawn cannot host are never dealt to it. Lily Pad and Tangle Kelp
+    only appear where there is water, and Gold Leaf, which needs a gold tile, is
+    never swapped in at all. A level that puts one of these on its own belt
+    keeps it, so a water level does not lose the plant its water columns need.
+
     The roll is fixed per level, so retrying a level gives the same plants
     rather than rerolling until you like them.
     """

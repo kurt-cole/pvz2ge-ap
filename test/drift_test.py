@@ -22,6 +22,9 @@ CLIENT_SRC = os.path.join(REPO, "pvz2gardendless", "build_pvzge_ap.py")
 # functions have something to call. They are expected NOT to match.
 STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          "makeZombiesClass", "setLevel",
+         # conveyor_fn.js harness: sets the level's own haveWater flag, which
+         # the real client reads off the game rather than declaring.
+         "setLevelWater",
          # store_fn.js harness: stand-ins for the client's socket and module
          # scope, plus applyLocationInfo, which mirrors a switch arm rather
          # than a function and so has nothing to match verbatim.

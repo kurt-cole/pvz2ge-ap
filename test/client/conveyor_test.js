@@ -174,5 +174,122 @@ for (const l of LEVELS) {
 }
 ok(`${oneShot} one-shot entries stayed one-shots`);
 
+// ── terrain: a belt must never hand out a plant the lawn cannot host ─────────
+// Regression, found in play testing: an Ancient Egypt level dealt out Lily Pad
+// and Tangle Kelp. Both are water-only, so on a waterless lawn they are dead
+// slots -- the player is handed a plant with nowhere to put it. lilypad sat in
+// sustained:budget beside wallnut and tanglekelp in single-use:budget beside
+// potatomine, so any belt holding either could receive them.
+const { setLevelWater, CONVEYOR_WATER_ONLY, CONVEYOR_TILE_LOCKED } = require('./conveyor_fn.js');
+const LOCKED = new Set([...CONVEYOR_WATER_ONLY, ...CONVEYOR_TILE_LOCKED]);
+
+// Levels whose own belt shows no water plant: the hook must treat these as dry,
+// so nothing water-only may appear in the output that was not already there.
+const dryLevels = LEVELS.filter(
+  l => !l.InitialPlantList.some(e => e && CONVEYOR_WATER_ONLY.has(e.PlantType)));
+
+function terrainViolations() {
+  const bad = [];
+  setLevelWater(false);
+  for (const l of dryLevels) {
+    const before = clone(l).InitialPlantList;
+    const after = run(clone(l)).InitialPlantList;
+    for (let i = 0; i < after.length; i++) {
+      if (LOCKED.has(after[i].PlantType) && after[i].PlantType !== before[i].PlantType) {
+        bad.push(`${l._file}[${i}]: ${before[i].PlantType} -> ${after[i].PlantType}`);
+      }
+    }
+  }
+  return bad;
+}
+
+const dryBad = terrainViolations();
+if (dryBad.length) fail(`${dryBad.length} water/tile plant(s) placed on a dry lawn: ${dryBad.slice(0, 3).join('; ')}`);
+else ok(`no water-only or tile-locked plant reached a dry lawn (${dryLevels.length} levels)`);
+
+// The check above proves a NEGATIVE, so prove it can fail. Removing the terrain
+// filter must make it fire -- otherwise it is passing vacuously and would not
+// have caught the bug it exists for.
+const realPlantable = window._AP_conveyorPlantable;
+window._AP_conveyorPlantable = () => true;
+const withoutFilter = terrainViolations();
+window._AP_conveyorPlantable = realPlantable;
+if (!withoutFilter.length) {
+  fail('the terrain check passes even with the filter removed -- it proves nothing');
+} else {
+  ok(`terrain check verified against the old logic: ${withoutFilter.length} violation(s) ` +
+     `without the filter, e.g. ${withoutFilter[0]}`);
+}
+
+// Fail closed: a level whose grid is not built yet reads as having no water,
+// rather than defaulting to "anything goes".
+setLevelWater(undefined);
+let closedBad = 0;
+for (const l of dryLevels) {
+  const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
+  for (let i = 0; i < after.length; i++) {
+    if (CONVEYOR_WATER_ONLY.has(after[i].PlantType) &&
+        after[i].PlantType !== before[i].PlantType) closedBad++;
+  }
+}
+if (closedBad) fail(`unreadable haveWater let ${closedBad} water plant(s) through`);
+else ok('an unreadable level fails closed to "no water"');
+
+// A water lawn may still receive water plants -- otherwise the gate above would
+// be indistinguishable from deleting them from the pool entirely.
+setLevelWater(true);
+let wetGot = 0;
+for (const l of LEVELS) {
+  const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
+  for (let i = 0; i < after.length; i++) {
+    if (CONVEYOR_WATER_ONLY.has(after[i].PlantType) &&
+        after[i].PlantType !== before[i].PlantType) wetGot++;
+  }
+}
+if (!wetGot) fail('a water lawn never received a water plant -- the gate is always closed');
+else ok(`a water lawn can still receive water plants (${wetGot} placements)`);
+
+// goldleaf needs a goldtile and there is no level-wide flag for one, so it is
+// never swapped in anywhere -- water lawns included.
+let goldIn = 0;
+for (const l of LEVELS) {
+  const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
+  for (let i = 0; i < after.length; i++) {
+    if (after[i].PlantType === 'goldleaf' && before[i].PlantType !== 'goldleaf') goldIn++;
+  }
+}
+if (goldIn) fail(`goldleaf swapped in ${goldIn} time(s) despite needing a gold tile`);
+else ok('goldleaf is never swapped in, on any lawn');
+
+// The other direction: a level that placed a terrain-locked plant itself keeps
+// it. Swapping a Big Wave Beach belt's Lily Pad for a Wall-nut removes the only
+// thing making its water columns usable.
+let lockedKept = 0, lockedLost = 0;
+for (const water of [false, true]) {
+  setLevelWater(water);
+  for (const l of LEVELS) {
+    const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
+    for (let i = 0; i < before.length; i++) {
+      if (!LOCKED.has(before[i].PlantType)) continue;
+      if (before[i].PlantType === after[i].PlantType) lockedKept++;
+      else { lockedLost++; fail(`${l._file}[${i}]: terrain-locked ${before[i].PlantType} became ${after[i].PlantType}`); }
+    }
+  }
+}
+if (!lockedLost) ok(`${lockedKept} terrain-locked entries kept exactly as the level had them`);
+
+// A belt carrying a water plant is itself proof the lawn has water, which is
+// what keeps the gate working when haveWater cannot be read in time.
+setLevelWater(undefined);
+const wetByBelt = LEVELS.filter(
+  l => l.InitialPlantList.some(e => e && CONVEYOR_WATER_ONLY.has(e.PlantType)));
+let beltSignal = 0;
+for (const l of wetByBelt) {
+  const after = run(clone(l)).InitialPlantList;
+  if (after.some(e => CONVEYOR_WATER_ONLY.has(e.PlantType))) beltSignal++;
+}
+ok(`${beltSignal}/${wetByBelt.length} levels recognised as wet from their own belt alone`);
+setLevelWater(false);
+
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nCONVEYOR HOOK OK');
 process.exit(failed ? 1 : 0);
