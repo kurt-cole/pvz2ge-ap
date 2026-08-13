@@ -1,0 +1,13 @@
+# Normalize line endings so a whole-file rewrite on Windows cannot produce a
+# CRLF-only diff. Text files are stored LF in the repo.
+* text=auto
+
+*.py   text eol=lf
+*.js   text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.md   text eol=lf
+
+*.png binary
+*.apworld binary
