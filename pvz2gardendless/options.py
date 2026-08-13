@@ -96,6 +96,15 @@ class SkipTutorial(Toggle):
     Skip the forced tutorial sequence at game start.
     When enabled, the game begins directly on the world map and all
     tutorial location checks are sent automatically on connect.
+
+    Also skips the tutorials that make you open a screen the first time it
+    unlocks: the almanac, the zen garden and the store each normally point you
+    at their button and then walk you through the screen once you are inside.
+
+    Left alone on purpose, because each does something besides prompt you: the
+    plant food tutorial, which hands you a peashooter, and the world map and
+    world key introductions, which decide where you land and move the world
+    chooser along.
     """
     display_name = "Skip Tutorial"
 

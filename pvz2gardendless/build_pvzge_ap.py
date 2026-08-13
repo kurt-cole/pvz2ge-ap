@@ -1997,6 +1997,27 @@ window.electron = electron;
     } catch(e) { log('Error creating AP slot: ' + e); return -1; }
   }
 
+  // The game nags you to open the almanac, the zen garden and the store the
+  // first time each one unlocks: a pointing finger on the world map (its
+  // *_LEADER flow), then an NPC walkthrough once you are inside (*_INTRO).
+  // Every one of them is gated on its own "already seen" flag on
+  // currentPlayer.tutorial, in the shape
+  //     if (!tut.almanac_open) { tut.almanac_open = true; SetFlow(ALMANAC_LEADER); }
+  // so setting the flag IS the game's own way of recording that it has been
+  // shown. No hook needed, and nothing to keep in sync with a game update.
+  //
+  // Only the six pure-prompt flags are listed. _PlayerTutorialProps carries
+  // three more that each do something besides prompt, so setting them would
+  // change the game rather than get out of its way: `plantfood` spawns the
+  // tutorial's peashooter, `worldmap` decides which screen you land on, and
+  // `worldkey` advances worldChooserPos and shows an advice tip. The three
+  // premium_* flags are left alone for the same reason.
+  const FEATURE_TUTORIAL_FLAGS = [
+    'almanac_open', 'almanac_intro',
+    'zengarden_open', 'zengarden_intro',
+    'store_open', 'store_intro',
+  ];
+
   // Reconstructs the AP save slot entirely from AP state.
   // Plants = received items; level progress = checked locations; worlds = received keys.
   // Called after Connected, after each ReceivedItems, and in the poll loop.
@@ -2128,6 +2149,18 @@ window.electron = electron;
         } else { break; }
       }
       cp.forceLevel = fl;
+    }
+
+    // 5b. Mark the feature tutorials as already seen. Runs every rebuild rather
+    // than once, because the flags live in the save and a feature can unlock at
+    // any point -- the almanac at egypt2, the zen garden at egypt5, the store at
+    // egypt6 -- so there is no single moment to do it. getTutorialProps() builds
+    // the object on demand and returns whatever is there, so an object with only
+    // these keys set is read exactly as intended: the six are seen, everything
+    // else is still falsy and still runs.
+    if(skipTutorial) {
+      const tut = cp.tutorial || (cp.tutorial = {});
+      for(const flag of FEATURE_TUTORIAL_FLAGS) tut[flag] = true;
     }
 
     try { APP.savePP(); } catch(e) {}
