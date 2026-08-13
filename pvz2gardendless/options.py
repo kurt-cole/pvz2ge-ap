@@ -6,7 +6,7 @@ import dataclasses
 
 from Options import (
     Choice, DefaultOnToggle, OptionSet, Range, Toggle, DeathLink,
-    PerGameCommonOptions,
+    PerGameCommonOptions, Visibility,
 )
 
 from .constants import SELECTABLE_WORLDS
@@ -184,6 +184,7 @@ class RandomizeConveyorPlants(Toggle):
     rather than rerolling until you like them.
     """
     display_name = "Randomize Conveyor Plants"
+    visibility = Visibility.none
 
 
 class ShuffleZombies(Toggle):
@@ -208,6 +209,12 @@ class ShuffleZombies(Toggle):
     Water zombies and land zombies are kept apart, since a land zombie
     dropped in a deep-water lane drowns.
 
+    Levels built around particular zombies are skipped entirely -- the camel
+    matching games, the cannon levels, Beghouled, bowling, Last Stand and the
+    other set pieces. Those levels win on their specific zombies rather than
+    just spawning them, so swapping there can leave one unbeatable. That is 84
+    of the game's 1134 levels; the rest all shuffle.
+
     The roll is fixed per level, so retrying a level gives the same zombies
     rather than rerolling until you like them. Rolls differ between slots on
     the same seed.
@@ -215,7 +222,7 @@ class ShuffleZombies(Toggle):
     Off matches how seeds generated before this option existed behave.
     """
     display_name = "Shuffle Zombies"
-
+    visibility = Visibility.none
 
 class EarlyWorldKeys(Toggle):
     """

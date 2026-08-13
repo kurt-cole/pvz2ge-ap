@@ -540,6 +540,44 @@ window.electron = electron;
 
   let _apZombieCacheKey = null;
   let _apZombieCache = {};
+  let _apZombieBespoke = false;
+
+  // Levels built AROUND particular zombies are left alone completely. A
+  // minigame module drives its zombies structurally rather than merely
+  // spawning them, so a swap there can leave the level unwinnable rather than
+  // just different:
+  //   CamelMinigameProperties   egypt7/16/23 -- you win by MATCHING camels on
+  //                             hump count. Swapping them left nothing to
+  //                             match. Found in play testing.
+  //   CannonMinigameProperties  pirate3/11/20 field nothing but seagulls, and
+  //                             a seagull flies in -- its flight is behaviour
+  //                             on PirateSeagullZombie, not a property, so
+  //                             there is no flag to partition it by.
+  //   Beghouled / Bowling / LastStand / Cowboy / Future / Rhythm -- same
+  //                             shape: the level is a set piece.
+  // 84 of the 1134 shipped levels carry one of these. Every other level still
+  // shuffles, which is the overwhelming majority of the game.
+  //
+  // This is the general answer to a class of bug that excluding zombie
+  // families one at a time only ever patches case by case.
+  const AP_BESPOKE_MODULES = /Minigame|Beghouled|Rhythm/;
+
+  function _apLevelIsBespoke() {
+    try {
+      const lc = window._AP_levelController;
+      const objs = lc && lc.component && lc.component.currentLevelObjects;
+      // Fails CLOSED: if the level's object list cannot be read, assume it is
+      // bespoke and do not shuffle. currentLevelObjects is filled in by
+      // readLevelJson before any zombie is resolved, so an unreadable one
+      // means something has moved -- and a level that does not shuffle is a
+      // far cheaper mistake than one that cannot be beaten.
+      if (!Array.isArray(objs) || !objs.length) return true;
+      for (const o of objs) {
+        if (o && AP_BESPOKE_MODULES.test(o.objclass || '')) return true;
+      }
+    } catch (e) { return true; }
+    return false;
+  }
 
   // Wave data does NOT name zombies by bare codename. Of the ~62000 type
   // references in the shipped levels, 57855 are RTID(codename@ZombieTypes) and
@@ -569,7 +607,11 @@ window.electron = electron;
     if (_apZombieCacheKey !== levelKey) {
       _apZombieCacheKey = levelKey;
       _apZombieCache = {};
+      // Worked out once per level, not once per spawn: it walks the level's
+      // whole object list.
+      _apZombieBespoke = _apLevelIsBespoke();
     }
+    if (_apZombieBespoke) return type;
     let pick = _apZombieCache[codename];
     if (pick === undefined) {
       const rnd = _apRng(_apHash(String(window._AP_zombieSeed || 0) + '|' +

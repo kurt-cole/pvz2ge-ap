@@ -89,6 +89,18 @@ class Range(Option):
     def __int__(self): return self.value
 
 
+# Options.Visibility, an IntFlag in real Archipelago. Only used to hide an
+# option from the templates/WebHost UI, so the values just have to be distinct
+# and OR-able -- nothing offline reads them.
+class Visibility(enum.IntFlag):
+    none       = 0b0000
+    template   = 0b0001
+    simple_ui  = 0b0010
+    complex_ui = 0b0100
+    spoiler    = 0b1000
+    all        = 0b1111
+
+
 class Toggle(Option):
     def __bool__(self): return bool(self.value)
 
@@ -123,7 +135,7 @@ class PerGameCommonOptions:
 mod("Options", Choice=Choice, Range=Range, Toggle=Toggle, OptionSet=OptionSet,
     DefaultOnToggle=DefaultOnToggle,
     DeathLink=DeathLink, PerGameCommonOptions=PerGameCommonOptions,
-    Option=Option, AssembleOptions=AssembleOptions)
+    Option=Option, AssembleOptions=AssembleOptions, Visibility=Visibility)
 
 
 class Group:

@@ -118,6 +118,63 @@ syncZombieConfig();
   else ok('a wrapped untiered codename passes through unchanged');
 }
 
+// ── levels built around their zombies are skipped whole ─────────────────────
+// A minigame module drives its zombies structurally, so a swap can leave the
+// level unwinnable rather than merely different. Both of these were found in
+// play testing, not by this suite.
+{
+  const cases = [
+    ['egypt7',   'CamelMinigameProperties',    'camel matching -- you win by matching hump counts'],
+    ['egypt16',  'CamelMinigameProperties',    'camel matching'],
+    ['egypt23',  'CamelMinigameProperties',    'camel matching'],
+    ['pirate3',  'CannonMinigameProperties',   'nothing but seagulls, which fly in'],
+    ['pirate11', 'CannonMinigameProperties',   'nothing but seagulls'],
+    ['pirate20', 'CannonMinigameProperties',   'nothing but seagulls'],
+    ['modern8',  'BeghouledZombieSpawnerProperties', 'match-3 set piece'],
+    ['beach8',   'BowlingMinigameProperties',  'bowling set piece'],
+    ['cowboy18', 'LastStandMinigameProperties','last stand set piece'],
+    ['future10_1','FutureMinigameProperties',  'future set piece'],
+    ['cowboy12', 'CowboyMinigameProperties',   'minecart set piece'],
+  ];
+  let bad = [];
+  for (const [level, mod] of cases) {
+    const Z = fresh();
+    setLevel(level, ['WaveManagerProperties', mod]);
+    const changed = ALL.filter(z => resolve(Z, z) !== z);
+    if (changed.length) bad.push(`${level} (${mod}) swapped ${changed.length}`);
+  }
+  if (bad.length) fail('bespoke levels were shuffled: ' + bad.join('; '));
+  else ok(`${cases.length} minigame levels are left entirely alone`);
+}
+
+// ...and an ordinary level right next door still shuffles, or the rule is a
+// blanket off switch rather than a targeted one.
+{
+  const Z = fresh();
+  setLevel('egypt8', ['WaveManagerProperties', 'SeedBankProperties']);
+  const changed = ALL.filter(z => resolve(Z, z) !== z);
+  if (!changed.length) fail('an ordinary level stopped shuffling too');
+  else ok(`an ordinary level beside them still shuffles (${changed.length} swaps)`);
+}
+
+// Unreadable level objects must fail CLOSED. Not shuffling is a cheap
+// mistake; shuffling a level that cannot then be beaten is not.
+{
+  for (const [label, lc] of [
+    ['no levelController', undefined],
+    ['no component',       { thisLevelsID: ['x'] }],
+    ['no object list',     { thisLevelsID: ['x'], component: {} }],
+    ['empty object list',  { thisLevelsID: ['x'], component: { currentLevelObjects: [] } }],
+  ]) {
+    const Z = fresh();
+    setLevel('probe');
+    window._AP_levelController = lc;
+    const changed = ALL.filter(z => resolve(Z, z) !== z);
+    if (changed.length) fail(`${label}: shuffled anyway, should fail closed`);
+  }
+  if (!failed) ok('an unreadable level fails closed and is not shuffled');
+}
+
 // ── swaps stay inside the tier ───────────────────────────────────────────────
 {
   let checked = 0;

@@ -55,6 +55,26 @@ function _apLevelKey() {
 
 const _AP_RTID = /^RTID\(([^@()]+)@([^()]*)\)$/;
 
+const AP_BESPOKE_MODULES = /Minigame|Beghouled|Rhythm/;
+let _apZombieBespoke = false;
+
+function _apLevelIsBespoke() {
+  try {
+    const lc = window._AP_levelController;
+    const objs = lc && lc.component && lc.component.currentLevelObjects;
+    // Fails CLOSED: if the level's object list cannot be read, assume it is
+    // bespoke and do not shuffle. currentLevelObjects is filled in by
+    // readLevelJson before any zombie is resolved, so an unreadable one
+    // means something has moved -- and a level that does not shuffle is a
+    // far cheaper mistake than one that cannot be beaten.
+    if (!Array.isArray(objs) || !objs.length) return true;
+    for (const o of objs) {
+      if (o && AP_BESPOKE_MODULES.test(o.objclass || '')) return true;
+    }
+  } catch (e) { return true; }
+  return false;
+}
+
 function _apZombieSwap(type) {
   const tierOf = window._AP_zombieTierOf;
   if (!tierOf) return type;
@@ -74,7 +94,11 @@ function _apZombieSwap(type) {
   if (_apZombieCacheKey !== levelKey) {
     _apZombieCacheKey = levelKey;
     _apZombieCache = {};
+    // Worked out once per level, not once per spawn: it walks the level's
+    // whole object list.
+    _apZombieBespoke = _apLevelIsBespoke();
   }
+  if (_apZombieBespoke) return type;
   let pick = _apZombieCache[codename];
   if (pick === undefined) {
     const rnd = _apRng(_apHash(String(window._AP_zombieSeed || 0) + '|' +
@@ -136,8 +160,17 @@ function makeZombiesClass() {
   };
 }
 
-function setLevel(id) {
-  window._AP_levelController = { thisLevelsID: id ? [id] : [] };
+// modules: the objclasses the level carries, as readLevelJson would leave them
+// on levelController.component.currentLevelObjects. Defaults to one ordinary
+// module so a plain level is not mistaken for an unreadable one.
+function setLevel(id, modules) {
+  window._AP_levelController = {
+    thisLevelsID: id ? [id] : [],
+    component: {
+      currentLevelObjects: (modules || ['WaveManagerProperties'])
+        .map(c => ({ objclass: c })),
+    },
+  };
 }
 
 module.exports = {
