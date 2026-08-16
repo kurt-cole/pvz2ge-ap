@@ -122,10 +122,20 @@ KEY_NAME_TO_WORLD = {f"{world} Key": world for world in KEYED_WORLDS}
 # than that and would let the gate pass on a plant that generates no usable
 # sun: Magnifying Grass consumes sun to fire, Sun Bean / Moon Bean / Toadstool
 # only convert damage or eaten zombies into sun, Plantern just reveals fog,
-# and Gold Bloom is a 0-cost conveyor-only plant.
+# Shine Vine only modifies a neighbour's output (SunProductionModifier), Marigold
+# produces coins, and Gold Bloom is a 0-cost conveyor-only plant.
+#
+# Moonflower is left out despite a real `sun` action: SunPerNeighbor 25 means it
+# produces nothing without shadow plants beside it, so it cannot carry a gate
+# alone. Solar Tomato is left out by Kurt's call (2026-08-16) -- it is a
+# 100-sun, 25s-recharge plant whose production is not in its sheet at all, so
+# it is not something a player can be assumed to open a world on.
+#
+# A name here is promoted to progression in items.py, so removing one demotes
+# that plant to useful. Item IDs are unaffected.
 SUN_PRODUCER_PLANTS = [
     "Sunflower", "Sun-Shroom", "Twin Sunflower", "Primal Sunflower",
-    "Solar Tomato", "Solar Sage",
+    "Solar Sage",
 ]
 
 # Cheap plants that can actually kill a zombie. rules.py gates every Ancient
