@@ -3163,8 +3163,141 @@ def find_tool(name):
     return shutil.which(name)
 
 
-def build(build_dir, log, done_cb, error_cb):
-    """Full build sequence. Runs in a thread."""
+def git_capture(args, cwd):
+    """Run a git command and return (returncode, stripped stdout).
+
+    Quiet by design -- this is for reading repository state during an update
+    check, where streaming every line into the build log would bury the answer.
+    """
+    try:
+        proc = subprocess.run(
+            ["git"] + args, cwd=cwd, capture_output=True, text=True,
+            timeout=120,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, str(e)
+    return proc.returncode, (proc.stdout or proc.stderr or "").strip()
+
+
+def _remote_head(repo_dir):
+    """Resolve this repo's upstream commit, whatever its default branch is.
+
+    The clones here are --depth=1, so origin/HEAD is often not set and the
+    branch is not always master -- PVZGE-Electron and pvzge_web do not agree.
+    Ask for each candidate in turn rather than assuming one.
+    """
+    for ref in ("origin/HEAD", "origin/master", "origin/main"):
+        rc, out = git_capture(["rev-parse", ref], repo_dir)
+        if rc == 0 and out:
+            return out
+    return None
+
+
+def check_for_updates(build_dir, log):
+    """Report what in an existing build is out of date. Runs in a thread.
+
+    Returns (stale, summary_lines). `stale` is True when a rebuild would
+    actually change something, so the caller can offer the update rather than
+    making the user guess.
+
+    Reads only: fetches refs and compares hashes, never touches the working
+    tree. A fetch is cheap on an existing shallow clone, unlike the ~300MB
+    first clone.
+    """
+    electron_dir  = os.path.join(build_dir, "PVZGE-Electron")
+    pvzge_web_dir = os.path.join(electron_dir, "pvzge_web")
+    docs_dir      = os.path.join(pvzge_web_dir, "docs")
+    lines = []
+    stale = False
+
+    if not find_tool("git"):
+        return False, ["git is not installed, so no update check is possible."]
+
+    if not os.path.isdir(docs_dir):
+        return True, [
+            "No build found in this folder yet.",
+            "Run a full build first -- there is nothing to update.",
+        ]
+
+    def check_repo(label, repo_dir, fetch_args):
+        nonlocal stale
+        if not os.path.isdir(os.path.join(repo_dir, ".git")):
+            lines.append(f"{label}: not a git checkout, cannot check")
+            return
+        log(f"  Fetching {label}...")
+        rc, out = git_capture(["fetch"] + fetch_args, repo_dir)
+        if rc != 0:
+            lines.append(f"{label}: could not reach GitHub ({out.splitlines()[-1] if out else 'no output'})")
+            return
+        _, local = git_capture(["rev-parse", "HEAD"], repo_dir)
+        remote = _remote_head(repo_dir)
+        if remote is None:
+            lines.append(f"{label}: no upstream ref to compare against")
+            return
+        if local == remote:
+            _, subject = git_capture(["log", "--oneline", "-1"], repo_dir)
+            lines.append(f"{label}: up to date  ({subject})")
+        else:
+            stale = True
+            rc, count = git_capture(["rev-list", "--count", f"HEAD..{remote}"], repo_dir)
+            n = count if rc == 0 and count.isdigit() else "new"
+            lines.append(f"{label}: {n} commit(s) behind upstream")
+
+    check_repo("Electron wrapper", electron_dir, ["origin"])
+    check_repo("Game source", pvzge_web_dir, ["origin", "master", "--depth=1"])
+
+    # The Archipelago client. This is the one that changes most often and the
+    # one a git fetch says nothing about -- it ships inside this apworld, so it
+    # moves when the apworld is updated, not when either repo does.
+    tmppatch_path = os.path.join(docs_dir, "tmpPatch.js")
+    if not os.path.isfile(tmppatch_path):
+        stale = True
+        lines.append("AP client: not injected yet")
+    else:
+        with open(tmppatch_path, "r", encoding="utf-8") as f:
+            on_disk = f.read()
+        if on_disk == TMPPATCH_CONTENT:
+            lines.append(f"AP client: up to date  ({len(TMPPATCH_CONTENT):,} bytes)")
+        else:
+            stale = True
+            delta = len(TMPPATCH_CONTENT) - len(on_disk)
+            lines.append(f"AP client: differs from this apworld "
+                         f"({delta:+,} bytes)")
+
+    # Even with everything above current, the packaged app can predate the
+    # patch: electron-builder bakes the client into the executable, so editing
+    # tmpPatch.js alone changes nothing the player runs.
+    exe = None
+    for name in ("PvZ Gardendless AP.exe", "PvZ Gardendless AP.dmg",
+                 "PvZ Gardendless AP.AppImage"):
+        p = os.path.join(build_dir, name)
+        if os.path.isfile(p):
+            exe = p
+            break
+    if exe is None:
+        stale = True
+        lines.append("Packaged app: not built yet")
+    elif os.path.isfile(tmppatch_path) and \
+            os.path.getmtime(exe) < os.path.getmtime(tmppatch_path):
+        stale = True
+        lines.append("Packaged app: older than the injected client, "
+                     "so it does not contain it")
+    else:
+        lines.append(f"Packaged app: {os.path.basename(exe)}")
+
+    return stale, lines
+
+
+def build(build_dir, log, done_cb, error_cb, fast=False):
+    """Full build sequence. Runs in a thread.
+
+    fast=True is the update path: it requires an existing checkout, still pulls
+    both repos (incremental on a shallow clone, so seconds rather than the
+    ~300MB first fetch), and skips `npm install` when node_modules is already
+    there. electron-builder still runs -- the client is baked into the
+    executable, so there is no way to change what the player runs without
+    repackaging.
+    """
 
     electron_dir = os.path.join(build_dir, "PVZGE-Electron")
     docs_dir     = os.path.join(electron_dir, "pvzge_web", "docs")
@@ -3174,6 +3307,12 @@ def build(build_dir, log, done_cb, error_cb):
         log(f"\n{'─'*50}")
         log(f"  {msg}")
         log(f"{'─'*50}")
+
+    if fast and not os.path.isdir(docs_dir):
+        error_cb(
+            "Update needs an existing build, and none was found at:\n"
+            f"{docs_dir}\n\nRun a full build first.")
+        return
 
     # ── 1. Check requirements ─────────────────────────────────────────────────
     step("Checking requirements")
@@ -3291,12 +3430,19 @@ def build(build_dir, log, done_cb, error_cb):
 
 
     # ── 5. npm install ────────────────────────────────────────────────────────
-    step("Installing Node.js dependencies (electron, electron-builder)")
-    log("  This downloads ~200MB of packages the first time...")
-    rc = run_cmd("npm install", electron_dir, log)
-    if rc != 0:
-        error_cb("npm install failed. See log above for details.")
-        return
+    # Skipped on the update path when node_modules is already populated. This
+    # is the one step an update genuinely saves: the clones above are
+    # incremental once they exist, and electron-builder below is unavoidable.
+    node_modules = os.path.join(electron_dir, "node_modules")
+    if fast and os.path.isdir(node_modules) and os.listdir(node_modules):
+        step("Node.js dependencies already installed — skipping")
+    else:
+        step("Installing Node.js dependencies (electron, electron-builder)")
+        log("  This downloads ~200MB of packages the first time...")
+        rc = run_cmd("npm install", electron_dir, log)
+        if rc != 0:
+            error_cb("npm install failed. See log above for details.")
+            return
 
     # ── 6. Build ──────────────────────────────────────────────────────────────
     import platform as _platform
@@ -3415,23 +3561,48 @@ class BuilderApp:
         info = tk.Frame(self.root, bg=BG2, padx=12, pady=10)
         info.pack(fill="x", padx=24, pady=(0, 12))
         tk.Label(info,
-                 text="The builder will:\n"
+                 text="START BUILD does everything:\n"
                       "  1. Clone the Electron wrapper from GitHub (~5 MB)\n"
                       "  2. Clone the game source from GitHub (~300 MB)\n"
                       "  3. Inject the Archipelago client into the game\n"
                       "  4. Build the game application for your platform via npm\n\n"
+                      "CHECK FOR UPDATES reads what you already have and says\n"
+                      "whether a rebuild would change anything. UPDATE then does\n"
+                      "steps 3 and 4 only, reusing the downloads.\n\n"
                       "Requirements: Git + Node.js (LTS) must be installed.",
                  font=("Consolas", 9), bg=BG2, fg=MUTE, justify="left"
                  ).pack(anchor="w")
 
-        # Build button
+        # Actions. Check is the cheap read-only path and sits first, so the
+        # habit is "check, then act" rather than "rebuild and hope".
+        btn_row = tk.Frame(self.root, bg=BG)
+        btn_row.pack(pady=(0, 12))
+
+        self.check_btn = tk.Button(
+            btn_row, text="⟳  CHECK FOR UPDATES", font=("Consolas", 11),
+            bg=BG2, fg=ACCL, activebackground="#334155", activeforeground=ACCL,
+            relief="flat", bd=0, padx=16, pady=10, cursor="hand2",
+            command=self._start_check
+        )
+        self.check_btn.pack(side="left", padx=(0, 8))
+
+        # Disabled until a check finds something to do -- offering an update
+        # before knowing one is needed is what the check exists to replace.
+        self.update_btn = tk.Button(
+            btn_row, text="⬆  UPDATE", font=("Consolas", 11, "bold"),
+            bg=BG2, fg=MUTE, activebackground="#334155", activeforeground=ACCL,
+            relief="flat", bd=0, padx=16, pady=10, cursor="hand2",
+            state="disabled", command=self._start_update
+        )
+        self.update_btn.pack(side="left", padx=(0, 8))
+
         self.build_btn = tk.Button(
-            self.root, text="▶  START BUILD", font=("Consolas", 12, "bold"),
+            btn_row, text="▶  START BUILD", font=("Consolas", 12, "bold"),
             bg=ACC, fg="#022c22", activebackground="#047857", activeforeground="#022c22",
             relief="flat", bd=0, padx=20, pady=10, cursor="hand2",
             command=self._start_build
         )
-        self.build_btn.pack(pady=(0, 12))
+        self.build_btn.pack(side="left")
 
         # Log area
         log_frame = tk.Frame(self.root, bg=BG, padx=24, pady=0)
@@ -3480,17 +3651,20 @@ class BuilderApp:
                     self.status_var.set(data)
                 elif kind == "done":
                     self._on_done(data)
+                elif kind == "check_done":
+                    self._on_check_done(*data)
                 elif kind == "error":
                     self._on_error(data)
         except queue.Empty:
             pass
         self.root.after(100, self._poll_queue)
 
-    def _start_build(self):
+    def _resolve_dir(self):
+        """Validate the chosen folder and remember it. None means don't start."""
         build_dir = os.path.normpath(self.dir_var.get().strip())
-        if not build_dir:
+        if not build_dir or build_dir == ".":
             self._on_error("Please choose a build folder first.")
-            return
+            return None
         # Persist chosen directory to host.yaml
         try:
             from settings import get_settings
@@ -3498,12 +3672,74 @@ class BuilderApp:
             get_settings().save()
         except Exception:
             pass  # non-fatal if settings unavailable
+        return build_dir
 
-        self.build_btn.configure(state="disabled", text="Building…")
+    def _clear_log(self):
         self.log_area.configure(state="normal")
         self.log_area.delete("1.0", "end")
         self.log_area.configure(state="disabled")
-        self.status_var.set("Building…")
+
+    def _busy(self, busy):
+        state = "disabled" if busy else "normal"
+        self.build_btn.configure(state=state)
+        self.check_btn.configure(state=state)
+        # The update button follows the last check rather than coming back on
+        # its own: after a build there is nothing left to update.
+        if busy:
+            self.update_btn.configure(state="disabled")
+
+    def _start_check(self):
+        build_dir = self._resolve_dir()
+        if build_dir is None:
+            return
+        self._busy(True)
+        self.check_btn.configure(text="Checking…")
+        self._clear_log()
+        self.status_var.set("Checking for updates…")
+
+        def _thread():
+            log = lambda m: self.q.put(("log", m))
+            log(f"{'─'*50}")
+            log("  Checking for updates")
+            log(f"{'─'*50}")
+            try:
+                stale, lines = check_for_updates(build_dir, log)
+            except Exception as e:
+                # A read-only check must never be able to take the app down.
+                self.q.put(("error", f"Update check failed: {e}"))
+                return
+            self.q.put(("check_done", (stale, lines)))
+
+        threading.Thread(target=_thread, daemon=True).start()
+
+    def _on_check_done(self, stale, lines):
+        self._busy(False)
+        self.check_btn.configure(text="⟳  CHECK FOR UPDATES")
+        self._log("")
+        for line in lines:
+            self._log(f"  {line}")
+        self._log("")
+        if stale:
+            self.update_btn.configure(state="normal", fg="#6ee7b7")
+            self.status_var.set("Updates available — press UPDATE.")
+            self._log("  Something is out of date. UPDATE re-injects the client")
+            self._log("  and repackages the app, reusing what is already")
+            self._log("  downloaded. It still runs electron-builder (2-5 min),")
+            self._log("  because the client is baked into the executable.")
+        else:
+            self.update_btn.configure(state="disabled", fg="#64748b")
+            self.status_var.set("✓ Everything is up to date.")
+            self._log("  Everything is up to date. No rebuild needed.")
+
+    def _start_build(self, fast=False):
+        build_dir = self._resolve_dir()
+        if build_dir is None:
+            return
+
+        self._busy(True)
+        self.build_btn.configure(text="Updating…" if fast else "Building…")
+        self._clear_log()
+        self.status_var.set("Updating…" if fast else "Building…")
 
         def _thread():
             build(
@@ -3511,12 +3747,18 @@ class BuilderApp:
                 log=lambda m: self.q.put(("log", m)),
                 done_cb=lambda exe: self.q.put(("done", exe)),
                 error_cb=lambda err: self.q.put(("error", err)),
+                fast=fast,
             )
 
         threading.Thread(target=_thread, daemon=True).start()
 
+    def _start_update(self):
+        self._start_build(fast=True)
+
     def _on_done(self, exe_path):
-        self.build_btn.configure(state="normal", text="▶  BUILD AGAIN")
+        self._busy(False)
+        self.build_btn.configure(text="▶  BUILD AGAIN")
+        self.update_btn.configure(state="disabled", fg="#64748b")
         self.status_var.set("✓ Build complete!")
         self._log(f"\n{'='*50}")
         self._log("  BUILD COMPLETE!")
@@ -3540,7 +3782,9 @@ class BuilderApp:
                 subprocess.Popen(["xdg-open", folder])
 
     def _on_error(self, msg):
-        self.build_btn.configure(state="normal", text="▶  START BUILD")
+        self._busy(False)
+        self.build_btn.configure(text="▶  START BUILD")
+        self.check_btn.configure(text="⟳  CHECK FOR UPDATES")
         self.status_var.set("✗ Build failed.")
         self._log(f"\n{'!'*50}")
         self._log("  ERROR")
