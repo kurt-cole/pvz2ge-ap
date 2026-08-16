@@ -155,9 +155,11 @@ class IncludeSidePaths(Toggle):
     world enabled, and a sphere 1 of 50 locations instead of 7. Side paths
     belonging to a world this seed left out are still dropped either way.
 
-    Note the plants and keys are a fixed block of items that has to fit
-    somewhere. Without the side paths' ~200 locations it no longer fits in a
-    one- or two-world seed, so with this off world_count must be at least 3.
+    A small seed can end up with fewer locations than there are plants: a
+    one-world seed with this off is 101 locations against 149 items. Nothing
+    fails there -- the pool ships fewer of the plants that gate nothing, and
+    every progression plant, world key and upgrade still goes in. Turning this
+    on is the way to get the full plant list into a small seed.
     """
     display_name = "Include Side Paths"
 

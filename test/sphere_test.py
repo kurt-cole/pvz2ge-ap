@@ -150,9 +150,11 @@ report("all worlds, default")
 report("all worlds + shuffle_zombies", shuffle_zombies=1)
 report("all worlds + shopsanity", shopsanity=1)
 report("3 worlds", world_count=3, worlds_required=11)
-# Small seeds need the side paths back: without them the fixed plant+key block
-# does not fit under a 3-world seed (see create_item_pool).
-report("1 world (Egypt only)", world_count=1, worlds_required=11,
+# Both sides of include_side_paths on the smallest seeds. With it off a
+# one-world seed is 101 locations and create_item_pool trims useful plants to
+# fit, so these also check that the trim leaves the logic reachable.
+report("1 world (Egypt only)", world_count=1, worlds_required=11)
+report("1 world + side paths", world_count=1, worlds_required=11,
        include_side_paths=1)
 report("2 worlds, completion goal", world_count=2, goal_type=1,
        worlds_required=11, modern_day_victory=2, include_side_paths=1)

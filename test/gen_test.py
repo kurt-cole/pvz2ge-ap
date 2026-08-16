@@ -424,11 +424,10 @@ assert _a.enabled_worlds == _b.enabled_worlds
 assert _sda["goal_locations"] == _sdb["goal_locations"], "key rule changed logic"
 assert len(_a.active_locations()) == len(_b.active_locations())
 
-# Smallest seeds still have somewhere to put their keys. The floor differs by
-# include_side_paths: with the side paths in, a 1-world seed generates; without
-# them the fixed plant+key block does not fit until world_count is 3, which
-# create_item_pool rejects outright rather than shipping a short pool.
-for _sp, _counts in ((1, (1, 2, 3)), (0, (3, 4, 5))):
+# Smallest seeds still have somewhere to put their keys, with the side paths in
+# or out. A one-world seed without them is only 101 locations, so this is also
+# the tightest case for the useful-plant trim in create_item_pool.
+for _sp, _counts in ((1, (1, 2, 3)), (0, (1, 2, 3))):
     for _wc in _counts:
         _mw2, _al, _dn, _lt = _key_placement(early_world_keys=1, world_count=_wc,
                                              include_side_paths=_sp)
@@ -437,14 +436,34 @@ for _sp, _counts in ((1, (1, 2, 3)), (0, (3, 4, 5))):
             f"side_paths={_sp} world_count={_wc}: {_al} spots for {_need} keys"
 print("early_world_keys holds down to the smallest seed each setting allows")
 
-# The floor itself: a seed too small for its item pool must say so, not
-# silently generate short.
-for _wc in (1, 2):
-    try:
-        _key_placement(world_count=_wc, include_side_paths=0)
-    except ValueError as _e:
-        assert "include_side_paths" in str(_e), _e
-    else:
-        raise AssertionError(
-            f"world_count={_wc} with no side paths should not have generated")
-print("world_count 1-2 without side paths is rejected with an actionable error")
+# ── small seeds trim useful plants rather than failing ──────────────────────
+# A one-world seed with side paths off has 101 locations (140 with shopsanity)
+# against a 149-item block. The useful plants are the only part that can give:
+# they are named by no access rule, so shipping fewer of them costs reachability
+# nothing. Progression plants, keys and upgrades all have to survive.
+from apstub import ItemClassification as _IC
+_prog_plants = {p.name for p in W.items.PLANT_ITEMS
+                if p.classification == _IC.progression}
+
+for _label, _kw in (("1 world", dict(world_count=1)),
+                    ("1 world + shopsanity", dict(world_count=1, shopsanity=1)),
+                    ("2 worlds", dict(world_count=2))):
+    _w, _ = run(f"trim: {_label}", include_side_paths=0, worlds_required=11, **_kw)
+    _mwT = _w.multiworld
+    _names = [i.name for i in _mwT.itempool]
+    _missing = _prog_plants - set(_names)
+    assert not _missing, f"{_label}: dropped progression plants {sorted(_missing)[:5]}"
+    _keys = [n for n in _names if n.endswith(" Key")]
+    for _k in _keys:
+        assert C.KEY_NAME_TO_WORLD[_k] in _w.enabled_worlds
+    assert len(_names) == len(_w.active_locations()), f"{_label}: pool does not fill"
+    _dupes = [n for n, c in collections.Counter(
+        n for n in _names if n in _prog_plants).items() if c > 1]
+    assert not _dupes, f"{_label}: duplicated a progression plant {_dupes}"
+
+# ...and the trim is stable for a slot: same options, same plants dropped.
+_a1, _ = run("trim determinism A", world_count=1, include_side_paths=0, worlds_required=11)
+_b1, _ = run("trim determinism B", world_count=1, include_side_paths=0, worlds_required=11)
+assert (sorted(i.name for i in _a1.multiworld.itempool)
+        == sorted(i.name for i in _b1.multiworld.itempool)), "trim is not deterministic"
+print("small seeds trim useful plants, keeping every progression plant and key")

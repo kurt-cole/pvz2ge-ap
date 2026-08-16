@@ -325,10 +325,10 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
             continue
         pool.append(world.create_item(key_item.name))
 
-    # All progression + useful plants
+    # Every progression plant. These are named by access rules, so dropping one
+    # can make a gate unsatisfiable -- they are not negotiable.
     for plant in PLANT_ITEMS:
-        if plant.classification in (ItemClassification.progression,
-                                    ItemClassification.useful):
+        if plant.classification == ItemClassification.progression:
             pool.append(world.create_item(plant.name))
 
     # Permanent upgrades, when the option has the game withhold them. With it
@@ -342,21 +342,37 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
             for _ in codenames:
                 pool.append(world.create_item(name))
 
+    # Useful plants fill what is left. Normally that is all of them, but a small
+    # seed can have fewer locations than the full plant list, and these are the
+    # only part of the block that can give: they gate nothing, so a seed short
+    # of room ships fewer plants rather than failing to generate. A one-world
+    # seed with side paths off is 101 locations (140 with shopsanity) against
+    # 149 items, which is where this bites.
+    #
+    # Which ones go is drawn from the slot's own RNG so it is stable for a seed
+    # and differs between slots, then re-sorted into PLANT_ITEMS order so the
+    # pool itself is built in a fixed order regardless of what the draw picked.
+    useful = [p for p in PLANT_ITEMS
+              if p.classification == ItemClassification.useful]
+    room = pool_size - len(pool)
+    if room < len(useful):
+        if room < 0:
+            raise ValueError(
+                f"item pool ({len(pool)} keys, progression plants and upgrades) "
+                f"exceeds the {pool_size} locations this slot builds; raise "
+                "world_count or turn on include_side_paths")
+        keep = set(world.random.sample([p.name for p in useful], room))
+        useful = [p for p in useful if p.name in keep]
+    for plant in useful:
+        pool.append(world.create_item(plant.name))
+
     # Everything left over is filler, of which trap_percentage becomes
     # traps. Traps only ever displace filler, never a plant or a key.
+    # Cannot go negative: the useful-plant trim above already sized the pool to
+    # fit, and raises if even the mandatory block does not. Asserted rather than
+    # assumed, since a short pool fails much later and much less legibly.
     remaining = pool_size - len(pool)
-    # Keys and plants are a fixed block, so a seed small enough to have fewer
-    # locations than that block cannot hold its own item pool, and the
-    # arithmetic below would silently produce a short pool rather than say so.
-    # With include_side_paths on, even a one-world seed is well clear. With it
-    # off (the default) the side paths' ~200 locations are gone, and the block
-    # does not fit until world_count reaches 3.
-    if remaining < 0:
-        raise ValueError(
-            f"item pool ({len(pool)} keys and plants) exceeds the "
-            f"{pool_size} locations this slot builds; raise world_count "
-            "(3 is the minimum without side paths) or turn on "
-            "include_side_paths")
+    assert remaining >= 0, f"pool {len(pool)} overruns {pool_size} locations"
     trap_count = remaining * world.options.trap_percentage.value // 100
     # Rotated rather than picked at random, so a slot's trap mix is the same
     # every generation and does not depend on how the RNG happened to fall.
