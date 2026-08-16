@@ -124,9 +124,13 @@ def report(label, **kw):
            f"{100 - held:.0f}%")
 
     first = len(state_with(mw, pre).reachable_locations())
-    ungated = total - len(world_locs)
+    # Shop is NOT counted here any more: it hangs off Ancient Egypt Mid1, since
+    # the game only grows a store button once egypt6 is cleared.
+    from pvz2gardendless.constants import SHOP_REGION
+    ungated = len([l for l in w.active_locations()
+                   if l.region not in ALL_WORLD_REGIONS and l.region != SHOP_REGION])
     print(f"        sphere 1 {first} of {total} ({first / total * 100:.0f}%) "
-          f"-- {ungated} of those are ungated by design (side paths, tutorial, shop)")
+          f"-- {ungated} of those are ungated by design (side paths, tutorial)")
 
     # --- 3. the stretches actually gate something ---------------------------
     stretch_regions = [r for r in mw.regions if r.name.endswith((" Mid", " Late"))]
@@ -308,6 +312,34 @@ for _p in SUN_PRODUCER_PLANTS:
         break
 else:
     ok(f'all {len(SUN_PRODUCER_PLANTS)} sun producers satisfy the gate')
+
+# ── the shop opens with egypt6, not at the start ────────────────────────────
+# index.js only sets feature_store once egypt6 is cleared (the same chain gives
+# coins at tutorial4 and the zen garden at egypt5), so the store button does not
+# exist in sphere 1 and its checks cannot be there either. regions.py hangs Shop
+# off Ancient Egypt Mid1 to say exactly that.
+#
+# Built with shopsanity on, since with it off the region holds no locations and
+# the probe would pass vacuously -- the same trap the early_world_keys probe hit.
+_mws, _ws = build(shopsanity=1)
+_pres = [i.name for i in _mws.precollected]
+_shop_locs = [l.name for l in _ws.active_locations() if l.is_shop]
+if not _shop_locs:
+    fail("shopsanity built no shop locations, so this proves nothing")
+else:
+    _start = {l.name for l in state_with(_mws, _pres).reachable_locations()}
+    _leak = [n for n in _shop_locs if n in _start]
+    if _leak:
+        fail(f"{len(_leak)} shop checks are in sphere 1, but the store opens at egypt6: {_leak[:3]}")
+    else:
+        ok(f"all {len(_shop_locs)} shop checks are behind the egypt6 gate")
+
+    _open = {l.name for l in state_with(_mws, _pres + ["Sunflower"]).reachable_locations()}
+    _shut = [n for n in _shop_locs if n not in _open]
+    if _shut:
+        fail(f"a sun producer does not open the shop: {_shut[:3]}")
+    else:
+        ok("a sun producer opens the shop, same as egypt6-9")
 
 # THE structural guarantee, and the reason no early_items nudge is needed:
 # a sun producer is the ONLY way out of sphere 1. Every world's entrance wants

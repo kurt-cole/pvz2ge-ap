@@ -92,11 +92,20 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
         parent = regions[owner] if owner in regions else tutorial
         parent.connect(regions[sp], f"Enter {sp}")
 
-    # Shop — reachable from the world map at any time. Affordability is not
-    # modelled: currency accrues from play and from Archipelago's own
-    # coin/gem items, so a purchase is a matter of grinding rather than a
-    # logic gate.
-    tutorial.connect(regions[SHOP_REGION])
+    # Shop — the store button does not exist until egypt6 is cleared. That is
+    # the game's own rule, in index.js's feature-unlock chain:
+    #   feature_coins   <- tutorial4      feature_powerup/zengarden <- egypt5
+    #   feature_store   <- egypt6
+    # egypt6 is the first level of Mid1, so hanging the shop off that region
+    # gives it exactly the game's condition and inherits Mid1's sun-and-attacker
+    # rule for free. It used to hang off Tutorial, which put all 39 shopsanity
+    # checks in sphere 1 and made a shopsanity seed open five times as wide as
+    # the same seed without it.
+    #
+    # Affordability is still not modelled: currency accrues from play and from
+    # Archipelago's own coin/gem items, so a purchase is a matter of grinding
+    # rather than a logic gate.
+    regions["Ancient Egypt Mid1"].connect(regions[SHOP_REGION])
 
     active = world.active_locations()
 

@@ -176,6 +176,10 @@ class Shopsanity(Toggle):
 
     Buying a plant still will not grant it -- plants only come from
     Archipelago -- so a purchase spends the currency and sends the check.
+
+    The store itself does not exist until you clear Egypt level 6, which is the
+    game's own rule, so logic puts these checks behind Ancient Egypt's sun
+    producer gate rather than in the opening.
     """
     display_name = "Shopsanity"
 
