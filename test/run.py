@@ -30,6 +30,7 @@ JS_SUITES = [
     ("conveyor", "conveyor_test.js", "belt swaps stay in power band"),
     ("zombies",  "zombie_test.js",   "zombie swaps stay in tier, threats stay put"),
     ("costumes", "costume_test.js",  "costume grants and the shuffle trap"),
+    ("connect",  "connect_test.js",  "wss:// first, ws:// fallback"),
 ]
 
 

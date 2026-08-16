@@ -20,11 +20,23 @@ CLIENT_SRC = os.path.join(REPO, "pvz2gardendless", "build_pvzge_ap.py")
 
 # Harness scaffolding, not client logic: these exist only so the copied
 # functions have something to call. They are expected NOT to match.
+# An entry is either a bare name (a stub in any file) or "file.js:name" for a
+# name that is a stub in ONE file but a real client function elsewhere. Qualify
+# wherever you can: a bare name switches the check off everywhere.
 STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          "makeZombiesClass", "setLevel",
          # conveyor_fn.js harness: sets the level's own haveWater flag, which
          # the real client reads off the game rather than declaring.
          "setLevelWater",
+         # connect_fn.js harness. setStatus/onPkt/findOrCreateAPSlot/svCfg ARE
+         # real client functions, so these are qualified -- connect() only
+         # needs something callable, and a copy of each would drag in most of
+         # the client. setTimeout is captured so the retry can be run without
+         # waiting; reset/runNextTimer drive the harness.
+         "connect_fn.js:setStatus", "connect_fn.js:onPkt",
+         "connect_fn.js:findOrCreateAPSlot", "connect_fn.js:svCfg",
+         "connect_fn.js:setTimeout", "connect_fn.js:reset",
+         "connect_fn.js:runNextTimer",
          # store_fn.js harness: stand-ins for the client's socket and module
          # scope, plus applyLocationInfo, which mirrors a switch arm rather
          # than a function and so has nothing to match verbatim.
@@ -69,7 +81,7 @@ def main():
         if not found:
             failures.append(f"{fname}: no functions found -- did the format change?")
         for name, body in sorted(found.items()):
-            if name in STUBS:
+            if name in STUBS or f"{fname}:{name}" in STUBS:
                 skipped.append(f"{fname}:{name}")
                 continue
             if norm(body) in source:
