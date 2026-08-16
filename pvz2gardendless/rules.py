@@ -40,8 +40,8 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         # The first gate is deliberately left alone: Egypt is the only world
         # playable with no items, and tightening its opening would leave a
         # seed with nowhere to start.
-        # Mid1 starts at egypt3, so has_sun_and_attacker above is what makes
-        # "you are expected to have a sun producer by Egypt level 3" true in
+        # Mid1 starts at egypt6, so has_sun_and_attacker above is what makes
+        # "you are expected to have a sun producer by Egypt level 6" true in
         # logic. Together with the universal world rule below it is also one of
         # the only two exits from sphere 1, and both want a sun producer -- see
         # generate_early() for why that matters and what it replaced.

@@ -65,9 +65,10 @@ STRETCH_PLANTS = {" Mid": 6, " Late": 12}
 # which put its 44 levels in one sphere behind that single rule. These add a
 # plant count to the later two, on top of the sun-and-attacker requirement.
 #
-# That ungated opening is egypt1-2 only (2026-08-12). Mid1 begins at egypt3,
-# so the sun-and-attacker rule is what says "you are expected to have a sun
-# producer by Egypt level 3". It used to begin at egypt10, which had logic
+# That ungated opening is egypt1-5. Mid1 begins at egypt6, so the
+# sun-and-attacker rule is what says "you are expected to have a sun producer
+# by Egypt level 6". It began at egypt3 briefly (2026-08-12); before that at
+# egypt10, which had logic
 # calling nine levels playable on falling sun alone; a sun producer was nudged
 # into sphere 1 with early_items to paper over it. Mid1 deliberately has no
 # entry here: its gate is the sun producer, with no plant count on top.

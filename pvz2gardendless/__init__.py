@@ -230,9 +230,10 @@ class PvZ2GardendlessWorld(World):
         # was only ever a request -- fill warns and places normally when it
         # cannot honour one.
         #
-        # It is now structural. Sphere 1 is egypt1-2, the tutorial, the shop and
-        # the standalone side paths, and every exit from it runs through a sun
-        # producer: Egypt's own gate starts at egypt3, and rules.py requires one
+        # It is now structural. Sphere 1 is egypt1-5, the tutorial, the shop and
+        # (only when include_side_paths is on) the standalone side paths, and
+        # every exit from it runs through a sun producer: Egypt's own gate
+        # starts at egypt6, and rules.py requires one
         # to enter every other world on top of its key. So fill has to place a
         # sun producer in sphere 1 or the seed does not open at all. sphere_test
         # proves this by brute force over the whole pool rather than by

@@ -46,22 +46,23 @@ def _make_locs() -> List[PvZ2LocationData]:
     add("Sauce Unlock", "Tutorial")
 
     # ── Ancient Egypt ──
-    # Ungated: egypt1 and egypt2 are the only levels a seed is guaranteed to be
-    # able to play with nothing but the free starting plant, so they are what
-    # sphere 1 is made of. Everything from egypt3 on sits behind the sun
-    # producer gate -- see rules.py and EGYPT_STRETCH_PLANTS.
+    # Ungated: egypt1-5 are the levels a seed is guaranteed to be able to play
+    # with nothing but the free starting plant, so they are what sphere 1 is
+    # made of. Everything from egypt6 on sits behind the sun producer gate --
+    # see rules.py and EGYPT_STRETCH_PLANTS.
     add("random_zomboss_egypt", "Ancient Egypt", victory=True)
     add("Map Unlock", "Ancient Egypt")               # egypt1
     add("Cabbagepult Unlock", "Ancient Egypt")       # egypt2
-    # egypt3-9. Moved out of the opening stretch (2026-08-12): the sun
-    # requirement used to start at egypt10, which meant nine levels were
-    # reachable in logic on falling sun alone. Both levels here use
-    # SelectionMethod "chooser", so the player brings their own plants and the
-    # client's plant guard blocks anything Archipelago has not sent -- there is
-    # no seed bank handing out a Sunflower to fall back on.
-    add("Bloomerang Unlock", "Ancient Egypt Mid1")   # egypt3
-    add("Powerupgadget Unlock", "Ancient Egypt Mid1")# egypt4
-    add("Iceburg Unlock", "Ancient Egypt Mid1")      # egypt5
+    add("Bloomerang Unlock", "Ancient Egypt")        # egypt3
+    add("Powerupgadget Unlock", "Ancient Egypt")     # egypt4
+    add("Iceburg Unlock", "Ancient Egypt")           # egypt5
+    # egypt6-9. The sun requirement has moved twice: it began at egypt10, which
+    # left nine levels reachable in logic on falling sun alone; it was pulled
+    # back to egypt3 (2026-08-12); and it now starts at egypt6, which is where
+    # the game itself stops carrying a player who brought no sun. Every level
+    # here uses SelectionMethod "chooser", so the player brings their own
+    # plants and the client's plant guard blocks anything Archipelago has not
+    # sent -- there is no seed bank handing out a Sunflower to fall back on.
     add("Branch Unlock Egypt 6", "Ancient Egypt Mid1")
     add("Note Egypt Unlock", "Ancient Egypt Mid1")   # egypt7
     add("World Key - Ancient Egypt", "Ancient Egypt Mid1")  # egypt8

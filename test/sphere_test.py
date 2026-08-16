@@ -262,42 +262,42 @@ else:
     ok(f"shuffle_zombies leaves every sphere identical "
        f"({', '.join(str(len(s)) for s in _off)} locations at 3 depths)")
 
-# ── the Egypt sun gate starts at egypt3 ─────────────────────────────────────
-# "By Egypt level 3 you are expected to have a sun producing plant", expressed
-# as a rule. egypt1 and egypt2 stay playable with nothing but the free starting
-# plant -- they are what sphere 1 is made of, and gating them would leave a
-# seed with nowhere to begin.
+# ── the Egypt sun gate starts at egypt6 ─────────────────────────────────────
+# "By Egypt level 6 you are expected to have a sun producing plant", expressed
+# as a rule. egypt1-5 stay playable with nothing but the free starting plant --
+# they are what sphere 1 is made of, and gating them would leave a seed with
+# nowhere to begin.
 #
 # Location names rather than level codes because that is what the regions hold;
 # the mapping is the client's own LOC_LEVELS (egypt1 = Map Unlock,
 # egypt2 = Cabbagepult Unlock, egypt3 = Bloomerang Unlock ... egypt9).
 _mw, _w = build()
 _pre = [i.name for i in _mw.precollected]
-_open_egypt = ['Map Unlock', 'Cabbagepult Unlock']          # egypt1-2
-_gated_egypt = ['Bloomerang Unlock', 'Powerupgadget Unlock', 'Iceburg Unlock',
-                'Branch Unlock Egypt 6', 'Note Egypt Unlock',
-                'World Key - Ancient Egypt', 'Gravebuster Unlock']  # egypt3-9
+_open_egypt = ['Map Unlock', 'Cabbagepult Unlock', 'Bloomerang Unlock',
+               'Powerupgadget Unlock', 'Iceburg Unlock']            # egypt1-5
+_gated_egypt = ['Branch Unlock Egypt 6', 'Note Egypt Unlock',
+                'World Key - Ancient Egypt', 'Gravebuster Unlock']  # egypt6-9
 
 _no_sun = {l.name for l in state_with(_mw, _pre).reachable_locations()}
 _with_sun = {l.name for l in state_with(_mw, _pre + ['Sunflower']).reachable_locations()}
 
 _missing = [n for n in _open_egypt if n not in _no_sun]
 if _missing:
-    fail(f"egypt1-2 need more than the starting plant: {_missing}")
+    fail(f"egypt1-5 need more than the starting plant: {_missing}")
 else:
-    ok('egypt1-2 are playable with only the free starting plant')
+    ok('egypt1-5 are playable with only the free starting plant')
 
 _leaked = [n for n in _gated_egypt if n in _no_sun]
 if _leaked:
-    fail(f"reachable with no sun producer, so the gate does not start at egypt3: {_leaked}")
+    fail(f"reachable with no sun producer, so the gate does not start at egypt6: {_leaked}")
 else:
-    ok(f'all {len(_gated_egypt)} of egypt3-9 need a sun producer')
+    ok(f'all {len(_gated_egypt)} of egypt6-9 need a sun producer')
 
 _still = [n for n in _gated_egypt if n not in _with_sun]
 if _still:
-    fail(f"a sun producer does not open egypt3-9: {_still}")
+    fail(f"a sun producer does not open egypt6-9: {_still}")
 else:
-    ok('a sun producer opens egypt3-9')
+    ok('a sun producer opens egypt6-9')
 
 # Every sun producer must work, not just Sunflower -- the gate is has_any() and
 # a seed may only ever offer one of the six.
@@ -311,7 +311,7 @@ else:
 
 # THE structural guarantee, and the reason no early_items nudge is needed:
 # a sun producer is the ONLY way out of sphere 1. Every world's entrance wants
-# one on top of its key, and Egypt's own gate wants one at egypt3, so fill has
+# one on top of its key, and Egypt's own gate wants one at egypt6, so fill has
 # to place a sun producer in sphere 1 or the seed never opens.
 #
 # Checked by brute force over the whole pool rather than by spot-checking a
