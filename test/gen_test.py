@@ -14,6 +14,7 @@ from pvz2gardendless.options import (
     WorldCount, EnabledWorlds, GoalType, WorldsRequired, ModernDayVictory,
     SkipTutorial, Shopsanity, TrapPercentage, ShuffleUpgrades,
     RandomizeConveyorPlants, EarlyWorldKeys, ShuffleZombies, IncludeSidePaths,
+    IncludeDangerRooms,
 )
 from apstub import DeathLink
 
@@ -28,6 +29,8 @@ class Opts:
         self.skip_tutorial = SkipTutorial(kw.get("skip_tutorial", 0))
         self.include_side_paths = IncludeSidePaths(
             kw.get("include_side_paths", IncludeSidePaths.default))
+        self.include_danger_rooms = IncludeDangerRooms(
+            kw.get("include_danger_rooms", IncludeDangerRooms.default))
         self.shopsanity = Shopsanity(kw.get("shopsanity", 0))
         self.shuffle_upgrades = ShuffleUpgrades(kw.get("shuffle_upgrades", ShuffleUpgrades.default))
         self.randomize_conveyor_plants = RandomizeConveyorPlants(
@@ -435,6 +438,49 @@ for _sp, _counts in ((1, (1, 2, 3)), (0, (1, 2, 3))):
         assert not _lt and _al >= _need, \
             f"side_paths={_sp} world_count={_wc}: {_al} spots for {_need} keys"
 print("early_world_keys holds down to the smallest seed each setting allows")
+
+# ── include_danger_rooms ────────────────────────────────────────────────────
+# DANGER_ROOM_LOCATIONS is a hand-written set in constants.py, so it can drift
+# from what the client actually maps. Pin it to the derivation it claims: every
+# location whose LOC_LEVELS codename contains "dangerroom", and nothing else.
+# The 28 "Dangerroom <World> Unlock" locations are ordinary numbered levels
+# (egypt12, pirate4, beach20) whose reward is unlocking the room -- naming one
+# of those would delete a real level from the seed.
+import re as _re
+from pvz2gardendless.build_pvzge_ap import TMPPATCH_CONTENT as _JS
+from pvz2gardendless.locations import ALL_LOCATIONS as _ALL
+
+_blk = _JS.split("const LOC_LEVELS = {", 1)[1].split(chr(10) + "  };", 1)[0]
+_lvl = dict(_re.findall(r"'([^']+)':'([^']+)'", _blk))
+_derived = {l.name for l in _ALL if "dangerroom" in _lvl.get(l.name, "")}
+assert _derived == set(C.DANGER_ROOM_LOCATIONS), (
+    "DANGER_ROOM_LOCATIONS drifted from LOC_LEVELS: "
+    f"missing {sorted(_derived - set(C.DANGER_ROOM_LOCATIONS))[:5]}, "
+    f"extra {sorted(set(C.DANGER_ROOM_LOCATIONS) - _derived)[:5]}")
+_unlocks = {l.name for l in _ALL if l.name.startswith("Dangerroom ")}
+assert _unlocks and not (_unlocks & set(C.DANGER_ROOM_LOCATIONS)),     "an unlock level was swept into DANGER_ROOM_LOCATIONS"
+print(f"\nDANGER_ROOM_LOCATIONS: {len(_derived)} rooms, "
+      f"{len(_unlocks)} unlock levels correctly left alone")
+
+_dr_off, _ = run("danger rooms off", include_danger_rooms=0)
+_dr_on, _ = run("danger rooms on", include_danger_rooms=1)
+_off_names = {l.name for l in _dr_off.active_locations()}
+_on_names = {l.name for l in _dr_on.active_locations()}
+assert _on_names - _off_names == _derived - {"mixed_dangerroom2"},     "the option removed something other than the Danger Rooms"
+assert not (_off_names & set(C.DANGER_ROOM_LOCATIONS)), "a Danger Room survived"
+assert _unlocks <= _off_names, "an unlock level went with the rooms"
+# With side paths on, the Mixed Danger Room goes too.
+_both, _ = run("danger rooms off + side paths", include_danger_rooms=0,
+               include_side_paths=1)
+assert "mixed_dangerroom2" not in {l.name for l in _both.active_locations()}
+# The goal must survive: no goal location is a Danger Room, in any goal mode.
+for _gt in (0, 1, 2):
+    _gw, _gsd = run(f"danger rooms off, goal_type={_gt}",
+                    include_danger_rooms=0, goal_type=_gt, worlds_required=11)
+    _gnames = {l.name for l in _gw.active_locations()}
+    for _g in _gsd["goal_locations"]:
+        assert _g in _gnames, f"goal {_g} was removed with the Danger Rooms"
+print("include_danger_rooms removes exactly the 37 rooms and no goal location")
 
 # ── small seeds trim useful plants rather than failing ──────────────────────
 # A one-world seed with side paths off has 101 locations (140 with shopsanity)

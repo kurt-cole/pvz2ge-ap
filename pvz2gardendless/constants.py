@@ -492,6 +492,41 @@ SIDE_PATH_REGIONS = [
     "Vamporcini Sidepath",
 ]
 
+# The Danger Rooms: the game's endless survival mode, one per world (two to
+# four for some), plus Big Wave Beach's eight themed minigame rooms and the
+# Mixed Danger Room, which is Modern Day's "Highway to the Danger Room".
+#
+# DERIVED, not hand-picked: these are exactly the locations whose level
+# codename in the client's LOC_LEVELS contains "dangerroom". Every one of them
+# is named after its own codename, because a Danger Room hands out no reward
+# for the randomizer to borrow a name from. The 28 locations called
+# "Dangerroom <World> Unlock" are NOT in here and must never be -- those are
+# ordinary numbered levels (egypt12, pirate4, beach20 ...) whose reward is
+# unlocking the room. gen_test pins both halves of that.
+#
+# Dropped from the seed unless include_danger_rooms is on.
+DANGER_ROOM_LOCATIONS = frozenset({
+    "egypt_dangerroom", "egypt_dangerroom2", "egypt_dangerroom_minigame",
+    "pirate_dangerroom", "pirate_dangerroom2",
+    "cowboy_dangerroom", "cowboy_dangerroom2",
+    "future_dangerroom", "future_dangerroom2", "future_dangerroom_sunbomb",
+    "dark_dangerroom", "dark_dangerroom2", "dark_dangerroom_potion",
+    "beach_dangerroom", "beach_dangerroom2",
+    "beach_dangerroom_minigame_beach", "beach_dangerroom_minigame_cowboy",
+    "beach_dangerroom_minigame_dark", "beach_dangerroom_minigame_egypt",
+    "beach_dangerroom_minigame_future", "beach_dangerroom_minigame_iceage",
+    "beach_dangerroom_minigame_lostcity", "beach_dangerroom_minigame_pirate",
+    "iceage_dangerroom", "iceage_dangerroom2",
+    "lostcity_dangerroom", "lostcity_dangerroom2",
+    "kongfu_dangerroom", "kongfu_dangerroom2", "kongfu_dangerroom3",
+    "kongfu_dangerroom4",
+    "eighties_dangerroom",
+    "dino_dangerroom", "dino_dangerroom2",
+    "modern_dangerroom", "modern_dangerroom2",
+    "mixed_dangerroom2",
+})
+
+
 # Every side path named above has to be a real region, or its entry silently
 # gates nothing.
 _unknown_side_paths = set(SIDE_PATH_WORLD) - set(SIDE_PATH_REGIONS)

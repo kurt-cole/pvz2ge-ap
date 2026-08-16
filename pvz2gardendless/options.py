@@ -164,6 +164,27 @@ class IncludeSidePaths(Toggle):
     display_name = "Include Side Paths"
 
 
+class IncludeDangerRooms(Toggle):
+    """
+    Include the Danger Rooms -- the game's endless survival mode.
+
+    37 locations: one to four per world, Big Wave Beach's eight themed minigame
+    rooms, and the Mixed Danger Room, which is Modern Day's "Highway to the
+    Danger Room". With side paths off that last one is already out, so this
+    removes 36.
+
+    Off (the default) drops them from the seed the way an unpicked world is
+    dropped. The rooms are still playable, they just hold no checks.
+
+    They are off by default because a Danger Room is endless, scaling survival
+    content rather than a level with an end, so a check there is open-ended
+    grind rather than progress. The levels that UNLOCK each room are ordinary
+    numbered levels (egypt12, pirate4, beach20 and so on) and stay in the seed
+    either way -- this only removes the rooms themselves.
+    """
+    display_name = "Include Danger Rooms"
+
+
 class Shopsanity(Toggle):
     """
     Turn the in-game store's one-time purchases into location checks.
@@ -323,6 +344,7 @@ class PvZ2Options(PerGameCommonOptions):
     modern_day_victory: ModernDayVictory
     skip_tutorial:    SkipTutorial
     include_side_paths: IncludeSidePaths
+    include_danger_rooms: IncludeDangerRooms
     shopsanity:       Shopsanity
     shuffle_upgrades: ShuffleUpgrades
     randomize_conveyor_plants: RandomizeConveyorPlants

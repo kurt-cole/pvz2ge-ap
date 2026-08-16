@@ -8,8 +8,9 @@ from typing import Dict, List, Optional, Set
 from BaseClasses import Location
 
 from .constants import (
-    ALL_WORLD_REGIONS, BASE_ID, GAME_NAME, SHOP_COMMODITIES, SHOP_REGION,
-    SIDE_PATH_REGIONS, SIDE_PATH_WORLD, WORLD_REGIONS, shop_location_name,
+    ALL_WORLD_REGIONS, BASE_ID, DANGER_ROOM_LOCATIONS, GAME_NAME,
+    SHOP_COMMODITIES, SHOP_REGION, SIDE_PATH_REGIONS, SIDE_PATH_WORLD,
+    WORLD_REGIONS, shop_location_name,
 )
 from .options import GoalType
 
@@ -820,7 +821,8 @@ if _unclassified_regions:
 
 def active_locations(shopsanity: bool,
                      enabled_regions: Set[str],
-                     side_paths: bool = True) -> List[PvZ2LocationData]:
+                     side_paths: bool = True,
+                     danger_rooms: bool = True) -> List[PvZ2LocationData]:
     """Locations actually built for a slot with these settings.
 
     Shop and disabled-world locations stay in the static location_name_to_id
@@ -835,14 +837,21 @@ def active_locations(shopsanity: bool,
     Tutorial and Shop are always kept.
 
     side_paths=False drops every side path, worldless ones included; that is
-    the include_side_paths option, which is off by default. The parameter
-    defaults to True so a caller that predates the option keeps the old
-    behaviour.
+    the include_side_paths option. danger_rooms=False drops the 37 Danger Room
+    levels, which sit inside their world's own region rather than a region of
+    their own; that is include_danger_rooms. Both are off by default as
+    options, but both parameters default to True so a caller that predates
+    them keeps the old behaviour.
     """
     side_path_regions = set(SIDE_PATH_REGIONS)
 
     def keep(loc: PvZ2LocationData) -> bool:
         if loc.is_shop and not shopsanity:
+            return False
+        # Checked before the region tests: a Danger Room lives in a world
+        # region (or, for the Mixed one, a side path), so it would otherwise be
+        # kept by whichever branch owns it.
+        if not danger_rooms and loc.name in DANGER_ROOM_LOCATIONS:
             return False
         if loc.region in ALL_WORLD_REGIONS:
             return loc.region in enabled_regions

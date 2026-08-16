@@ -278,7 +278,8 @@ class PvZ2GardendlessWorld(World):
         """Locations actually built for this slot's options."""
         return compute_active_locations(bool(self.options.shopsanity),
                                         self.enabled_regions,
-                                        bool(self.options.include_side_paths))
+                                        bool(self.options.include_side_paths),
+                                        bool(self.options.include_danger_rooms))
 
     def create_items(self) -> None:
         pool = create_item_pool(self, len(self.active_locations()))
