@@ -131,6 +131,37 @@ class ModernDayVictory(Choice):
     default = 1
 
 
+class IncludeSidePaths(Toggle):
+    """
+    Include the side paths -- the branch quests hanging off the world maps,
+    plus the standalone ones reached from the world chooser (Sandbox, the Bank
+    Theft levels, Epic Beghouled, FloawerPot, the Mixed Danger Room,
+    Reinforcemint and ShootingStarFruit).
+
+    Off (the default) removes every side path location from the seed, exactly
+    the way an unpicked world is removed. Nothing can be placed there and
+    nothing routes through them, so they become free play with no checks.
+
+    They are off by default because logic cannot gate them the way the game
+    does. A side path is one flat region attached to the opening of the world
+    it branches from, so a path that spans two worlds is only gated on the
+    earlier one -- the Appease quest's second half sits behind Frostbite Caves
+    level 25 in game but is in logic from the start -- and the seven the game
+    ties to no world hang off the tutorial. That includes the Mixed Danger
+    Room, which is Modern Day's "Highway to the Danger Room" endless zone and
+    so is genuinely late-game content sitting in sphere 1.
+
+    On restores the old behaviour: 761 locations instead of 554 with every
+    world enabled, and a sphere 1 of 50 locations instead of 7. Side paths
+    belonging to a world this seed left out are still dropped either way.
+
+    Note the plants and keys are a fixed block of items that has to fit
+    somewhere. Without the side paths' ~200 locations it no longer fits in a
+    one- or two-world seed, so with this off world_count must be at least 3.
+    """
+    display_name = "Include Side Paths"
+
+
 class Shopsanity(Toggle):
     """
     Turn the in-game store's one-time purchases into location checks.
@@ -247,8 +278,8 @@ class EarlyWorldKeys(Toggle):
     Seas key inside Jurassic Marsh's middle stretch, which needed the Jurassic
     Marsh key and a stack of plants first.
 
-    With it on, keys may only land in a world's opening stretch, a side path,
-    the Danger Rooms, the tutorial or the store. Opening a world needs only its
+    With it on, keys may only land in a world's opening stretch, the tutorial,
+    the store, or a side path if include_side_paths kept them. Opening a world needs only its
     key (the plant-count gates are on the middle and late stretches), so keys
     chain through world openings and stay shallow.
 
@@ -285,6 +316,7 @@ class PvZ2Options(PerGameCommonOptions):
     worlds_required:  WorldsRequired
     modern_day_victory: ModernDayVictory
     skip_tutorial:    SkipTutorial
+    include_side_paths: IncludeSidePaths
     shopsanity:       Shopsanity
     shuffle_upgrades: ShuffleUpgrades
     randomize_conveyor_plants: RandomizeConveyorPlants

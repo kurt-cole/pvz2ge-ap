@@ -13,7 +13,7 @@ from pvz2gardendless import constants as C
 from pvz2gardendless.options import (
     WorldCount, EnabledWorlds, GoalType, WorldsRequired, ModernDayVictory,
     SkipTutorial, Shopsanity, TrapPercentage, ShuffleUpgrades,
-    RandomizeConveyorPlants, EarlyWorldKeys, ShuffleZombies,
+    RandomizeConveyorPlants, EarlyWorldKeys, ShuffleZombies, IncludeSidePaths,
 )
 from apstub import DeathLink
 
@@ -26,6 +26,8 @@ class Opts:
         self.worlds_required = WorldsRequired(kw.get("worlds_required", 7))
         self.modern_day_victory = ModernDayVictory(kw.get("modern_day_victory", 1))
         self.skip_tutorial = SkipTutorial(kw.get("skip_tutorial", 0))
+        self.include_side_paths = IncludeSidePaths(
+            kw.get("include_side_paths", IncludeSidePaths.default))
         self.shopsanity = Shopsanity(kw.get("shopsanity", 0))
         self.shuffle_upgrades = ShuffleUpgrades(kw.get("shuffle_upgrades", ShuffleUpgrades.default))
         self.randomize_conveyor_plants = RandomizeConveyorPlants(
@@ -142,12 +144,13 @@ def run(label, **kw):
 
 run("default (all worlds)")
 run("3 worlds, want 4 keys", world_count=3, worlds_required=4)
-run("1 world (Egypt only)", world_count=1, worlds_required=11)
-run("explicit list only", world_count=1,
+run("1 world (Egypt only)", world_count=1, worlds_required=11, include_side_paths=1)
+run("explicit list only", world_count=1, include_side_paths=1,
     enabled_worlds=["Pirate Seas", "Wild West"], worlds_required=11)
 run("explicit + topup", world_count=5, enabled_worlds=["Big Wave Beach"])
 run("trophies, 3 worlds", world_count=3, goal_type=0, worlds_required=11)
-run("completions, 2 worlds", world_count=2, goal_type=1, worlds_required=11)
+run("completions, 2 worlds", world_count=2, goal_type=1, worlds_required=11,
+    include_side_paths=1)
 run("3 worlds + shopsanity", world_count=3, shopsanity=1, worlds_required=11)
 run("all worlds + shopsanity + traps", shopsanity=1, trap_percentage=50)
 
@@ -167,12 +170,13 @@ b, _ = run("determinism B", world_count=4)
 assert a.enabled_worlds == b.enabled_worlds
 
 # Frostbite Caves entry-plant rule only when the world is in
-w, _ = run("BWB forced in", world_count=1, enabled_worlds=["Big Wave Beach"])
+w, _ = run("BWB forced in", world_count=1, enabled_worlds=["Big Wave Beach"],
+           include_side_paths=1)
 assert "Big Wave Beach" in w.enabled_worlds
 
 run("upgrades off", shuffle_upgrades=0)
 run("upgrades off, 3 worlds", shuffle_upgrades=0, world_count=3)
-run("upgrades on, 1 world", world_count=1)
+run("upgrades on, 1 world", world_count=1, include_side_paths=1)
 run("upgrades on + shopsanity", shopsanity=1)
 
 # conveyor randomization: pure client behaviour, so all generation has to do is
@@ -420,9 +424,27 @@ assert _a.enabled_worlds == _b.enabled_worlds
 assert _sda["goal_locations"] == _sdb["goal_locations"], "key rule changed logic"
 assert len(_a.active_locations()) == len(_b.active_locations())
 
-# Smallest seeds still have somewhere to put their keys.
-for _wc in (1, 2, 3):
-    _mw2, _al, _dn, _lt = _key_placement(early_world_keys=1, world_count=_wc)
-    _need = sum(1 for i in _mw2.itempool if i.name.endswith(" Key"))
-    assert not _lt and _al >= _need, f"world_count={_wc}: {_al} spots for {_need} keys"
-print("early_world_keys holds down to a 1-world seed")
+# Smallest seeds still have somewhere to put their keys. The floor differs by
+# include_side_paths: with the side paths in, a 1-world seed generates; without
+# them the fixed plant+key block does not fit until world_count is 3, which
+# create_item_pool rejects outright rather than shipping a short pool.
+for _sp, _counts in ((1, (1, 2, 3)), (0, (3, 4, 5))):
+    for _wc in _counts:
+        _mw2, _al, _dn, _lt = _key_placement(early_world_keys=1, world_count=_wc,
+                                             include_side_paths=_sp)
+        _need = sum(1 for i in _mw2.itempool if i.name.endswith(" Key"))
+        assert not _lt and _al >= _need, \
+            f"side_paths={_sp} world_count={_wc}: {_al} spots for {_need} keys"
+print("early_world_keys holds down to the smallest seed each setting allows")
+
+# The floor itself: a seed too small for its item pool must say so, not
+# silently generate short.
+for _wc in (1, 2):
+    try:
+        _key_placement(world_count=_wc, include_side_paths=0)
+    except ValueError as _e:
+        assert "include_side_paths" in str(_e), _e
+    else:
+        raise AssertionError(
+            f"world_count={_wc} with no side paths should not have generated")
+print("world_count 1-2 without side paths is rejected with an actionable error")

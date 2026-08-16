@@ -818,7 +818,8 @@ if _unclassified_regions:
 
 
 def active_locations(shopsanity: bool,
-                     enabled_regions: Set[str]) -> List[PvZ2LocationData]:
+                     enabled_regions: Set[str],
+                     side_paths: bool = True) -> List[PvZ2LocationData]:
     """Locations actually built for a slot with these settings.
 
     Shop and disabled-world locations stay in the static location_name_to_id
@@ -830,15 +831,26 @@ def active_locations(shopsanity: bool,
     A side path is entered from inside a world (see SIDE_PATH_WORLD), so one
     belonging to a world this seed left out has to go with it -- otherwise its
     locations exist with nothing that can reach them and generation fails.
-    Tutorial, Shop and the seven worldless side paths are always kept.
+    Tutorial and Shop are always kept.
+
+    side_paths=False drops every side path, worldless ones included; that is
+    the include_side_paths option, which is off by default. The parameter
+    defaults to True so a caller that predates the option keeps the old
+    behaviour.
     """
+    side_path_regions = set(SIDE_PATH_REGIONS)
+
     def keep(loc: PvZ2LocationData) -> bool:
         if loc.is_shop and not shopsanity:
             return False
         if loc.region in ALL_WORLD_REGIONS:
             return loc.region in enabled_regions
-        owner = SIDE_PATH_WORLD.get(loc.region)
-        if owner is not None:
+        if loc.region in side_path_regions:
+            if not side_paths:
+                return False
+            owner = SIDE_PATH_WORLD.get(loc.region)
+            if owner is None:
+                return True  # one of the seven the game ties to no world
             return any(r in enabled_regions for r in WORLD_REGIONS[owner])
         return True
 

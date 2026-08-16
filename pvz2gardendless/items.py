@@ -346,13 +346,17 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
     # traps. Traps only ever displace filler, never a plant or a key.
     remaining = pool_size - len(pool)
     # Keys and plants are a fixed block, so a seed small enough to have fewer
-    # locations than that block cannot hold its own item pool. The side paths
-    # and Modern Day keep even a one-world seed well clear of this, but the
+    # locations than that block cannot hold its own item pool, and the
     # arithmetic below would silently produce a short pool rather than say so.
+    # With include_side_paths on, even a one-world seed is well clear. With it
+    # off (the default) the side paths' ~200 locations are gone, and the block
+    # does not fit until world_count reaches 3.
     if remaining < 0:
         raise ValueError(
             f"item pool ({len(pool)} keys and plants) exceeds the "
-            f"{pool_size} locations this slot builds; enable more worlds")
+            f"{pool_size} locations this slot builds; raise world_count "
+            "(3 is the minimum without side paths) or turn on "
+            "include_side_paths")
     trap_count = remaining * world.options.trap_percentage.value // 100
     # Rotated rather than picked at random, so a slot's trap mix is the same
     # every generation and does not depend on how the RNG happened to fall.

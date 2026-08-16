@@ -456,8 +456,16 @@ SIDE_PATH_WORLD = {
 # The seven side paths the game data ties to no world: Sandbox, the Bank Theft
 # levels, Epic Beghouled, FloawerPot, the Mixed Danger Room, Reinforcemint and
 # ShootingStarFruit. They are standalone content reached from the world
-# chooser rather than from inside a world, so they stay reachable from the
-# start -- which also keeps a guaranteed sphere-1 pool for fill to open with.
+# chooser rather than from inside a world, so when they are in the seed at all
+# they are reachable from the start.
+#
+# The whole list is dropped unless include_side_paths is on, which it is not by
+# default: logic cannot gate a side path the way the game does (a path is one
+# flat region hung off the opening of the world it branches from, and these
+# seven hang off the tutorial), so leaving them in put late content -- Modern
+# Day's own danger room among it -- in sphere 1. With them out, sphere 1 is the
+# tutorial, egypt1-2 and the shop, and that is the whole pool fill has to open
+# the seed with.
 SIDE_PATH_REGIONS = [
     "Aloe Sidepath", "Appease Sidepath", "Atombomb Sidepath", "Bank Sidepath",
     "Bloominghearts Sidepath", "Buttercup Sidepath", "Conceal Sidepath",

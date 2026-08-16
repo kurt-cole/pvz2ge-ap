@@ -36,8 +36,13 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
     # side paths of a dropped world, which have no way in once it is gone.
     # Shop is built even with shopsanity off: an empty region costs nothing,
     # while a missing one would break the connect below.
-    dropped_side_paths = {sp for sp, owner in SIDE_PATH_WORLD.items()
-                          if owner not in world.enabled_worlds}
+    # include_side_paths off drops all of them, worldless ones included --
+    # see the option for why that is the default.
+    if world.options.include_side_paths:
+        dropped_side_paths = {sp for sp, owner in SIDE_PATH_WORLD.items()
+                              if owner not in world.enabled_worlds}
+    else:
+        dropped_side_paths = set(SIDE_PATH_REGIONS)
     built = ({r for r in ALL_REGIONS if r not in ALL_WORLD_REGIONS}
              | world.enabled_regions) - dropped_side_paths
     for name in ALL_REGIONS:
