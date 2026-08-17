@@ -1932,40 +1932,7 @@ window.electron = electron;
   // plants from the AP-managed slot before they hit localStorage.
   (function() {
     const _origSetItem = Storage.prototype.setItem;
-    // Captured here rather than using localStorage.getItem, which the client
-    // overrides earlier to force PlayerIndex -- the diagnostic below wants the
-    // raw stored bytes, not the rewritten ones.
-    const _origGetItemForDiag = Storage.prototype.getItem;
     Storage.prototype.setItem = function(key, value) {
-      // DIAGNOSTIC. Every persisted change to the save passes through here, so
-      // this is the one place that can name whatever zeroes the balance during
-      // startup -- the console has never been usable early enough to catch it
-      // live. Logs the stack the moment a non-zero stored balance becomes zero.
-      // Console only, never the AP panel: it is noisy and for debugging.
-      if (key === SAVE_KEY) {
-        try {
-          const before = JSON.parse(_origGetItemForDiag.call(localStorage, key) || '[]');
-          const after  = JSON.parse(value);
-          const pick = (arr) => {
-            if (!Array.isArray(arr)) return null;
-            const i = arr.findIndex(p => p && p._ap_managed === true);
-            return i >= 0 ? arr[i] : null;
-          };
-          const b = pick(before), a = pick(after);
-          if (b && a) {
-            for (const f of ['coin', 'gem']) {
-              if ((b[f] || 0) > 0 && (a[f] || 0) === 0) {
-                console.warn('[AP] ' + f + ' ' + b[f] + ' -> 0 written here:\n'
-                             + new Error().stack);
-              }
-            }
-            if (b.features && b.features.feature_store && a.features
-                && !a.features.feature_store) {
-              console.warn('[AP] feature flags cleared here:\n' + new Error().stack);
-            }
-          }
-        } catch (e) { /* diagnostics must never break a save */ }
-      }
       if (key === SAVE_KEY && window._AP_grantedPlantIds) {
         try {
           const arr = JSON.parse(value);
@@ -2136,6 +2103,34 @@ window.electron = electron;
   function rebuildAPSave() {
     const APP = window._AP_AllPlayerProperties;
     if(!APP || !APP.currentPlayer) return;
+
+    // 0a. currentPlayer is not always an element of allPlayers, and savePP()
+    // serialises allPlayers:
+    //     savePP() { localStorage.setItem(KEY, JSON.stringify(allPlayers)) }
+    // so every write against an orphaned currentPlayer is discarded silently.
+    // savePP returns normally, the value is right in memory, and nothing
+    // reaches disk.
+    //
+    // Measured at startup (2026-08-16): currentPlayer was an orphan
+    // (indexOf === -1) carrying the previous session's feature flags. The
+    // balance restore ran against it and logged success; the splash scene then
+    // finished, getPlayer() re-read localStorage, and a second object took its
+    // place at coin 0 with the flags unset. That is the whole restart bug --
+    // in-session saves work because currentPlayer IS in the array by then.
+    //
+    // Prefer the marked entry already in the array: it is what savePP writes
+    // and what the game reloads. Only push the orphan when nothing else claims
+    // the slot, since pushing while a marked entry exists would duplicate it.
+    const _all = APP.allPlayers || (APP.allPlayers = []);
+    if(_all.indexOf(APP.currentPlayer) < 0){
+      const _marked = _all.findIndex(p => p && p._ap_managed === true);
+      if(_marked >= 0){
+        APP.currentPlayer = _all[_marked];
+      } else {
+        _all.push(APP.currentPlayer);
+      }
+      log('Reattached the save slot: writes were not reaching disk');
+    }
     const cp = APP.currentPlayer;
 
     // 0. Keep the slot marker and index pinned to whatever object the game
@@ -2292,30 +2287,6 @@ window.electron = electron;
     // A newly built component may have just overwritten the balance, so let
     // the restore run again for it. Checked before restoring, seeded after, so
     // the component ends the pass agreeing with whatever the player now holds.
-    // DIAGNOSTIC. The AP panel has shown "Unlocked feature(s)" printing twice
-    // across one startup, with the balance restore in between -- flags that
-    // were just set and saved coming back unset. Nothing clears them, so the
-    // object being read must be a different one. getPlayer() reassigns both
-    // allPlayers and currentPlayer from a fresh JSON.parse every time it runs,
-    // so a second call hands back re-parsed objects and silently orphans every
-    // in-memory change made against the old ones.
-    //
-    // Stamping an id lets that be seen rather than inferred: if _ap_objid
-    // changes between polls, the player was swapped. Console only.
-    try {
-      if (!cp._ap_objid) {
-        cp._ap_objid = Math.random().toString(36).slice(2, 8);
-        console.warn('[AP] new currentPlayer object ' + cp._ap_objid
-                     + '  coin=' + (cp.coin || 0) + ' gem=' + (cp.gem || 0)
-                     + '  features=' + JSON.stringify(cp.features || {})
-                     + '  inAllPlayers=' + ((APP.allPlayers || []).indexOf(cp)));
-      }
-      console.warn('[AP] poll obj=' + cp._ap_objid
-                   + ' coin=' + (cp.coin || 0) + ' gem=' + (cp.gem || 0)
-                   + ' coinSeen=' + (st.coinSeen || 0) + ' gemSeen=' + (st.gemSeen || 0)
-                   + ' restoreDone=' + _currencyRestoreDone);
-    } catch (e) {}
-
     const _compChanged = currencyComponentChanged();
     if(_compChanged) _currencyRestoreDone = false;
     const _restored = restoreLostCurrency();
