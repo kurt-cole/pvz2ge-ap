@@ -2018,6 +2018,56 @@ window.electron = electron;
     'store_open', 'store_intro',
   ];
 
+  // Which cp.features flag each level clear turns on, straight out of the
+  // game's own unlock chain in index.js:
+  //     n.feature_store || getLevelProgressByID("egypt6").progress >= 3
+  //                        && (n.feature_store = true)
+  // The store BUTTON is gated on that flag alone
+  // (!feature_store || (this.storeButton.node.active = false)), so a save with
+  // egypt6 cleared and the flag unset has no way into the store at all.
+  //
+  // That is reachable under AP: the flag is only ever written while the game
+  // watches you finish the level, but an AP save is rebuilt from checked
+  // locations, so a slot resumed on another machine, or one whose egypt6 check
+  // arrived from the multiworld rather than from play, has the progress and
+  // not the flag. Re-deriving it from progress on every rebuild makes that
+  // self-correcting.
+  //
+  // Only the store is listed. The same chain drives feature_coins (tutorial4),
+  // feature_powerup and feature_zengarden (egypt5) and feature_almanac
+  // (egypt2), and each is a one-line addition here -- but each also changes
+  // what a level does rather than just what a button shows, so they are a
+  // separate decision.
+  const FEATURE_UNLOCK_LEVELS = { feature_store: 'egypt6' };
+
+  // The game's LevelProgress enum: 3 is unlocked_willbeFinished, which is both
+  // what its own unlock checks compare against and what rebuildAPSave writes
+  // for a checked location. Anything below it is not a clear.
+  const PROGRESS_FINISHED = 3;
+
+  // Returns the flags it turned on, so the caller can log a change without
+  // logging every poll. Never turns one off: the game's chain does not either,
+  // and a flag that flickered would hide the store button mid-session.
+  function syncFeatureFlags(cp) {
+    const opened = [];
+    if (!cp) return opened;
+    const levels = cp.levelProps || {};
+    // getFeatureProps() builds this on demand and returns whatever is there,
+    // so an object carrying only the keys below reads correctly: those are
+    // set, every other flag is undefined and therefore still falsy, exactly as
+    // the game's own all-false constructor leaves them.
+    const feats = cp.features || (cp.features = {});
+    for (const flag of Object.keys(FEATURE_UNLOCK_LEVELS)) {
+      const entry = levels[FEATURE_UNLOCK_LEVELS[flag]];
+      const progress = entry && entry.progress;
+      if (!feats[flag] && progress >= PROGRESS_FINISHED) {
+        feats[flag] = true;
+        opened.push(flag);
+      }
+    }
+    return opened;
+  }
+
   // Reconstructs the AP save slot entirely from AP state.
   // Plants = received items; level progress = checked locations; worlds = received keys.
   // Called after Connected, after each ReceivedItems, and in the poll loop.
@@ -2162,6 +2212,13 @@ window.electron = electron;
       const tut = cp.tutorial || (cp.tutorial = {});
       for(const flag of FEATURE_TUTORIAL_FLAGS) tut[flag] = true;
     }
+
+    // 5c. Open the store once egypt6 is cleared, which is the game's own
+    // condition. Runs after step 3 has rebuilt levelProps, so it reads the same
+    // progress the game would. Unconditional on skipTutorial: this is not about
+    // suppressing a prompt, it is about the button existing at all.
+    const _opened = syncFeatureFlags(cp);
+    if(_opened.length) log('Unlocked feature(s) from level progress: ' + _opened.join(', '));
 
     try { APP.savePP(); } catch(e) {}
 
