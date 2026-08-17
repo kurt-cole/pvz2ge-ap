@@ -2021,6 +2021,22 @@ window.electron = electron;
     'store_open', 'store_intro',
   ];
 
+  // Flags that gate a flow which PAYS OUT. Set whatever skip_tutorial says,
+  // because leaving one unset is not a cosmetic choice -- it is free currency:
+  //
+  //     !tut.premium_bring_out && tut.premium_unlock
+  //       ? (tut.premium_bring_out = true, SetFlow("PREMIUM_BRING_OUT"), savePP())
+  //       : ...
+  //
+  // and PREMIUM_BRING_OUT carries GIVE_GEM 20. Seen firing repeatedly when
+  // moving between worlds (2026-08-16), so 20 gems on tap.
+  //
+  // premium_unlock and premium_light_up are deliberately NOT here. They gate
+  // what the store shows rather than a payout, and premium_unlock is the
+  // condition this flow reads -- forcing it would arm the flow rather than
+  // silence it.
+  const PAYOUT_FLAGS = ['premium_bring_out'];
+
   // Which cp.features flag each level clear turns on, straight out of the
   // game's own unlock chain in index.js:
   //     n.feature_store || getLevelProgressByID("egypt6").progress >= 3
@@ -2309,6 +2325,13 @@ window.electron = electron;
     if(skipTutorial) {
       const tut = cp.tutorial || (cp.tutorial = {});
       for(const flag of FEATURE_TUTORIAL_FLAGS) tut[flag] = true;
+    }
+
+    // 5b-ii. The paying flows are silenced regardless of skip_tutorial. A
+    // player who wants the tutorials still does not want a repeatable 20 gems.
+    {
+      const tut = cp.tutorial || (cp.tutorial = {});
+      for(const flag of PAYOUT_FLAGS) tut[flag] = true;
     }
 
     // 5c. Re-derive the game's feature flags from level progress. Runs after
