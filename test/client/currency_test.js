@@ -128,40 +128,44 @@ restoreLostCurrency();
 observeCurrency();
 is(st.coinSeen, 900, 'restore-then-observe keeps the balance');
 
-console.log('\n  a drop to zero is never recorded');
+console.log('\n  zero is a spend unless a new display explains it');
 
-// Measured 2026-08-16: 2620 earned in a level, stamped to 0 on the way out,
-// and the ledger followed it down -- leaving nothing to restore at the next
-// launch. A balance going to EXACTLY zero is the display overwriting the save.
+// A balance at zero is ambiguous on its face: either the display stamped over
+// the save, or the player spent their last coin. Only a NEWLY BUILT component
+// can have stamped one, so the caller passes that in. Both halves measured:
+// 2620 lost at a session boundary (a wipe), and 40 gems spent in the store
+// coming straight back (a spend wrongly read as a wipe).
+
+// Spend: no new component, so the zero stands and is recorded.
+p = players(0, 0);
+reset({ coinSeen: 500, gemSeen: 40 }, p);
+observeCurrency(false);
+is([st.coinSeen, st.gemSeen], [0, 0], 'spending the last of it is recorded');
+
+// Wipe: a new component appeared this pass, so the ledger is kept.
 p = players(0, 0);
 reset({ coinSeen: 2620, gemSeen: 0 }, p);
-observeCurrency();
-is(st.coinSeen, 2620, 'a wipe to zero does not overwrite the ledger');
+observeCurrency(true);
+is(st.coinSeen, 2620, 'a wipe does not overwrite the ledger');
 is(savedCount(), 0, '...and nothing is written');
+is(restoreLostCurrency(), ['coin +2620'], '...so the balance is still recoverable');
 
-// Partial drops are still spending and must be followed.
+// A wipe is always to exactly zero, so a partial drop is spending either way.
 p = players(120, 0);
-reset({ coinSeen: 2620 }, p);
-observeCurrency();
-is(st.coinSeen, 120, 'a partial drop is a purchase and is recorded');
+reset({ coinSeen: 2620, gemSeen: 0 }, p);
+observeCurrency(true);
+is(st.coinSeen, 120, 'a partial drop is a purchase even when a display was rebuilt');
 
-// Zero is recordable when the ledger is already zero -- that is not a wipe,
-// it is a player who has never had any money.
+// Zero from a zero ledger is not a wipe, it is a player with no money.
 p = players(0, 0);
 reset({}, p);
-observeCurrency();
-is(st.coinSeen, 0, 'zero from a zero ledger is fine');
-
-// ...and the wipe is recoverable afterwards, which is the whole point.
-p = players(0, 0);
-reset({ coinSeen: 2620 }, p);
-observeCurrency();
-is(restoreLostCurrency(), ['coin +2620'], 'the preserved ledger still restores');
+observeCurrency(true);
+is(st.coinSeen, 0, 'zero from a zero ledger records fine');
 
 // Coins and gems are independent: a coin wipe must not freeze the gem ledger.
 p = players(0, 40);
 reset({ coinSeen: 500, gemSeen: 10 }, p);
-observeCurrency();
+observeCurrency(true);
 is([st.coinSeen, st.gemSeen], [500, 40],
    'the coin wipe is ignored while the gem gain is recorded');
 
@@ -244,6 +248,21 @@ syncCurrencyDisplay();
 observeCurrency();
 is([p.currentPlayer.coin, window._AP_CoinCount.component.value, st.coinSeen],
    [900, 900, 900], 'player, display and ledger all agree afterwards');
+
+// And the reason an unrepaired zero can be trusted as a spend: a real wipe is
+// always repaired earlier in the same pass, before observeCurrency sees it.
+p = players(2620, 0);
+reset({ coinSeen: 2620, gemSeen: 0 }, p);
+restoreLostCurrency();                               // spends the one restore
+window._AP_CoinCount = realHud(p.currentPlayer, 'coin', 'addCoinCount', 0);
+window._AP_CoinCount.component.value = 0;            // new display stamps 0
+const wiped = currencyComponentChanged();
+if (wiped) restoreDone(false);
+restoreLostCurrency();
+syncCurrencyDisplay();
+observeCurrency(wiped);
+is([p.currentPlayer.coin, st.coinSeen], [2620, 2620],
+   'wipe repaired in-pass, ledger intact');
 
 if (failed) {
   console.log(`\n${failed} FAILURE(S)`);

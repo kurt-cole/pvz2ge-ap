@@ -2259,12 +2259,13 @@ window.electron = electron;
     // A newly built component may have just overwritten the balance, so let
     // the restore run again for it. Checked before restoring, seeded after, so
     // the component ends the pass agreeing with whatever the player now holds.
-    if(currencyComponentChanged()) _currencyRestoreDone = false;
+    const _compChanged = currencyComponentChanged();
+    if(_compChanged) _currencyRestoreDone = false;
     const _restored = restoreLostCurrency();
     if(_restored.length) log('Restored balance the display overwrote: ' + _restored.join(', '));
     applyPendingCurrency();
     syncCurrencyDisplay();
-    observeCurrency();
+    observeCurrency(_compChanged);
   }
 
   // forceLevel order for tutorial progression
@@ -2896,23 +2897,25 @@ window.electron = electron;
   // Records what the player actually holds, so the next launch has something
   // to restore to. Runs after restoreLostCurrency on the first poll, so a
   // wiped 0 is never what gets recorded.
-  function observeCurrency(){
+  function observeCurrency(wipeSuspected){
     const APP = window._AP_AllPlayerProperties;
     const cp  = APP ? APP.currentPlayer : null;
     if(!cp) return;
     let dirty = false;
     for(const c of CURRENCY_FIELDS){
       const have = cp[c.field] || 0;
-      // A drop to EXACTLY zero is the display stamping over the save, not a
-      // purchase. Recording it destroys the only record of the balance, and
-      // then there is nothing left for the restore to put back -- measured
-      // 2026-08-16: 2620 earned in a level, wiped on the way out, ledger
-      // followed it down to 0, and the next launch had nothing to recover.
+      // A balance at zero is ambiguous on its face: it is either the display
+      // stamping over the save, or a player who spent their last coin. The
+      // caller resolves it, because only a NEWLY BUILT component can have
+      // stamped a zero -- and when one has, restoreLostCurrency ran earlier in
+      // this same pass and already repaired the balance, so a zero still
+      // standing here is a real spend.
       //
-      // Spending down to exactly zero is refunded once on the next restore.
-      // That is the safer way to be wrong: it hands back money that was
-      // genuinely spent, rather than silently deleting a balance.
-      if(have === 0 && (st[c.seen] || 0) > 0) continue;
+      // Recording a wipe is unrecoverable: it destroys the only record of the
+      // balance and leaves the restore nothing to put back. Refusing to record
+      // a spend is merely a refund. So when the two cannot be told apart, this
+      // errs toward keeping the ledger.
+      if(have === 0 && wipeSuspected && (st[c.seen] || 0) > 0) continue;
       if(st[c.seen] !== have){ st[c.seen] = have; dirty = true; }
     }
     if(dirty) svSt();
