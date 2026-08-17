@@ -32,6 +32,7 @@ JS_SUITES = [
     ("costumes", "costume_test.js",  "costume grants and the shuffle trap"),
     ("connect",  "connect_test.js",  "wss:// first, ws:// fallback"),
     ("features", "feature_test.js",  "opening the store from egypt6 progress"),
+    ("currency", "currency_test.js", "restoring the balance the game wipes at boot"),
 ]
 
 

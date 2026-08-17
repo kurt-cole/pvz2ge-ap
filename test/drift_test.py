@@ -40,7 +40,11 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # store_fn.js harness: stand-ins for the client's socket and module
          # scope, plus applyLocationInfo, which mirrors a switch arm rather
          # than a function and so has nothing to match verbatim.
-         "send", "resetShopState", "setLocations", "applyLocationInfo"}
+         "send", "resetShopState", "setLocations", "applyLocationInfo",
+         # currency_fn.js harness: reset() rebuilds module scope between cases,
+         # svSt counts saves. restoreLostCurrency/observeCurrency themselves
+         # ARE real client functions and are checked.
+         "currency_fn.js:reset"}
 
 _ws = re.compile(r"\s+")
 norm = lambda s: _ws.sub(" ", s).strip()

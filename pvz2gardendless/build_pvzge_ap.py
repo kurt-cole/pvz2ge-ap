@@ -2251,9 +2251,15 @@ window.electron = electron;
 
     try { APP.savePP(); } catch(e) {}
 
-    // 6. Flush any currency that couldn't be applied earlier (no player slot
-    // loaded at the time, or the UI component wasn't up yet).
+    // 6. Currency, in order: put back what the boot wipe took, then flush any
+    // grant that couldn't be applied earlier (no player slot loaded at the
+    // time, or the UI component wasn't up yet), then record the result as the
+    // balance to restore to next boot. Observing last is what keeps the wiped
+    // 0 from becoming the remembered balance.
+    const _restored = restoreLostCurrency();
+    if(_restored.length) log('Restored balance lost at startup: ' + _restored.join(', '));
     applyPendingCurrency();
+    observeCurrency();
   }
 
   // forceLevel order for tutorial progression
@@ -2774,10 +2780,78 @@ window.electron = electron;
   // re-granted afterwards.
   const CURRENCY_FIELDS = [
     { field:'coin', granted:'coinGranted', applied:'coinApplied',
+      seen:'coinSeen',
       cls:function(){ return window._AP_CoinCount; }, add:'addCoinCount' },
     { field:'gem',  granted:'gemGranted',  applied:'gemApplied',
+      seen:'gemSeen',
       cls:function(){ return window._AP_GemCount; },  add:'addGemCount' },
   ];
+
+  // ── The boot wipe ─────────────────────────────────────────────────────────
+  // The game contains exactly ONE write to a player's coin or gem in the whole
+  // bundle -- the HUD component's value setter:
+  //     addCoinCount(n) { this.value += n; }
+  //     onValueSet(n)   { currentPlayer.coin = n; savePP(); }
+  // and its load does `this._shownValue = currentPlayer.coin; this.value =
+  // this._shownValue`. At boot that runs against a currentPlayer that is not
+  // the loaded save yet, reads 0, and writes the 0 straight through. So every
+  // restart begins with the balance erased, before anything is on screen.
+  //
+  // Measured, not inferred (2026-08-16): 12345 written and confirmed in
+  // localStorage, then location.reload() with no shutdown at all -- 0 on the
+  // other side. A save/restart loses it the same way.
+  //
+  // st.coinSeen/gemSeen is the last balance the client actually observed on
+  // the live player, refreshed every poll. Restoring the shortfall puts back
+  // only what was seen; it can never invent currency.
+  //
+  // Once per session, because the wipe happens once, at boot. Spending later
+  // also lowers the balance and must NOT be undone -- after this has run,
+  // observeCurrency() simply follows the balance down.
+  let _currencyRestoreDone = false;
+
+  function restoreLostCurrency(){
+    if(_currencyRestoreDone) return [];
+    const APP = window._AP_AllPlayerProperties;
+    const cp  = APP ? APP.currentPlayer : null;
+    if(!cp) return []; // no player yet; retried on the next poll
+    _currencyRestoreDone = true;
+    const restored = [];
+    for(const c of CURRENCY_FIELDS){
+      const seen = st[c.seen] || 0;
+      const have = cp[c.field] || 0;
+      const short = seen - have;
+      if(short <= 0) continue;
+      // Through the component where possible, exactly as applyPendingCurrency
+      // does: its setter owns the displayed value, and writing cp directly
+      // behind its back leaves the HUD showing the old number until the next
+      // addCoinCount overwrites the save with it.
+      const comp = c.cls() && c.cls().component;
+      if(comp && typeof comp[c.add] === 'function'){
+        try { comp[c.add](short); } catch(e) { cp[c.field] = seen; }
+      } else {
+        cp[c.field] = seen;
+      }
+      restored.push(c.field + ' +' + short);
+    }
+    if(restored.length){ try { APP.savePP(); } catch(e) {} }
+    return restored;
+  }
+
+  // Records what the player actually holds, so the next boot has something to
+  // restore to. Runs after restoreLostCurrency on the first poll, so the wiped
+  // 0 is never what gets recorded.
+  function observeCurrency(){
+    const APP = window._AP_AllPlayerProperties;
+    const cp  = APP ? APP.currentPlayer : null;
+    if(!cp) return;
+    let dirty = false;
+    for(const c of CURRENCY_FIELDS){
+      const have = cp[c.field] || 0;
+      if(st[c.seen] !== have){ st[c.seen] = have; dirty = true; }
+    }
+    if(dirty) svSt();
+  }
 
   function applyPendingCurrency(){
     const APP = window._AP_AllPlayerProperties;
