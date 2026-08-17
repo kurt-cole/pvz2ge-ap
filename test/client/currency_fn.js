@@ -81,6 +81,16 @@ function observeCurrency(){
   let dirty = false;
   for(const c of CURRENCY_FIELDS){
     const have = cp[c.field] || 0;
+    // A drop to EXACTLY zero is the display stamping over the save, not a
+    // purchase. Recording it destroys the only record of the balance, and
+    // then there is nothing left for the restore to put back -- measured
+    // 2026-08-16: 2620 earned in a level, wiped on the way out, ledger
+    // followed it down to 0, and the next launch had nothing to recover.
+    //
+    // Spending down to exactly zero is refunded once on the next restore.
+    // That is the safer way to be wrong: it hands back money that was
+    // genuinely spent, rather than silently deleting a balance.
+    if(have === 0 && (st[c.seen] || 0) > 0) continue;
     if(st[c.seen] !== have){ st[c.seen] = have; dirty = true; }
   }
   if(dirty) svSt();

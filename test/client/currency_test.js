@@ -128,11 +128,42 @@ restoreLostCurrency();
 observeCurrency();
 is(st.coinSeen, 900, 'restore-then-observe keeps the balance');
 
+console.log('\n  a drop to zero is never recorded');
+
+// Measured 2026-08-16: 2620 earned in a level, stamped to 0 on the way out,
+// and the ledger followed it down -- leaving nothing to restore at the next
+// launch. A balance going to EXACTLY zero is the display overwriting the save.
 p = players(0, 0);
-reset({ coinSeen: 900 }, p);
+reset({ coinSeen: 2620, gemSeen: 0 }, p);
 observeCurrency();
-is(st.coinSeen, 0,
-   'observe-first would destroy it -- this is why order matters in rebuildAPSave');
+is(st.coinSeen, 2620, 'a wipe to zero does not overwrite the ledger');
+is(savedCount(), 0, '...and nothing is written');
+
+// Partial drops are still spending and must be followed.
+p = players(120, 0);
+reset({ coinSeen: 2620 }, p);
+observeCurrency();
+is(st.coinSeen, 120, 'a partial drop is a purchase and is recorded');
+
+// Zero is recordable when the ledger is already zero -- that is not a wipe,
+// it is a player who has never had any money.
+p = players(0, 0);
+reset({}, p);
+observeCurrency();
+is(st.coinSeen, 0, 'zero from a zero ledger is fine');
+
+// ...and the wipe is recoverable afterwards, which is the whole point.
+p = players(0, 0);
+reset({ coinSeen: 2620 }, p);
+observeCurrency();
+is(restoreLostCurrency(), ['coin +2620'], 'the preserved ledger still restores');
+
+// Coins and gems are independent: a coin wipe must not freeze the gem ledger.
+p = players(0, 40);
+reset({ coinSeen: 500, gemSeen: 10 }, p);
+observeCurrency();
+is([st.coinSeen, st.gemSeen], [500, 40],
+   'the coin wipe is ignored while the gem gain is recorded');
 
 console.log('\n  the stale display, which is the actual bug');
 
