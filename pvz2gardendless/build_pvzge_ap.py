@@ -1932,7 +1932,40 @@ window.electron = electron;
   // plants from the AP-managed slot before they hit localStorage.
   (function() {
     const _origSetItem = Storage.prototype.setItem;
+    // Captured here rather than using localStorage.getItem, which the client
+    // overrides earlier to force PlayerIndex -- the diagnostic below wants the
+    // raw stored bytes, not the rewritten ones.
+    const _origGetItemForDiag = Storage.prototype.getItem;
     Storage.prototype.setItem = function(key, value) {
+      // DIAGNOSTIC. Every persisted change to the save passes through here, so
+      // this is the one place that can name whatever zeroes the balance during
+      // startup -- the console has never been usable early enough to catch it
+      // live. Logs the stack the moment a non-zero stored balance becomes zero.
+      // Console only, never the AP panel: it is noisy and for debugging.
+      if (key === SAVE_KEY) {
+        try {
+          const before = JSON.parse(_origGetItemForDiag.call(localStorage, key) || '[]');
+          const after  = JSON.parse(value);
+          const pick = (arr) => {
+            if (!Array.isArray(arr)) return null;
+            const i = arr.findIndex(p => p && p._ap_managed === true);
+            return i >= 0 ? arr[i] : null;
+          };
+          const b = pick(before), a = pick(after);
+          if (b && a) {
+            for (const f of ['coin', 'gem']) {
+              if ((b[f] || 0) > 0 && (a[f] || 0) === 0) {
+                console.warn('[AP] ' + f + ' ' + b[f] + ' -> 0 written here:\n'
+                             + new Error().stack);
+              }
+            }
+            if (b.features && b.features.feature_store && a.features
+                && !a.features.feature_store) {
+              console.warn('[AP] feature flags cleared here:\n' + new Error().stack);
+            }
+          }
+        } catch (e) { /* diagnostics must never break a save */ }
+      }
       if (key === SAVE_KEY && window._AP_grantedPlantIds) {
         try {
           const arr = JSON.parse(value);
