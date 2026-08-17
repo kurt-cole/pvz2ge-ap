@@ -11,8 +11,8 @@
 // egypt1, tutorial1-4 and eleven Modern Day levels checked still had all nine
 // false -- so under AP they never turn on by themselves. This is what repairs
 // that, and these cases pin it to the game's own conditions.
-const { syncFeatureFlags, FEATURE_UNLOCK_LEVELS, PROGRESS_FINISHED }
-  = require('./feature_fn.js');
+const { syncFeatureFlags, FEATURE_UNLOCK_LEVELS, FEATURE_PROMPT_FLAGS,
+        PROGRESS_FINISHED } = require('./feature_fn.js');
 
 let failed = 0;
 const ok = m => console.log('  ok    ' + m);
@@ -126,6 +126,43 @@ is(sorted(Object.keys(cp.features)),
    ['feature_almanac', 'feature_coins', 'feature_plantfood', 'feature_powerup',
     'feature_store', 'feature_worldmap', 'feature_zengarden'],
    'a fully cleared save sets these seven and no others');
+
+console.log('\n  the first-time prompt is marked seen with the feature');
+
+// The game runs a flow when a feature is on and its prompt flag is off:
+//     if (HasFlow() || o.store_open || !t.feature_store) { ... }
+//     else { o.store_open = true; SetFlow("STORE_LEADER"); }
+// and STORE_LEADER carries GIVE_GEM 20. It sets store_open in memory and
+// leaves saving to whatever runs next, so a flow that fires before the flag
+// is persisted pays out again on the next start -- free gems every restart.
+cp = save({ egypt6: 3 });
+syncFeatureFlags(cp);
+is([cp.tutorial.store_open, cp.tutorial.store_intro], [true, true],
+   'unlocking the store marks its prompt seen');
+
+cp = save({ egypt2: 3, egypt5: 3 });
+syncFeatureFlags(cp);
+is([cp.tutorial.almanac_open, cp.tutorial.zengarden_open], [true, true],
+   'the almanac and zen garden prompts too');
+is(cp.tutorial.store_open, undefined,
+   '...but not the store, which is not unlocked yet');
+
+// The case that would otherwise slip through: a save where the feature is
+// ALREADY true never re-enters the "newly opened" branch.
+cp = save({ egypt6: 3 }, { feature_store: true });
+is(syncFeatureFlags(cp), [], 'nothing newly opened');
+is(cp.tutorial.store_open, true, '...but the prompt is still marked seen');
+
+// It must not invent prompt flags for features that are off.
+cp = save({});
+syncFeatureFlags(cp);
+is(Object.keys(cp.tutorial || {}), [], 'no feature on: no prompt flags set');
+
+// Only the three features that HAVE a prompt are covered -- coins, plant food
+// and the world map have no first-time flow to suppress.
+is(Object.keys(FEATURE_PROMPT_FLAGS).sort(),
+   ['feature_almanac', 'feature_store', 'feature_zengarden'],
+   'exactly the three prompted features');
 
 if (failed) {
   console.log(`\n${failed} FAILURE(S)`);

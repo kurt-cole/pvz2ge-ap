@@ -2067,6 +2067,28 @@ window.electron = electron;
     feature_store:     [['egypt6', 3]],
   };
 
+  // The first-time prompt each of these features shows, and the flags that
+  // record it as already seen. Set together with the feature itself, whatever
+  // skip_tutorial says, because the prompt is not merely cosmetic:
+  //
+  //     if (HasFlow() || o.store_open || !t.feature_store) { ... }
+  //     else { o.store_open = true; SetFlow("STORE_LEADER"); }
+  //
+  // and STORE_LEADER carries a GIVE_GEM action worth 20 gems. The game sets
+  // o.store_open in memory when it fires and leaves saving to whatever runs
+  // next, so a flow that fires before the flag is persisted pays out again on
+  // the following start -- free gems on every restart.
+  //
+  // Under AP these features unlock when the multiworld says so rather than
+  // when the player earns them, so the prompt fires at an arbitrary moment
+  // anyway. Marking it seen at the same instant the feature turns on closes
+  // the window entirely.
+  const FEATURE_PROMPT_FLAGS = {
+    feature_store:     ['store_open', 'store_intro'],
+    feature_almanac:   ['almanac_open', 'almanac_intro'],
+    feature_zengarden: ['zengarden_open', 'zengarden_intro'],
+  };
+
   // The game's LevelProgress enum: locked 0, unlocked_neverPlayed 1,
   // unlocked_played 2, unlocked_willbeFinished 3, finished 4. 3 is what
   // rebuildAPSave writes for a checked location and what most of the chain
@@ -2096,6 +2118,15 @@ window.electron = electron;
         feats[flag] = true;
         opened.push(flag);
       }
+    }
+    // Mark the first-time prompt seen for every feature that is ON, not just
+    // the ones turned on just now: a save where the feature was already true
+    // would otherwise never pass through the branch above, and the flow would
+    // still be waiting to fire on it.
+    for (const flag of Object.keys(FEATURE_PROMPT_FLAGS)) {
+      if (!feats[flag]) continue;
+      const tut = cp.tutorial || (cp.tutorial = {});
+      for (const t of FEATURE_PROMPT_FLAGS[flag]) tut[t] = true;
     }
     return opened;
   }

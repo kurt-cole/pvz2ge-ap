@@ -10,16 +10,14 @@ const FEATURE_UNLOCK_LEVELS = {
   feature_store:     [['egypt6', 3]],
 };
 
-// The game's LevelProgress enum: locked 0, unlocked_neverPlayed 1,
-// unlocked_played 2, unlocked_willbeFinished 3, finished 4. 3 is what
-// rebuildAPSave writes for a checked location and what most of the chain
-// compares against; the thresholds above name their own so the two coins
-// conditions stay distinguishable.
+const FEATURE_PROMPT_FLAGS = {
+  feature_store:     ['store_open', 'store_intro'],
+  feature_almanac:   ['almanac_open', 'almanac_intro'],
+  feature_zengarden: ['zengarden_open', 'zengarden_intro'],
+};
+
 const PROGRESS_FINISHED = 3;
 
-// Returns the flags it turned on, so the caller can log a change without
-// logging every poll. Never turns one off: the game's chain does not either,
-// and a flag that flickered would hide the store button mid-session.
 function syncFeatureFlags(cp) {
   const opened = [];
   if (!cp) return opened;
@@ -40,7 +38,17 @@ function syncFeatureFlags(cp) {
       opened.push(flag);
     }
   }
+  // Mark the first-time prompt seen for every feature that is ON, not just
+  // the ones turned on just now: a save where the feature was already true
+  // would otherwise never pass through the branch above, and the flow would
+  // still be waiting to fire on it.
+  for (const flag of Object.keys(FEATURE_PROMPT_FLAGS)) {
+    if (!feats[flag]) continue;
+    const tut = cp.tutorial || (cp.tutorial = {});
+    for (const t of FEATURE_PROMPT_FLAGS[flag]) tut[t] = true;
+  }
   return opened;
 }
 
-module.exports = { syncFeatureFlags, FEATURE_UNLOCK_LEVELS, PROGRESS_FINISHED };
+module.exports = { syncFeatureFlags, FEATURE_UNLOCK_LEVELS,
+                   FEATURE_PROMPT_FLAGS, PROGRESS_FINISHED };
