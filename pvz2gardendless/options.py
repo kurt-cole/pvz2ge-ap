@@ -327,6 +327,14 @@ class TrapPercentage(Range):
     rest of the level. Traps received outside a level are held and applied when
     the next level starts.
 
+    Costume Shuffle Trap re-rolls which costume every dressed plant is wearing,
+    including taking some back off.
+
+    -500 Coins and -20 Gems take that much off your balance, which is about
+    what one coin or gem filler item gives. They can never take you below zero:
+    a trap larger than your balance empties it and the rest is forgiven, never
+    held against money you earn later.
+
     0 disables traps entirely.
     """
     display_name = "Trap Percentage"

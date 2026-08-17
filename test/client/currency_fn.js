@@ -98,6 +98,44 @@ function observeCurrency(wipeSuspected){
   if(dirty) svSt();
 }
 
+function applyCurrencyTraps(){
+  const APP = window._AP_AllPlayerProperties;
+  const cp  = APP ? APP.currentPlayer : null;
+  if(!cp) return []; // retried from rebuildAPSave() on the next poll
+  const taken = [];
+  let cleared = false;
+  for(const c of CURRENCY_FIELDS){
+    const debtKey = c.field + 'Debt';
+    const debt = st[debtKey] || 0;
+    if(debt <= 0) continue;
+    const have = cp[c.field] || 0;
+    const take = Math.min(have, debt);
+    const left = have - take;
+    st[debtKey] = 0;          // forgiven, not carried
+    cleared = true;
+    // Nothing to take from an empty balance. The debt is still cleared, but
+    // it is not reported: the caller toasts whatever comes back, and a
+    // "-0 Coins" toast is a lie about what happened.
+    if(take <= 0) continue;
+    // Through the component where there is one, so the display and the save
+    // agree -- writing cp behind a live component's back leaves it holding
+    // the old number for the next add to push back over the save.
+    const comp = c.cls() && c.cls().component;
+    if(comp && typeof comp.value === 'number'){
+      try { comp.value = left; } catch(e) { cp[c.field] = left; }
+    } else {
+      cp[c.field] = left;
+    }
+    st[c.seen] = left;        // the ledger follows a trap down
+    taken.push([c.field, take]);
+  }
+  if(taken.length){
+    try { APP.savePP(); } catch(e) {}
+  }
+  if(cleared) svSt();
+  return taken;
+}
+
 function reset(state, players) {
   for (const k of Object.keys(st)) delete st[k];
   Object.assign(st, state);
@@ -115,6 +153,7 @@ function restoreDone(v) {
 
 module.exports = {
   restoreLostCurrency, observeCurrency, currencyComponentChanged,
+  applyCurrencyTraps,
   syncCurrencyDisplay, CURRENCY_FIELDS,
   st, window, reset, restoreDone, savedCount: () => saved,
 };

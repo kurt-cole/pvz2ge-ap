@@ -2292,6 +2292,14 @@ window.electron = electron;
     const _restored = restoreLostCurrency();
     if(_restored.length) log('Restored balance the display overwrote: ' + _restored.join(', '));
     applyPendingCurrency();
+    // After the grants, so a grant and a trap arriving in the same batch net
+    // out in the player's favour rather than the trap taking from the older,
+    // smaller balance.
+    const _taken = applyCurrencyTraps();
+    for(const t of _taken){
+      toast((t[0] === 'coin' ? '🪙 ' : '💎 ') + '-' + t[1]
+            + (t[0] === 'coin' ? ' Coins' : ' Gems'), '#f66');
+    }
     syncCurrencyDisplay();
     observeCurrency(_compChanged);
   }
@@ -2781,6 +2789,21 @@ window.electron = electron;
     // grant whenever currentPlayer isn't loaded yet -- which is exactly the
     // case during the Sync item replay right after connecting -- and
     // st.lastIdx would then stop it from ever being reprocessed.
+    // Currency traps ("-500 Coins", "-20 Gems"). Queued rather than applied
+    // inline for the same reason grants are: currentPlayer is often absent
+    // during the post-connect Sync replay, and st.lastIdx would stop a dropped
+    // one from ever being reprocessed. Queued as a running total per currency,
+    // so several arriving at once are taken together.
+    const currencyTrapMatch = /^-(\d+) (Coins|Gems)$/.exec(name);
+    if(currencyTrapMatch){
+      const amount = parseInt(currencyTrapMatch[1], 10);
+      const isCoin = currencyTrapMatch[2] === 'Coins';
+      const key = isCoin ? 'coinDebt' : 'gemDebt';
+      st[key] = (st[key]||0) + amount;
+      svSt();
+      applyCurrencyTraps();
+      return;
+    }
     const currencyMatch = /^(\d+) (Coins|Gems)$/.exec(name);
     if(currencyMatch){
       const amount = parseInt(currencyMatch[1], 10);
@@ -2870,6 +2893,57 @@ window.electron = electron;
     }
     if(restored.length){ try { APP.savePP(); } catch(e) {} }
     return restored;
+  }
+
+  // Currency traps take from the balance. Queued as a debt per currency
+  // (st.coinDebt/gemDebt) because currentPlayer is often absent when the item
+  // arrives; the debt is cleared as soon as a player exists.
+  //
+  // A trap can never push a balance below zero. It takes min(balance, debt)
+  // and FORGIVES the remainder rather than holding it against future income:
+  // a hidden debt that silently ate the next coins earned would be a much
+  // nastier item than the one the option describes.
+  //
+  // The ledger is lowered by hand here rather than left to observeCurrency.
+  // A trap that empties a balance is a legitimate drop to exactly zero, which
+  // is otherwise the one case observeCurrency refuses to record -- so without
+  // this the next restore would hand the money straight back.
+  function applyCurrencyTraps(){
+    const APP = window._AP_AllPlayerProperties;
+    const cp  = APP ? APP.currentPlayer : null;
+    if(!cp) return []; // retried from rebuildAPSave() on the next poll
+    const taken = [];
+    let cleared = false;
+    for(const c of CURRENCY_FIELDS){
+      const debtKey = c.field + 'Debt';
+      const debt = st[debtKey] || 0;
+      if(debt <= 0) continue;
+      const have = cp[c.field] || 0;
+      const take = Math.min(have, debt);
+      const left = have - take;
+      st[debtKey] = 0;          // forgiven, not carried
+      cleared = true;
+      // Nothing to take from an empty balance. The debt is still cleared, but
+      // it is not reported: the caller toasts whatever comes back, and a
+      // "-0 Coins" toast is a lie about what happened.
+      if(take <= 0) continue;
+      // Through the component where there is one, so the display and the save
+      // agree -- writing cp behind a live component's back leaves it holding
+      // the old number for the next add to push back over the save.
+      const comp = c.cls() && c.cls().component;
+      if(comp && typeof comp.value === 'number'){
+        try { comp.value = left; } catch(e) { cp[c.field] = left; }
+      } else {
+        cp[c.field] = left;
+      }
+      st[c.seen] = left;        // the ledger follows a trap down
+      taken.push([c.field, take]);
+    }
+    if(taken.length){
+      try { APP.savePP(); } catch(e) {}
+    }
+    if(cleared) svSt();
+    return taken;
   }
 
   // The HUD component's setter writes an ABSOLUTE value, not a delta:

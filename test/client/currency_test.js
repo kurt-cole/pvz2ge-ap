@@ -13,7 +13,8 @@
 // apart, with nothing else touching cp.
 const {
   restoreLostCurrency, observeCurrency, currencyComponentChanged,
-  syncCurrencyDisplay, st, window, reset, restoreDone, savedCount,
+  syncCurrencyDisplay, applyCurrencyTraps, st, window, reset, restoreDone,
+  savedCount,
 } = require('./currency_fn.js');
 
 let failed = 0;
@@ -263,6 +264,71 @@ syncCurrencyDisplay();
 observeCurrency(wiped);
 is([p.currentPlayer.coin, st.coinSeen], [2620, 2620],
    'wipe repaired in-pass, ledger intact');
+
+console.log('\n  currency traps take, but never below zero');
+
+// "-500 Coins" / "-20 Gems" arrive as a debt on st, because currentPlayer is
+// often absent during the post-connect Sync replay.
+p = players(3190, 60);
+reset({ coinSeen: 3190, gemSeen: 60, coinDebt: 500, gemDebt: 20 }, p);
+is(applyCurrencyTraps(), [['coin', 500], ['gem', 20]], 'both debts are taken');
+is([p.currentPlayer.coin, p.currentPlayer.gem], [2690, 40], 'balances drop by the amount');
+is([st.coinSeen, st.gemSeen], [2690, 40], 'the ledger follows the trap down');
+is([st.coinDebt, st.gemDebt], [0, 0], 'the debt is cleared');
+
+// The whole point: a trap bigger than the balance empties it and stops.
+p = players(200, 5);
+reset({ coinSeen: 200, gemSeen: 5, coinDebt: 500, gemDebt: 20 }, p);
+is(applyCurrencyTraps(), [['coin', 200], ['gem', 5]], 'only what is there is taken');
+is([p.currentPlayer.coin, p.currentPlayer.gem], [0, 0], 'the balance floors at zero');
+is([st.coinSeen, st.gemSeen], [0, 0], 'and the ledger floors with it');
+
+// The remainder is forgiven, not carried -- a hidden debt eating later income
+// would be a far nastier item than the option describes.
+is([st.coinDebt, st.gemDebt], [0, 0], 'the excess is forgiven, not held');
+is(applyCurrencyTraps(), [], 'nothing is taken from an empty balance afterwards');
+
+// An emptied balance must survive the restore, or the trap refunds itself.
+// This is why the ledger is lowered by hand in applyCurrencyTraps:
+// observeCurrency refuses to record a drop to exactly zero when a display was
+// rebuilt, so nothing else would lower it.
+//
+// In rebuildAPSave order: restore runs first, so the trap always applies to a
+// repaired balance rather than a wiped one.
+p = players(0, 0);                       // wiped by a rebuilt display
+reset({ coinSeen: 500, gemSeen: 20, coinDebt: 500, gemDebt: 20 }, p);
+is(restoreLostCurrency(), ['coin +500', 'gem +20'], 'the wipe is repaired first');
+is(applyCurrencyTraps(), [['coin', 500], ['gem', 20]], '...then the trap takes it');
+is([p.currentPlayer.coin, st.coinSeen], [0, 0], 'balance and ledger both at zero');
+restoreDone(false);
+is(restoreLostCurrency(), [], 'a trapped-to-zero balance is not handed back');
+
+// Already broke: nothing to take, nothing reported.
+p = players(0, 0);
+reset({ coinSeen: 0, gemSeen: 0, coinDebt: 500 }, p);
+is(applyCurrencyTraps(), [], 'no balance, nothing taken');
+is(st.coinDebt, 0, '...and the debt still clears rather than lurking');
+
+// Goes through the display where there is one, so the counter agrees.
+p = players(1000, 0);
+reset({ coinSeen: 1000, gemSeen: 0, coinDebt: 400 }, p);
+window._AP_CoinCount = realHud(p.currentPlayer, 'coin', 'addCoinCount', 1000);
+applyCurrencyTraps();
+is([p.currentPlayer.coin, window._AP_CoinCount.component.value], [600, 600],
+   'the on-screen counter drops with the balance');
+
+// No player yet: the debt is kept for the next poll rather than lost.
+reset({ coinSeen: 500, gemSeen: 0, coinDebt: 500 }, null);
+is(applyCurrencyTraps(), [], 'no player: nothing happens yet');
+is(st.coinDebt, 500, '...and the debt survives for the retry');
+window._AP_AllPlayerProperties = players(500, 0);
+is(applyCurrencyTraps(), [['coin', 500]], 'applied once the player arrives');
+
+// Debts accumulate when several traps land together.
+p = players(3000, 0);
+reset({ coinSeen: 3000, gemSeen: 0, coinDebt: 1500 }, p);   // three -500 traps
+is(applyCurrencyTraps(), [['coin', 1500]], 'stacked traps are taken together');
+is(p.currentPlayer.coin, 1500, '...for the full amount');
 
 if (failed) {
   console.log(`\n${failed} FAILURE(S)`);

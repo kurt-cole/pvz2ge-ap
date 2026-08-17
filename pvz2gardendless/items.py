@@ -266,13 +266,37 @@ COSTUME_TRAP_ITEMS: List[PvZ2ItemData] = [
                  _upgrade_base + len(UPGRADE_ITEMS) + len(COSTUME_ITEMS)),
 ]
 
+# Currency traps: the filler block's mirror image. Named with a leading minus
+# so the client can read the amount straight off the name, the same way it does
+# for "500 Coins" -- one regex either side, and no table to drift.
+#
+# Sized at the middle of each filler range (500 of 100/500/1000, 20 of
+# 10/20/50), so a trap costs about what one filler grant gives.
+#
+# A trap can never push a balance below zero: the client takes
+# min(balance, amount) and forgives the rest rather than carrying a debt that
+# would silently eat later income.
+#
+# Appended past the costume trap for the same reason that was appended past the
+# upgrades -- TRAP_ITEMS is the block UPGRADE_ITEMS is numbered from, so it
+# cannot grow.
+COIN_TRAP = "-500 Coins"
+GEM_TRAP  = "-20 Gems"
+_currency_trap_base = (_upgrade_base + len(UPGRADE_ITEMS) + len(COSTUME_ITEMS)
+                       + len(COSTUME_TRAP_ITEMS))
+CURRENCY_TRAP_ITEMS: List[PvZ2ItemData] = [
+    PvZ2ItemData(name, ItemClassification.trap, _currency_trap_base + i)
+    for i, name in enumerate([COIN_TRAP, GEM_TRAP])
+]
+
 # Every trap the pool builder deals out, and the order it rotates through.
-TRAP_POOL: List[PvZ2ItemData] = TRAP_ITEMS + COSTUME_TRAP_ITEMS
+TRAP_POOL: List[PvZ2ItemData] = (TRAP_ITEMS + COSTUME_TRAP_ITEMS
+                                 + CURRENCY_TRAP_ITEMS)
 TRAP_CYCLE = [t.name for t in TRAP_POOL]
 
 ALL_ITEMS: List[PvZ2ItemData] = (PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS
                                  + TRAP_ITEMS + UPGRADE_ITEMS + COSTUME_ITEMS
-                                 + COSTUME_TRAP_ITEMS)
+                                 + COSTUME_TRAP_ITEMS + CURRENCY_TRAP_ITEMS)
 ITEM_NAME_TO_ITEM: Dict[str, PvZ2ItemData] = {item.name: item for item in ALL_ITEMS}
 ITEM_NAME_TO_ID: Dict[str, int]        = {item.name: item.code for item in ALL_ITEMS}
 

@@ -321,12 +321,15 @@ from pvz2gardendless.constants import UPGRADE_GROUPS, UPGRADE_ITEM_COUNT
 # every block added before it. Declared in the order blocks were introduced,
 # so adding a new one only means appending it here.
 from pvz2gardendless.items import (PLANT_ITEMS, KEY_ITEMS, FILLER_ITEMS,
-                                   TRAP_ITEMS, COSTUME_TRAP_ITEMS)
+                                   TRAP_ITEMS, COSTUME_TRAP_ITEMS,
+                                   CURRENCY_TRAP_ITEMS, TRAP_POOL,
+                                   COIN_TRAP, GEM_TRAP)
 BLOCKS = [
     ("plants+keys+filler+traps", PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS + TRAP_ITEMS),
     ("upgrades", UPGRADE_ITEMS),
     ("costume filler", COSTUME_ITEMS),
     ("costume trap", COSTUME_TRAP_ITEMS),
+    ("currency traps", CURRENCY_TRAP_ITEMS),
 ]
 for bi in range(1, len(BLOCKS)):
     name, block = BLOCKS[bi]
@@ -337,6 +340,34 @@ assert sum(len(b) for _, b in BLOCKS) == len(ALL_ITEMS), "a block is unaccounted
 assert set(FILLER_CYCLE) == {f.name for f in FILLER_POOL}
 assert any(i.name == "Random Plant Costume" for i in COSTUME_ITEMS)
 assert len({i.code for i in ALL_ITEMS}) == len(ALL_ITEMS), "duplicate item IDs"
+
+# ── currency traps ──────────────────────────────────────────────────────────
+# The client reads the amount straight off the item name, so the names have to
+# stay parseable by its regex -- one leading minus, a number, then the currency.
+import re as _re_ct
+from apstub import ItemClassification as _IC_ct
+_ct_re = _re_ct.compile(r"^-(\d+) (Coins|Gems)$")
+for _t in CURRENCY_TRAP_ITEMS:
+    assert _ct_re.match(_t.name), f"client cannot parse trap name {_t.name!r}"
+    assert _t.classification == _IC_ct.trap, f"{_t.name} is not classified as a trap"
+# ...and must NOT be mistaken for a grant by the client's positive regex.
+_grant_re = _re_ct.compile(r"^(\d+) (Coins|Gems)$")
+for _t in CURRENCY_TRAP_ITEMS:
+    assert not _grant_re.match(_t.name), f"{_t.name} would read as a grant"
+# The pool builder only ever hands out TRAP_CYCLE entries, so a trap missing
+# from the pool would exist as an item nothing could ever deal.
+assert {COIN_TRAP, GEM_TRAP} <= {t.name for t in TRAP_POOL},     "currency traps are not in the trap pool, so nothing would deal them"
+# They are traps, not filler -- get_filler_item_name must never return one.
+assert not ({COIN_TRAP, GEM_TRAP} & {f.name for f in FILLER_POOL}),     "a currency trap leaked into the filler pool"
+
+# A seed with traps on actually contains them, and one with traps off does not.
+_wt, _ = run("currency traps at 100%", trap_percentage=100)
+_names = [i.name for i in _wt.multiworld.itempool]
+assert COIN_TRAP in _names and GEM_TRAP in _names, "traps on: no currency traps dealt"
+_wn, _ = run("traps off", trap_percentage=0)
+_off = {i.name for i in _wn.multiworld.itempool}
+assert not ({COIN_TRAP, GEM_TRAP} & _off), "traps off: a currency trap was still dealt"
+print("currency traps: dealt when asked for, absent when not")
 _allcn = [cn for _, cns in UPGRADE_GROUPS for cn in cns]
 assert len(set(_allcn)) == 14 == UPGRADE_ITEM_COUNT, "codenames not 14 distinct"
 assert len(UPGRADE_ITEM_TO_CNS) == 8, "expected 8 distinct upgrade item names"
