@@ -527,6 +527,33 @@ DANGER_ROOM_LOCATIONS = frozenset({
 })
 
 
+# Levels the game defines but never attaches to a map, so nothing can launch
+# them and their checks can never fire by playing.
+#
+# VERIFIED, not assumed (2026-08-16): each of these appears in exactly ONE
+# resource file, `import/02/02ed09922.json`, which holds level definitions.
+# They are absent from the world tables (`import/01/01c3025f0.json`), from
+# every world's map-node data (e.g. `import/06/0611992e3.json` for Egypt), and
+# from index.js entirely -- zero references. A live level like egypt35 or
+# egypt_dangerroom appears in four files by comparison.
+#
+# They were reachable in logic, so fill could put a world key or a gated plant
+# on one and leave the seed uncompletable -- and random_zomboss_egypt sat in
+# Ancient Egypt's opening stretch, making it a PREFERRED early-fill target.
+#
+# Dropped in active_locations() rather than deleted from the table below: the
+# IDs there are assigned by increment, so removing an entry would renumber
+# every location after it and break seeds already generated.
+UNREACHABLE_LOCATIONS = frozenset({
+    "random_egypt",   "random_zomboss_egypt",
+    "random_pirate",  "random_zomboss_pirate",
+    "random_cowboy",  "random_zomboss_cowboy",
+    "random_future",  "random_zomboss_future",
+    "random_dark",    "random_zomboss_dark",
+    "random_beach",   # no random_zomboss_beach exists
+})
+
+
 # Every side path named above has to be a real region, or its entry silently
 # gates nothing.
 _unknown_side_paths = set(SIDE_PATH_WORLD) - set(SIDE_PATH_REGIONS)

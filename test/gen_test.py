@@ -341,6 +341,42 @@ assert set(FILLER_CYCLE) == {f.name for f in FILLER_POOL}
 assert any(i.name == "Random Plant Costume" for i in COSTUME_ITEMS)
 assert len({i.code for i in ALL_ITEMS}) == len(ALL_ITEMS), "duplicate item IDs"
 
+# ── unreachable levels are never built ──────────────────────────────────────
+# The eleven random_* levels are defined in the game data but attached to no
+# map node, so nothing can launch them and their checks can never fire. They
+# were reachable in LOGIC, so fill could bury a world key on one.
+#
+# Checked across every option combination, because the point is that no
+# setting brings them back.
+for _label, _kw in (("default", {}),
+                    ("side paths + danger rooms", dict(include_side_paths=1,
+                                                       include_danger_rooms=1)),
+                    ("shopsanity", dict(shopsanity=1)),
+                    ("one world", dict(world_count=1, worlds_required=11))):
+    _uw, _ = run(f"unreachable: {_label}", **_kw)
+    _built = {l.name for l in _uw.active_locations()}
+    _leak = sorted(C.UNREACHABLE_LOCATIONS & _built)
+    assert not _leak, f"{_label}: unreachable locations built: {_leak}"
+    # ...and nothing else went with them.
+    assert len(_built) == len({l.name for l in _uw.active_locations()})
+print(f"none of the {len(C.UNREACHABLE_LOCATIONS)} unreachable levels is ever built")
+
+# They must still exist in the static table: AP requires location_name_to_id to
+# be constant, and the IDs after them would renumber if one were deleted.
+from pvz2gardendless.locations import ALL_LOCATIONS as _ALL_L, LOC_NAME_TO_ID
+for _n in C.UNREACHABLE_LOCATIONS:
+    assert _n in LOC_NAME_TO_ID, f"{_n} was deleted from the table, renumbering IDs"
+# The set is exactly the random_* family -- if a new one is added to the game
+# data it must be added here too, and nothing else may be swept in.
+_rand = {l.name for l in _ALL_L if l.name.startswith("random_")}
+assert _rand == set(C.UNREACHABLE_LOCATIONS),     f"random_* family and UNREACHABLE_LOCATIONS disagree: {_rand ^ set(C.UNREACHABLE_LOCATIONS)}"
+# No goal or victory condition may depend on one, in any goal mode.
+for _gt in (0, 1, 2):
+    _gw, _gsd = run(f"unreachable: goal_type={_gt}", goal_type=_gt, worlds_required=11)
+    for _g in _gsd["goal_locations"]:
+        assert _g not in C.UNREACHABLE_LOCATIONS, f"goal {_g} is unreachable in game"
+    assert _gsd["modern_day_victory"] not in C.UNREACHABLE_LOCATIONS
+
 # ── currency traps ──────────────────────────────────────────────────────────
 # The client reads the amount straight off the item name, so the names have to
 # stay parseable by its regex -- one leading minus, a number, then the currency.

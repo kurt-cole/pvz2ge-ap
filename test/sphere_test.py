@@ -146,6 +146,26 @@ def report(label, **kw):
     return w
 
 
+# The eleven random_* levels are defined in the game data but attached to no
+# map node, so their checks can never fire. They used to be reachable in logic,
+# and random_zomboss_egypt sat in Ancient Egypt's opening stretch -- a
+# preferred early-fill target that no player could ever check.
+_mwU, _wU = build()
+_sphere1 = {l.name for l in state_with(_mwU, [i.name for i in _mwU.precollected])
+            .reachable_locations()}
+from pvz2gardendless.constants import UNREACHABLE_LOCATIONS
+_bad = sorted(UNREACHABLE_LOCATIONS & _sphere1)
+if _bad:
+    fail(f"unreachable levels are in sphere 1: {_bad}")
+else:
+    ok(f"none of the {len(UNREACHABLE_LOCATIONS)} unreachable levels is in sphere 1")
+_placedU = {l.name for r in _mwU.regions for l in r.locations}
+_bad2 = sorted(UNREACHABLE_LOCATIONS & _placedU)
+if _bad2:
+    fail(f"unreachable levels were built into regions: {_bad2}")
+else:
+    ok("...and none is built into a region at all")
+
 report("all worlds, default")
 report("all worlds + shuffle_zombies", shuffle_zombies=1)
 report("all worlds + shopsanity", shopsanity=1)

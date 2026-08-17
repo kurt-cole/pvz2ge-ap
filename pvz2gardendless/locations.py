@@ -10,7 +10,7 @@ from BaseClasses import Location
 from .constants import (
     ALL_WORLD_REGIONS, BASE_ID, DANGER_ROOM_LOCATIONS, GAME_NAME,
     SHOP_COMMODITIES, SHOP_REGION, SIDE_PATH_REGIONS, SIDE_PATH_WORLD,
-    WORLD_REGIONS, shop_location_name,
+    UNREACHABLE_LOCATIONS, WORLD_REGIONS, shop_location_name,
 )
 from .options import GoalType
 
@@ -846,6 +846,11 @@ def active_locations(shopsanity: bool,
     side_path_regions = set(SIDE_PATH_REGIONS)
 
     def keep(loc: PvZ2LocationData) -> bool:
+        # Never built, under any options: the game has no way to launch these
+        # levels, so their checks cannot fire. Not an option, because an
+        # unreachable check is not a preference.
+        if loc.name in UNREACHABLE_LOCATIONS:
+            return False
         if loc.is_shop and not shopsanity:
             return False
         # Checked before the region tests: a Danger Room lives in a world
