@@ -5,6 +5,7 @@
 const window = {};
 const st = {};
 let _currencyRestoreDone = false;
+let _lastCurrencyComp = {};
 let saved = 0;
 function svSt() { saved++; }
 
@@ -45,6 +46,34 @@ function restoreLostCurrency(){
   return restored;
 }
 
+function currencyComponentChanged(){
+  let changed = false;
+  for(const c of CURRENCY_FIELDS){
+    const comp = (c.cls() && c.cls().component) || null;
+    if(_lastCurrencyComp[c.field] !== comp){
+      _lastCurrencyComp[c.field] = comp;
+      if(comp) changed = true;
+    }
+  }
+  return changed;
+}
+
+function syncCurrencyDisplay(){
+  const APP = window._AP_AllPlayerProperties;
+  const cp  = APP ? APP.currentPlayer : null;
+  if(!cp) return [];
+  const fixed = [];
+  for(const c of CURRENCY_FIELDS){
+    const comp = c.cls() && c.cls().component;
+    if(!comp) continue;
+    const have = cp[c.field] || 0;
+    if(comp.value !== have){
+      try { comp.value = have; fixed.push(c.field); } catch(e) {}
+    }
+  }
+  return fixed;
+}
+
 function observeCurrency(){
   const APP = window._AP_AllPlayerProperties;
   const cp  = APP ? APP.currentPlayer : null;
@@ -61,13 +90,19 @@ function reset(state, players) {
   for (const k of Object.keys(st)) delete st[k];
   Object.assign(st, state);
   _currencyRestoreDone = false;
+  _lastCurrencyComp = {};
   saved = 0;
   window._AP_AllPlayerProperties = players;
   window._AP_CoinCount = undefined;
   window._AP_GemCount = undefined;
 }
+function restoreDone(v) {
+  if (v !== undefined) _currencyRestoreDone = v;
+  return _currencyRestoreDone;
+}
 
 module.exports = {
-  restoreLostCurrency, observeCurrency, CURRENCY_FIELDS,
-  st, window, reset, savedCount: () => saved,
+  restoreLostCurrency, observeCurrency, currencyComponentChanged,
+  syncCurrencyDisplay, CURRENCY_FIELDS,
+  st, window, reset, restoreDone, savedCount: () => saved,
 };

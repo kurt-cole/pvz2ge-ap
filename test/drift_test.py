@@ -44,7 +44,7 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # currency_fn.js harness: reset() rebuilds module scope between cases,
          # svSt counts saves. restoreLostCurrency/observeCurrency themselves
          # ARE real client functions and are checked.
-         "currency_fn.js:reset"}
+         "currency_fn.js:reset", "currency_fn.js:restoreDone"}
 
 _ws = re.compile(r"\s+")
 norm = lambda s: _ws.sub(" ", s).strip()

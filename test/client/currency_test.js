@@ -2,15 +2,18 @@
 // build_pvzge_ap.py.
 //
 // The bug being defended against, measured 2026-08-16: the game holds exactly
-// one write to a player's coin or gem in the entire bundle, the coin HUD's
-// value setter --
-//     onValueSet(n) { currentPlayer.coin = n; savePP(); }
-// -- and the component's load runs `this.value = this._shownValue` against a
-// currentPlayer that is not the loaded save yet. It reads 0 and writes that 0
-// through. Confirmed by writing 12345, reloading the page with no shutdown at
-// all, and reading 0 back.
+// one write to a player's coin or gem in the entire bundle, the HUD's value
+// setter --
+//     addCoinCount(n) { this.value += n; }   // adds to the COMPONENT
+//     onValueSet(n)   { currentPlayer.coin = n; savePP(); }
+// -- and the component seeds its own `value` from the player once, at load.
+// Whenever it loads without the real save as currentPlayer it holds 0, and the
+// next coin event of any size writes that absolute total over the balance.
+// Measured directly: cp.coin 2000 while component.value sat at 0, ten seconds
+// apart, with nothing else touching cp.
 const {
-  restoreLostCurrency, observeCurrency, st, window, reset, savedCount,
+  restoreLostCurrency, observeCurrency, currencyComponentChanged,
+  syncCurrencyDisplay, st, window, reset, restoreDone, savedCount,
 } = require('./currency_fn.js');
 
 let failed = 0;
@@ -76,8 +79,9 @@ is(window._AP_AllPlayerProperties.currentPlayer.coin, 400, '...and does not lowe
 
 console.log('\n  spending is not undone');
 
-// The wipe happens once, at boot. Everything after it that lowers the balance
-// is the player spending, and must stand.
+// The restore is spent after one run. Everything after it that lowers the
+// balance is the player spending, and must stand -- only a rebuilt component
+// re-arms it (see below).
 p = players(0, 0);
 reset({ coinSeen: 500 }, p);
 restoreLostCurrency();
@@ -129,6 +133,86 @@ reset({ coinSeen: 900 }, p);
 observeCurrency();
 is(st.coinSeen, 0,
    'observe-first would destroy it -- this is why order matters in rebuildAPSave');
+
+console.log('\n  the stale display, which is the actual bug');
+
+// The real component: `value` is its own number, and its setter writes that
+// ABSOLUTE value over the player. addCoinCount adds to the component, not to
+// the player -- measured: cp.coin 2000 + addCoinCount(2000) left cp.coin at
+// 2000, because the component went 0 -> 2000 and wrote 2000.
+const realHud = (cp, field, addName, start) => {
+  const c = {
+    _v: start,
+    get value() { return this._v; },
+    set value(n) { this._v = n; cp[field] = n; },
+  };
+  c[addName] = function (n) { this.value = this.value + n; };
+  return { component: c };
+};
+
+p = players(2000, 0);
+reset({ coinSeen: 2000 }, p);
+window._AP_CoinCount = realHud(p.currentPlayer, 'coin', 'addCoinCount', 0);
+is(window._AP_CoinCount.component.value, 0, 'component loaded stale at 0 while the player holds 2000');
+// This is the loss, reproduced: one coin picked up in a level.
+window._AP_CoinCount.component.addCoinCount(10);
+is(p.currentPlayer.coin, 10, 'a single 10-coin pickup overwrites the whole balance');
+
+// ...and with the display kept seeded, the same pickup behaves.
+p = players(2000, 0);
+reset({ coinSeen: 2000 }, p);
+window._AP_CoinCount = realHud(p.currentPlayer, 'coin', 'addCoinCount', 0);
+is(syncCurrencyDisplay(), ['coin'], 'the stale display is re-seeded from the player');
+is(window._AP_CoinCount.component.value, 2000, '...to the real balance');
+window._AP_CoinCount.component.addCoinCount(10);
+is(p.currentPlayer.coin, 2010, 'now a 10-coin pickup adds instead of erasing');
+
+// Seeding is idempotent and silent once they agree.
+is(syncCurrencyDisplay(), [], 'nothing to fix when display and player agree');
+
+// No component on this screen is not an error.
+reset({}, players(500, 0));
+is(syncCurrencyDisplay(), [], 'no component: nothing to sync');
+reset({}, null);
+is(syncCurrencyDisplay(), [], 'no player: nothing to sync');
+
+console.log('\n  a rebuilt component re-arms the restore');
+
+// The component is torn down and rebuilt on every scene change, so "once per
+// launch" is not enough -- each new one can have stamped its 0 over the save
+// before the client's next poll.
+p = players(0, 0);
+reset({ coinSeen: 900 }, p);
+restoreLostCurrency();
+is(restoreDone(), true, 'the restore is spent after running once');
+is(currencyComponentChanged(), false, 'no component at all is not a change');
+
+window._AP_CoinCount = realHud(p.currentPlayer, 'coin', 'addCoinCount', 0);
+is(currencyComponentChanged(), true, 'a component appearing counts as a change');
+is(currencyComponentChanged(), false, '...but only the first time it is seen');
+
+const firstComp = window._AP_CoinCount;
+window._AP_CoinCount = realHud(p.currentPlayer, 'coin', 'addCoinCount', 0);
+is(window._AP_CoinCount !== firstComp, true, 'scene change built a new component');
+is(currencyComponentChanged(), true, 'a REBUILT component counts again (identity, not presence)');
+
+// The whole sequence rebuildAPSave runs, against a component that just wiped.
+p = players(900, 0);
+reset({ coinSeen: 900 }, p);
+restoreLostCurrency();                               // spends the one restore
+is(p.currentPlayer.coin, 900, 'balance intact before the scene change');
+// A scene change builds a new component, which seeds itself at 0 and stamps
+// that over the player -- the loss this whole mechanism exists to catch.
+window._AP_CoinCount = realHud(p.currentPlayer, 'coin', 'addCoinCount', 0);
+window._AP_CoinCount.component.value = 0;
+is(p.currentPlayer.coin, 0, 'the new display wiped the balance');
+if (currencyComponentChanged()) restoreDone(false);
+const again = restoreLostCurrency();
+is(again, ['coin +900'], 'the rebuilt component let the restore run again');
+syncCurrencyDisplay();
+observeCurrency();
+is([p.currentPlayer.coin, window._AP_CoinCount.component.value, st.coinSeen],
+   [900, 900, 900], 'player, display and ledger all agree afterwards');
 
 if (failed) {
   console.log(`\n${failed} FAILURE(S)`);

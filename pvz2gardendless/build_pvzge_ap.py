@@ -2256,9 +2256,14 @@ window.electron = electron;
     // time, or the UI component wasn't up yet), then record the result as the
     // balance to restore to next boot. Observing last is what keeps the wiped
     // 0 from becoming the remembered balance.
+    // A newly built component may have just overwritten the balance, so let
+    // the restore run again for it. Checked before restoring, seeded after, so
+    // the component ends the pass agreeing with whatever the player now holds.
+    if(currencyComponentChanged()) _currencyRestoreDone = false;
     const _restored = restoreLostCurrency();
-    if(_restored.length) log('Restored balance lost at startup: ' + _restored.join(', '));
+    if(_restored.length) log('Restored balance the display overwrote: ' + _restored.join(', '));
     applyPendingCurrency();
+    syncCurrencyDisplay();
     observeCurrency();
   }
 
@@ -2838,9 +2843,59 @@ window.electron = electron;
     return restored;
   }
 
-  // Records what the player actually holds, so the next boot has something to
-  // restore to. Runs after restoreLostCurrency on the first poll, so the wiped
-  // 0 is never what gets recorded.
+  // The HUD component's setter writes an ABSOLUTE value, not a delta:
+  //     addCoinCount(n) { this.value += n; }   // n added to ITS value
+  //     onValueSet(n)   { currentPlayer.coin = n; savePP(); }
+  // and it seeds its own `value` from the player once, at load. Whenever it
+  // loads without the real save as currentPlayer it holds 0, and from then on
+  // the first coin event of any kind -- a single coin picked up in a level,
+  // value 0 -> 10 -- writes that absolute total straight over the balance.
+  //
+  // Measured on the world map (2026-08-16): cp.coin 2000 while component.value
+  // sat at 0, ten seconds apart, with nothing rewriting cp in between. The
+  // component simply never re-reads the player. So this is not a boot-time
+  // event; it is a stale display waiting to overwrite the save.
+  //
+  // Seeding the component from the player each poll inverts that: the display
+  // follows the save. Assigning `value` runs the same setter, so it also
+  // rewrites cp with the value it already has and saves -- idempotent.
+  let _lastCurrencyComp = {};
+
+  // A component object we have not seen before has just initialised, and may
+  // already have stamped its 0 over the balance -- so the restore is allowed
+  // to run again. Identity, not presence: the component is torn down and
+  // rebuilt on every scene change.
+  function currencyComponentChanged(){
+    let changed = false;
+    for(const c of CURRENCY_FIELDS){
+      const comp = (c.cls() && c.cls().component) || null;
+      if(_lastCurrencyComp[c.field] !== comp){
+        _lastCurrencyComp[c.field] = comp;
+        if(comp) changed = true;
+      }
+    }
+    return changed;
+  }
+
+  function syncCurrencyDisplay(){
+    const APP = window._AP_AllPlayerProperties;
+    const cp  = APP ? APP.currentPlayer : null;
+    if(!cp) return [];
+    const fixed = [];
+    for(const c of CURRENCY_FIELDS){
+      const comp = c.cls() && c.cls().component;
+      if(!comp) continue;
+      const have = cp[c.field] || 0;
+      if(comp.value !== have){
+        try { comp.value = have; fixed.push(c.field); } catch(e) {}
+      }
+    }
+    return fixed;
+  }
+
+  // Records what the player actually holds, so the next launch has something
+  // to restore to. Runs after restoreLostCurrency on the first poll, so a
+  // wiped 0 is never what gets recorded.
   function observeCurrency(){
     const APP = window._AP_AllPlayerProperties;
     const cp  = APP ? APP.currentPlayer : null;
