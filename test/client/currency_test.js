@@ -13,7 +13,8 @@
 // apart, with nothing else touching cp.
 const {
   restoreLostCurrency, observeCurrency, currencyComponentChanged,
-  syncCurrencyDisplay, applyCurrencyTraps, st, window, reset, restoreDone,
+  syncCurrencyDisplay, applyCurrencyTraps, clearWorldKeys, st, window,
+  reset, restoreDone,
   savedCount,
 } = require('./currency_fn.js');
 
@@ -329,6 +330,41 @@ p = players(3000, 0);
 reset({ coinSeen: 3000, gemSeen: 0, coinDebt: 1500 }, p);   // three -500 traps
 is(applyCurrencyTraps(), [['coin', 1500]], 'stacked traps are taken together');
 is(p.currentPlayer.coin, 1500, '...for the full amount');
+
+console.log('\n  the game\'s own world keys are confiscated');
+
+// Clearing a world-key level (egypt8 and friends) grants currentPlayer.worldkey,
+// which the game lets you spend to open ANY world -- straight past every access
+// rule in the seed. Worlds open from the "<World> Key" item alone under AP, so
+// the currency has no legitimate use and is held at zero.
+let wp = { worldkey: 3 };
+reset({}, { currentPlayer: wp, savePP() {} });
+is(clearWorldKeys(wp), 3, 'reports how many were taken');
+is(wp.worldkey, 0, '...and the count is zero');
+is(clearWorldKeys(wp), 0, 'nothing to take on the next poll');
+
+// WorldKeyCount has the same absolute-write setter as the coin HUD, so this
+// must go through the component -- setting the player alone would leave the
+// display holding the old count for the next addKeyCount to write back.
+wp = { worldkey: 2 };
+reset({}, { currentPlayer: wp, savePP() {} });
+window._AP_WorldKeyCount = realHud(wp, 'worldkey', 'addKeyCount', 2);
+is(clearWorldKeys(wp), 2, 'taken through the component');
+is([wp.worldkey, window._AP_WorldKeyCount.component.value], [0, 0],
+   'player and display both at zero');
+// ...and the display cannot then put them back.
+window._AP_WorldKeyCount.component.addKeyCount(1);
+is(wp.worldkey, 1, 'a later grant adds from zero rather than from a stale 2');
+
+// A display already at zero while the player still holds keys.
+wp = { worldkey: 4 };
+reset({}, { currentPlayer: wp, savePP() {} });
+window._AP_WorldKeyCount = realHud(wp, 'worldkey', 'addKeyCount', 0);
+is(clearWorldKeys(wp), 4, 'still reported');
+is(wp.worldkey, 0, '...and still cleared');
+
+is(clearWorldKeys(null), 0, 'no player: nothing happens');
+is(clearWorldKeys({}), 0, 'a player with no worldkey field is fine');
 
 if (failed) {
   console.log(`\n${failed} FAILURE(S)`);

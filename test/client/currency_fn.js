@@ -136,6 +136,19 @@ function applyCurrencyTraps(){
   return taken;
 }
 
+function clearWorldKeys(cp){
+  if(!cp) return 0;
+  const had = cp.worldkey || 0;
+  const comp = window._AP_WorldKeyCount && window._AP_WorldKeyCount.component;
+  if(comp && typeof comp.value === 'number'){
+    if(comp.value !== 0){ try { comp.value = 0; } catch(e) { cp.worldkey = 0; } }
+    else if(had) cp.worldkey = 0;
+  } else if(had){
+    cp.worldkey = 0;
+  }
+  return had;
+}
+
 function reset(state, players) {
   for (const k of Object.keys(st)) delete st[k];
   Object.assign(st, state);
@@ -145,6 +158,7 @@ function reset(state, players) {
   window._AP_AllPlayerProperties = players;
   window._AP_CoinCount = undefined;
   window._AP_GemCount = undefined;
+  window._AP_WorldKeyCount = undefined;
 }
 function restoreDone(v) {
   if (v !== undefined) _currencyRestoreDone = v;
@@ -153,7 +167,7 @@ function restoreDone(v) {
 
 module.exports = {
   restoreLostCurrency, observeCurrency, currencyComponentChanged,
-  applyCurrencyTraps,
+  applyCurrencyTraps, clearWorldKeys,
   syncCurrencyDisplay, CURRENCY_FIELDS,
   st, window, reset, restoreDone, savedCount: () => saved,
 };

@@ -249,6 +249,9 @@ window.electron = electron;
     'levelController': function(v) { window._AP_levelController = v; installConveyorHook(v); },
     'CoinCount': function(v) { window._AP_CoinCount = v; },
     'GemCount':  function(v) { window._AP_GemCount  = v; },
+    // World keys are the game's own currency for unlocking worlds, and under
+    // AP they are a way around every access rule -- see clearWorldKeys().
+    'WorldKeyCount': function(v) { window._AP_WorldKeyCount = v; },
     // Square.getLane(0..4) is how the Lawn Mower Trap reaches each lane's
     // mower.
     'Square':    function(v) { window._AP_Square    = v; },
@@ -2225,6 +2228,13 @@ window.electron = electron;
       if(lvl) cp.levelProps[lvl] = { progress: 3 };
     }
 
+    // 3b. Take back the game's own world-key currency. Every poll, not once:
+    // the key level can be beaten at any time, and the count is granted the
+    // moment it is.
+    const _hadKeys = clearWorldKeys(cp);
+    if(_hadKeys) log('Removed ' + _hadKeys + ' world key(s) the game granted; '
+                     + 'worlds open from Archipelago items only');
+
     // 4. Unlock worlds for received keys.
     if(!cp.worldProps) cp.worldProps = {};
     const unlockWorld = (wid) => {
@@ -2893,6 +2903,35 @@ window.electron = electron;
     }
     if(restored.length){ try { APP.savePP(); } catch(e) {} }
     return restored;
+  }
+
+  // ── World keys ────────────────────────────────────────────────────────────
+  // The game hands out its own world-key currency for clearing a world's key
+  // level (egypt8 and friends) and lets you spend it to open any world you
+  // like. Under AP that is a way around every access rule in the seed: a world
+  // Archipelago has not sent the key for can be opened and played anyway, and
+  // its checks then fire out of logic.
+  //
+  // Worlds are opened here by receiving the "<World> Key" ITEM, which
+  // rebuildAPSave turns into worldProps[id].unlocked. So the game's own
+  // currency has no legitimate use under AP and is held at zero.
+  //
+  // Same shape as the coin and gem HUD -- WorldKeyCount.onValueSet writes
+  // currentPlayer.worldkey and saves, and its `value` is an absolute total
+  // seeded once at load. So this goes through the component where there is
+  // one; setting the player alone would leave the display holding the old
+  // count for the next addKeyCount to write straight back.
+  function clearWorldKeys(cp){
+    if(!cp) return 0;
+    const had = cp.worldkey || 0;
+    const comp = window._AP_WorldKeyCount && window._AP_WorldKeyCount.component;
+    if(comp && typeof comp.value === 'number'){
+      if(comp.value !== 0){ try { comp.value = 0; } catch(e) { cp.worldkey = 0; } }
+      else if(had) cp.worldkey = 0;
+    } else if(had){
+      cp.worldkey = 0;
+    }
+    return had;
   }
 
   // Currency traps take from the balance. Queued as a debt per currency
