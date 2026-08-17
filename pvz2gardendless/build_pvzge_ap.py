@@ -2033,16 +2033,42 @@ window.electron = electron;
   // not the flag. Re-deriving it from progress on every rebuild makes that
   // self-correcting.
   //
-  // Only the store is listed. The same chain drives feature_coins (tutorial4),
-  // feature_powerup and feature_zengarden (egypt5) and feature_almanac
-  // (egypt2), and each is a one-line addition here -- but each also changes
-  // what a level does rather than just what a button shows, so they are a
-  // separate decision.
-  const FEATURE_UNLOCK_LEVELS = { feature_store: 'egypt6' };
+  // Confirmed against a real save (2026-08-16): a slot with egypt1, tutorial1-4
+  // and eleven Modern Day levels checked had ALL NINE flags still false. The
+  // chain evidently runs when the save is loaded, before the client has
+  // rebuilt levelProps from the multiworld, and not again -- so under AP these
+  // never turn on by themselves. That is not only a missing store button:
+  //
+  //     feature_plantfood || (this.showPlantfood = false)
+  //     feature_powerup   || (this.showPowerUps  = false)
+  //     feature_coins     || (this.dropCoins     = false)
+  //     feature_zengarden || (this.dropSprouts   = false)
+  //
+  // With feature_coins false, zombies drop no coins at all, which is why an AP
+  // save can show currency granted by the multiworld and none ever earned.
+  //
+  // Each flag lists [level, threshold] pairs and needs any ONE of them, which
+  // is how the game writes it: coins unlock on tutorial4 being finished OR on
+  // egypt1 being merely unlocked (> locked, so 1 rather than 3).
+  //
+  // feature_lod and feature_worldkeys are deliberately absent: neither is ever
+  // set to true anywhere in index.js, so there is no condition to mirror and
+  // inventing one would grant something the game never grants.
+  const FEATURE_UNLOCK_LEVELS = {
+    feature_almanac:   [['egypt2', 3]],
+    feature_coins:     [['tutorial4', 3], ['egypt1', 1]],
+    feature_plantfood: [['egypt1', 3]],
+    feature_worldmap:  [['egypt1', 3]],
+    feature_powerup:   [['egypt5', 3]],
+    feature_zengarden: [['egypt5', 3]],
+    feature_store:     [['egypt6', 3]],
+  };
 
-  // The game's LevelProgress enum: 3 is unlocked_willbeFinished, which is both
-  // what its own unlock checks compare against and what rebuildAPSave writes
-  // for a checked location. Anything below it is not a clear.
+  // The game's LevelProgress enum: locked 0, unlocked_neverPlayed 1,
+  // unlocked_played 2, unlocked_willbeFinished 3, finished 4. 3 is what
+  // rebuildAPSave writes for a checked location and what most of the chain
+  // compares against; the thresholds above name their own so the two coins
+  // conditions stay distinguishable.
   const PROGRESS_FINISHED = 3;
 
   // Returns the flags it turned on, so the caller can log a change without
@@ -2058,9 +2084,12 @@ window.electron = electron;
     // the game's own all-false constructor leaves them.
     const feats = cp.features || (cp.features = {});
     for (const flag of Object.keys(FEATURE_UNLOCK_LEVELS)) {
-      const entry = levels[FEATURE_UNLOCK_LEVELS[flag]];
-      const progress = entry && entry.progress;
-      if (!feats[flag] && progress >= PROGRESS_FINISHED) {
+      if (feats[flag]) continue;
+      const met = FEATURE_UNLOCK_LEVELS[flag].some(function(cond) {
+        const entry = levels[cond[0]];
+        return !!entry && entry.progress >= cond[1];
+      });
+      if (met) {
         feats[flag] = true;
         opened.push(flag);
       }
@@ -2213,10 +2242,10 @@ window.electron = electron;
       for(const flag of FEATURE_TUTORIAL_FLAGS) tut[flag] = true;
     }
 
-    // 5c. Open the store once egypt6 is cleared, which is the game's own
-    // condition. Runs after step 3 has rebuilt levelProps, so it reads the same
-    // progress the game would. Unconditional on skipTutorial: this is not about
-    // suppressing a prompt, it is about the button existing at all.
+    // 5c. Re-derive the game's feature flags from level progress. Runs after
+    // step 3 has rebuilt levelProps, so it reads exactly what the game would.
+    // Unconditional on skipTutorial: this is not about suppressing a prompt,
+    // it is about coins dropping and buttons existing at all.
     const _opened = syncFeatureFlags(cp);
     if(_opened.length) log('Unlocked feature(s) from level progress: ' + _opened.join(', '));
 
