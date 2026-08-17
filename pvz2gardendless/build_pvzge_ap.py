@@ -2292,6 +2292,30 @@ window.electron = electron;
     // A newly built component may have just overwritten the balance, so let
     // the restore run again for it. Checked before restoring, seeded after, so
     // the component ends the pass agreeing with whatever the player now holds.
+    // DIAGNOSTIC. The AP panel has shown "Unlocked feature(s)" printing twice
+    // across one startup, with the balance restore in between -- flags that
+    // were just set and saved coming back unset. Nothing clears them, so the
+    // object being read must be a different one. getPlayer() reassigns both
+    // allPlayers and currentPlayer from a fresh JSON.parse every time it runs,
+    // so a second call hands back re-parsed objects and silently orphans every
+    // in-memory change made against the old ones.
+    //
+    // Stamping an id lets that be seen rather than inferred: if _ap_objid
+    // changes between polls, the player was swapped. Console only.
+    try {
+      if (!cp._ap_objid) {
+        cp._ap_objid = Math.random().toString(36).slice(2, 8);
+        console.warn('[AP] new currentPlayer object ' + cp._ap_objid
+                     + '  coin=' + (cp.coin || 0) + ' gem=' + (cp.gem || 0)
+                     + '  features=' + JSON.stringify(cp.features || {})
+                     + '  inAllPlayers=' + ((APP.allPlayers || []).indexOf(cp)));
+      }
+      console.warn('[AP] poll obj=' + cp._ap_objid
+                   + ' coin=' + (cp.coin || 0) + ' gem=' + (cp.gem || 0)
+                   + ' coinSeen=' + (st.coinSeen || 0) + ' gemSeen=' + (st.gemSeen || 0)
+                   + ' restoreDone=' + _currencyRestoreDone);
+    } catch (e) {}
+
     const _compChanged = currencyComponentChanged();
     if(_compChanged) _currencyRestoreDone = false;
     const _restored = restoreLostCurrency();
