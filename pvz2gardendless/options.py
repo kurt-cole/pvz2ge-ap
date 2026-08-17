@@ -135,8 +135,8 @@ class IncludeSidePaths(Toggle):
     """
     Include the side paths -- the branch quests hanging off the world maps,
     plus the standalone ones reached from the world chooser (Sandbox, the Bank
-    Theft levels, Epic Beghouled, FloawerPot, the Mixed Danger Room,
-    Reinforcemint and ShootingStarFruit).
+    Theft levels, Epic Beghouled, FloawerPot, Reinforcemint and
+    ShootingStarFruit).
 
     Off (the default) removes every side path location from the seed, exactly
     the way an unpicked world is removed. Nothing can be placed there and
@@ -147,9 +147,7 @@ class IncludeSidePaths(Toggle):
     it branches from, so a path that spans two worlds is only gated on the
     earlier one -- the Appease quest's second half sits behind Frostbite Caves
     level 25 in game but is in logic from the start -- and the seven the game
-    ties to no world hang off the tutorial. That includes the Mixed Danger
-    Room, which is Modern Day's "Highway to the Danger Room" endless zone and
-    so is genuinely late-game content sitting in sphere 1.
+    ties to no world hang off the tutorial.
 
     On restores the old behaviour: 761 locations instead of 554 with every
     world enabled, and a sphere 1 of 50 locations instead of 7. Side paths
@@ -168,10 +166,8 @@ class IncludeDangerRooms(Toggle):
     """
     Include the Danger Rooms -- the game's endless survival mode.
 
-    37 locations: one to four per world, Big Wave Beach's eight themed minigame
-    rooms, and the Mixed Danger Room, which is Modern Day's "Highway to the
-    Danger Room". With side paths off that last one is already out, so this
-    removes 36.
+    35 locations: one to three per world, plus Big Wave Beach's eight themed
+    minigame rooms.
 
     Off (the default) drops them from the seed the way an unpicked world is
     dropped. The rooms are still playable, they just hold no checks.
@@ -181,6 +177,10 @@ class IncludeDangerRooms(Toggle):
     grind rather than progress. The levels that UNLOCK each room are ordinary
     numbered levels (egypt12, pirate4, beach20 and so on) and stay in the seed
     either way -- this only removes the rooms themselves.
+
+    Each room is in logic only once the level that unlocks it is reachable,
+    matching the game: a room's map node stays locked until you beat that
+    level, whatever else you are carrying.
     """
     display_name = "Include Danger Rooms"
 

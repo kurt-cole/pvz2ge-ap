@@ -468,15 +468,16 @@ SIDE_PATH_WORLD = {
 # levels, Epic Beghouled, FloawerPot, the Mixed Danger Room, Reinforcemint and
 # ShootingStarFruit. They are standalone content reached from the world
 # chooser rather than from inside a world, so when they are in the seed at all
-# they are reachable from the start.
+# they are reachable from the start. The Mixed one is now always empty:
+# mixed_dangerroom2 was its only location and it is unreachable in game, see
+# UNREACHABLE_LOCATIONS.
 #
 # The whole list is dropped unless include_side_paths is on, which it is not by
 # default: logic cannot gate a side path the way the game does (a path is one
 # flat region hung off the opening of the world it branches from, and these
-# seven hang off the tutorial), so leaving them in put late content -- Modern
-# Day's own danger room among it -- in sphere 1. With them out, sphere 1 is the
-# tutorial, egypt1-2 and the shop, and that is the whole pool fill has to open
-# the seed with.
+# seven hang off the tutorial), so leaving them in put late content in sphere 1.
+# With them out, sphere 1 is the tutorial, egypt1-2 and the shop, and that is
+# the whole pool fill has to open the seed with.
 SIDE_PATH_REGIONS = [
     "Aloe Sidepath", "Appease Sidepath", "Atombomb Sidepath", "Bank Sidepath",
     "Bloominghearts Sidepath", "Buttercup Sidepath", "Conceal Sidepath",
@@ -494,7 +495,11 @@ SIDE_PATH_REGIONS = [
 
 # The Danger Rooms: the game's endless survival mode, one per world (two to
 # four for some), plus Big Wave Beach's eight themed minigame rooms and the
-# Mixed Danger Room, which is Modern Day's "Highway to the Danger Room".
+# Mixed Danger Room.
+#
+# 37 entries, of which 35 are ever built: kongfu_dangerroom4 and
+# mixed_dangerroom2 are in UNREACHABLE_LOCATIONS. They stay named here so the
+# set keeps matching its stated derivation from LOC_LEVELS.
 #
 # DERIVED, not hand-picked: these are exactly the locations whose level
 # codename in the client's LOC_LEVELS contains "dangerroom". Every one of them
@@ -527,6 +532,66 @@ DANGER_ROOM_LOCATIONS = frozenset({
 })
 
 
+# Which level unlocks each Danger Room, as the location name of that level.
+#
+# DERIVED FROM GAME DATA, not from the naming. A Danger Room's map node is
+# locked until its own level progress is above zero, and the only thing that
+# raises it is `AllPlayerProperties.unlockTrophy` in index.js:
+#
+#   case "dangerroom":
+#     n.objdata.UnlockLevel.forEach(r => {
+#       var t = e.getLevelProgressByID(r);
+#       t.progress <= 0 && (t.progress = g.unlocked_neverPlayed); ... })
+#
+# so the chain is: a level's `FirstRewardParam` names a `dangerroom_*` trophy in
+# the TROPHIES table (`import/0f/0fc6e99c8.json`), and that trophy's
+# `objdata.UnlockLevel` lists the rooms it opens. Scanning every level
+# definition for a `dangerroom_*` FirstRewardParam produces exactly the 28
+# levels below, and they match the client's own LOC_LEVELS mapping.
+#
+# Beating that level is therefore the whole condition -- there is no separate
+# world-progress requirement -- which is what rules.py gates each room on.
+# One level can open several rooms: beach24 opens all eight of Big Wave
+# Beach's themed minigame rooms at once.
+DANGER_ROOM_UNLOCK = {
+    "egypt_dangerroom":                   "Dangerroom Egypt Unlock",           # egypt12
+    "egypt_dangerroom_minigame":          "Dangerroom Egypt Minigame Unlock",  # egypt23
+    "egypt_dangerroom2":                  "Dangerroom Egypt2 Unlock",          # egypt31
+    "pirate_dangerroom":                  "Dangerroom Pirate Unlock",          # pirate4
+    "pirate_dangerroom2":                 "Dangerroom Pirate2 Unlock",         # pirate33
+    "cowboy_dangerroom":                  "Dangerroom Cowboy Unlock",          # cowboy3
+    "cowboy_dangerroom2":                 "Dangerroom Cowboy2 Unlock",         # cowboy33
+    "future_dangerroom":                  "Dangerroom Future Unlock",          # future4
+    "future_dangerroom2":                 "Dangerroom Future2 Unlock",         # future32
+    "future_dangerroom_sunbomb":          "Dangerroom Future Sunbomb Unlock",  # future33
+    "dark_dangerroom":                    "Dangerroom Dark Unlock",            # dark12
+    "dark_dangerroom2":                   "Dangerroom Dark2 Unlock",           # dark26
+    "dark_dangerroom_potion":             "Dangerroom Dark Potion Unlock",     # dark27
+    "beach_dangerroom":                   "Dangerroom Beach Unlock",           # beach20
+    "beach_dangerroom2":                  "Dangerroom Beach2 Unlock",          # beach36
+    "beach_dangerroom_minigame_egypt":    "Dangerroom Beach Minigame Unlock",  # beach24
+    "beach_dangerroom_minigame_pirate":   "Dangerroom Beach Minigame Unlock",  # beach24
+    "beach_dangerroom_minigame_cowboy":   "Dangerroom Beach Minigame Unlock",  # beach24
+    "beach_dangerroom_minigame_future":   "Dangerroom Beach Minigame Unlock",  # beach24
+    "beach_dangerroom_minigame_dark":     "Dangerroom Beach Minigame Unlock",  # beach24
+    "beach_dangerroom_minigame_beach":    "Dangerroom Beach Minigame Unlock",  # beach24
+    "beach_dangerroom_minigame_iceage":   "Dangerroom Beach Minigame Unlock",  # beach24
+    "beach_dangerroom_minigame_lostcity": "Dangerroom Beach Minigame Unlock",  # beach24
+    "iceage_dangerroom":                  "Dangerroom Iceage Unlock",          # iceage20
+    "iceage_dangerroom2":                 "Dangerroom Iceage2 Unlock",         # iceage35
+    "lostcity_dangerroom":                "Dangerroom Lostcity Unlock",        # lostcity20
+    "lostcity_dangerroom2":               "Dangerroom Lostcity2 Unlock",       # lostcity39
+    "kongfu_dangerroom":                  "Dangerroom Kongfu Unlock",          # kongfu14
+    "kongfu_dangerroom2":                 "Dangerroom Kongfu2 Unlock",         # kongfu30
+    "kongfu_dangerroom3":                 "Dangerroom Kongfu3 Unlock",         # kongfu47
+    "eighties_dangerroom":                "Dangerroom Eighties Unlock",        # eighties20
+    "dino_dangerroom":                    "Dangerroom Dino Unlock",            # dino20
+    "dino_dangerroom2":                   "Dangerroom Dino2 Unlock",           # dino36
+    "modern_dangerroom":                  "Dangerroom Modern Unlock",          # modern20
+    "modern_dangerroom2":                 "Dangerroom Modern2 Unlock",         # modern40
+}
+
+
 # Levels the game defines but never attaches to a map, so nothing can launch
 # them and their checks can never fire by playing.
 #
@@ -551,6 +616,20 @@ UNREACHABLE_LOCATIONS = frozenset({
     "random_future",  "random_zomboss_future",
     "random_dark",    "random_zomboss_dark",
     "random_beach",   # no random_zomboss_beach exists
+    # Two Danger Rooms in the same position, found while deriving
+    # DANGER_ROOM_UNLOCK (2026-08-17). Every other room has a map node in its
+    # world's scene data AND a level whose FirstRewardParam opens it; these two
+    # have neither, so nothing can put them on a map and nothing can raise their
+    # progress above locked:
+    #   kongfu_dangerroom4 -- the dangerroom_kongfu4 trophy exists, but no level
+    #     awards it and Kongfu Temple's map (`import/08/08fde7325.json`) carries
+    #     only three DANGERROOM nodes, for rooms 1-3.
+    #   mixed_dangerroom2 -- appears in exactly ONE resource file, the level
+    #     definitions. No trophy, no node. This is the "Mixed Danger Room" the
+    #     side-path option describes as Modern Day's "Highway to the Danger
+    #     Room"; it is the sole location of the Mixed Sidepath region, which is
+    #     now always empty.
+    "kongfu_dangerroom4", "mixed_dangerroom2",
 })
 
 
@@ -562,3 +641,14 @@ if _unknown_side_paths:
 _unknown_side_path_worlds = set(SIDE_PATH_WORLD.values()) - set(WORLD_REGIONS)
 if _unknown_side_path_worlds:
     raise ValueError(f"side paths tied to unknown worlds: {sorted(_unknown_side_path_worlds)}")
+
+# Every Danger Room the seed can build has to name the level that unlocks it, or
+# rules.py silently leaves it ungated -- which is the bug this table exists to
+# fix, and it would look identical to it working. The only rooms allowed to have
+# no unlock level are the two that are never built at all.
+_ungated_rooms = set(DANGER_ROOM_LOCATIONS) - set(DANGER_ROOM_UNLOCK) - UNREACHABLE_LOCATIONS
+if _ungated_rooms:
+    raise ValueError(f"Danger Rooms with no unlock level: {sorted(_ungated_rooms)}")
+_unknown_rooms = set(DANGER_ROOM_UNLOCK) - set(DANGER_ROOM_LOCATIONS)
+if _unknown_rooms:
+    raise ValueError(f"DANGER_ROOM_UNLOCK names non-rooms: {sorted(_unknown_rooms)}")

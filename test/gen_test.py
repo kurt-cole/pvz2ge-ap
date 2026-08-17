@@ -342,9 +342,11 @@ assert any(i.name == "Random Plant Costume" for i in COSTUME_ITEMS)
 assert len({i.code for i in ALL_ITEMS}) == len(ALL_ITEMS), "duplicate item IDs"
 
 # ── unreachable levels are never built ──────────────────────────────────────
-# The eleven random_* levels are defined in the game data but attached to no
-# map node, so nothing can launch them and their checks can never fire. They
-# were reachable in LOGIC, so fill could bury a world key on one.
+# Levels defined in the game data but attached to no map node, so nothing can
+# launch them and their checks can never fire. They were reachable in LOGIC, so
+# fill could bury a world key on one. Two families: the eleven random_* levels,
+# and two Danger Rooms (kongfu_dangerroom4, mixed_dangerroom2) that additionally
+# have no level awarding the trophy that would unlock them.
 #
 # Checked across every option combination, because the point is that no
 # setting brings them back.
@@ -366,10 +368,14 @@ print(f"none of the {len(C.UNREACHABLE_LOCATIONS)} unreachable levels is ever bu
 from pvz2gardendless.locations import ALL_LOCATIONS as _ALL_L, LOC_NAME_TO_ID
 for _n in C.UNREACHABLE_LOCATIONS:
     assert _n in LOC_NAME_TO_ID, f"{_n} was deleted from the table, renumbering IDs"
-# The set is exactly the random_* family -- if a new one is added to the game
-# data it must be added here too, and nothing else may be swept in.
+# The set is the random_* family plus the two orphaned Danger Rooms -- if a new
+# random_* is added to the game data it must be added here too, and nothing else
+# may be swept in. The two rooms are named explicitly rather than derived: every
+# OTHER dangerroom location is a real level, so any rule loose enough to catch
+# these two would catch all 37.
 _rand = {l.name for l in _ALL_L if l.name.startswith("random_")}
-assert _rand == set(C.UNREACHABLE_LOCATIONS),     f"random_* family and UNREACHABLE_LOCATIONS disagree: {_rand ^ set(C.UNREACHABLE_LOCATIONS)}"
+_orphan_rooms = {"kongfu_dangerroom4", "mixed_dangerroom2"}
+assert _rand | _orphan_rooms == set(C.UNREACHABLE_LOCATIONS),     f"random_* family and UNREACHABLE_LOCATIONS disagree: {(_rand | _orphan_rooms) ^ set(C.UNREACHABLE_LOCATIONS)}"
 # No goal or victory condition may depend on one, in any goal mode.
 for _gt in (0, 1, 2):
     _gw, _gsd = run(f"unreachable: goal_type={_gt}", goal_type=_gt, worlds_required=11)
@@ -526,20 +532,46 @@ assert _derived == set(C.DANGER_ROOM_LOCATIONS), (
     f"extra {sorted(set(C.DANGER_ROOM_LOCATIONS) - _derived)[:5]}")
 _unlocks = {l.name for l in _ALL if l.name.startswith("Dangerroom ")}
 assert _unlocks and not (_unlocks & set(C.DANGER_ROOM_LOCATIONS)),     "an unlock level was swept into DANGER_ROOM_LOCATIONS"
-print(f"\nDANGER_ROOM_LOCATIONS: {len(_derived)} rooms, "
+# Every room that can be built names the level that unlocks it, and that level
+# is a real location. A room missing from DANGER_ROOM_UNLOCK gets no rule at
+# all, which looks identical to the rule working -- constants.py raises on it,
+# this pins the other half: the unlock names have to resolve.
+_buildable_rooms = set(C.DANGER_ROOM_LOCATIONS) - set(C.UNREACHABLE_LOCATIONS)
+assert set(C.DANGER_ROOM_UNLOCK) == _buildable_rooms, (
+    "DANGER_ROOM_UNLOCK does not cover every buildable room: "
+    f"{sorted(_buildable_rooms ^ set(C.DANGER_ROOM_UNLOCK))}")
+_region_of = {l.name: l.region for l in _ALL}
+_world_of = {r: w for w, rs in C.WORLD_REGIONS.items() for r in rs}
+for _room, _ul in C.DANGER_ROOM_UNLOCK.items():
+    assert _ul in _region_of, f"{_room} unlocks off unknown location {_ul}"
+    assert _ul in _unlocks, f"{_room} unlocks off {_ul}, not a Dangerroom level"
+    # Same world, or the rule reaches across a world the seed may have dropped
+    # -- and rules.py would raise looking the unlock location up. Not the same
+    # REGION: Egypt's rooms sit in Ancient Egypt Late while their unlock levels
+    # are in Mid1/Mid2.
+    assert _world_of[_region_of[_room]] == _world_of[_region_of[_ul]], \
+        f"{_room} and its unlock {_ul} are in different worlds"
+print(f"\nDANGER_ROOM_LOCATIONS: {len(_derived)} rooms "
+      f"({len(_buildable_rooms)} buildable, all gated on their unlock level), "
       f"{len(_unlocks)} unlock levels correctly left alone")
 
 _dr_off, _ = run("danger rooms off", include_danger_rooms=0)
 _dr_on, _ = run("danger rooms on", include_danger_rooms=1)
 _off_names = {l.name for l in _dr_off.active_locations()}
 _on_names = {l.name for l in _dr_on.active_locations()}
-assert _on_names - _off_names == _derived - {"mixed_dangerroom2"},     "the option removed something other than the Danger Rooms"
+assert _on_names - _off_names == _buildable_rooms,     "the option removed something other than the Danger Rooms"
 assert not (_off_names & set(C.DANGER_ROOM_LOCATIONS)), "a Danger Room survived"
 assert _unlocks <= _off_names, "an unlock level went with the rooms"
-# With side paths on, the Mixed Danger Room goes too.
-_both, _ = run("danger rooms off + side paths", include_danger_rooms=0,
-               include_side_paths=1)
-assert "mixed_dangerroom2" not in {l.name for l in _both.active_locations()}
+# The two rooms nothing in the game can launch are never built, under any
+# combination -- kongfu_dangerroom4 has no map node and no level awards its
+# trophy; mixed_dangerroom2 has neither node nor trophy.
+for _sp in (0, 1):
+    for _drs in (0, 1):
+        _u, _ = run(f"orphan rooms: side_paths={_sp} danger_rooms={_drs}",
+                    include_side_paths=_sp, include_danger_rooms=_drs)
+        _un = {l.name for l in _u.active_locations()}
+        assert not (_un & {"kongfu_dangerroom4", "mixed_dangerroom2"}), \
+            "an unreachable Danger Room was built"
 # The goal must survive: no goal location is a Danger Room, in any goal mode.
 for _gt in (0, 1, 2):
     _gw, _gsd = run(f"danger rooms off, goal_type={_gt}",
@@ -547,7 +579,8 @@ for _gt in (0, 1, 2):
     _gnames = {l.name for l in _gw.active_locations()}
     for _g in _gsd["goal_locations"]:
         assert _g in _gnames, f"goal {_g} was removed with the Danger Rooms"
-print("include_danger_rooms removes exactly the 37 rooms and no goal location")
+print(f"include_danger_rooms removes exactly the {len(_buildable_rooms)} rooms "
+      "and no goal location")
 
 # ── small seeds trim useful plants rather than failing ──────────────────────
 # A one-world seed with side paths off has 101 locations (140 with shopsanity)

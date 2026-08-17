@@ -166,6 +166,73 @@ if _bad2:
 else:
     ok("...and none is built into a region at all")
 
+# ── a Danger Room is never in logic before the level that unlocks it ────────
+# In game the room's map node reads its own level progress, which nothing
+# raises except beating the level whose FirstRewardParam names its trophy
+# (constants.DANGER_ROOM_UNLOCK). Five rooms lead their world's location list
+# and so landed in that world's OPENING stretch -- iceage/lostcity/kongfu/
+# eighties/dino_dangerroom -- while the game does not hand them over until
+# level 14-20, so they were reachable the moment the world's key turned up.
+#
+# Proved over many item sets, not one: the claim is that the room NEVER
+# precedes its unlock, and most states cannot tell the difference. THE STATE
+# THAT DISCRIMINATES IS "every key plus a single sun producer" -- a world is
+# open, its opening stretch is reachable, and its Mid stretch (6 plants) is
+# not, which is exactly where a room sitting in the opening leaks. Delete the
+# rule in rules.py and that one row reports lostcity_dangerroom and
+# eighties_dangerroom; a ladder that jumps straight from 3 plants to 6 passes
+# clean with the rule gone, which is what this test did on its first draft.
+#
+# The random sweep is there so the same hole cannot reopen for a room whose
+# world happens to want more plants at its entrance. Fixed seed: this suite has
+# to give the same answer twice.
+import random as _rndD
+from pvz2gardendless.constants import DANGER_ROOM_UNLOCK, SUN_PRODUCER_PLANTS as _SUND
+
+print("\n=== danger rooms wait for their unlock level ===")
+_mwD, _wD = build(include_danger_rooms=1)
+_preD = [i.name for i in _mwD.precollected]
+_keysD = [i.name for i in _mwD.itempool if i.name.endswith(" Key")]
+_placedD = {l.name for r in _mwD.regions for l in r.locations}
+_roomsD = {r: u for r, u in DANGER_ROOM_UNLOCK.items() if r in _placedD}
+if not _roomsD:
+    fail("no Danger Rooms were built, so this proves nothing")
+else:
+    _ladder = [("precollected only", _preD), ("+keys", _preD + _keysD)]
+    # One row per sun producer, since which one fill hands over first varies.
+    _ladder += [(f"+keys +{_p}", _preD + _keysD + [_p]) for _p in _SUND]
+    # ...and every plant count either side of the 6-plant Mid gate.
+    _ladder += [(f"+keys +{_n} plants", _preD + _keysD + PROG_PLANTS[:_n])
+                for _n in range(1, 14)]
+    _ladder.append(("+keys +all plants", _preD + _keysD + PROG_PLANTS))
+    _rng = _rndD.Random(0)
+    _poolD = sorted({i.name for i in _mwD.itempool
+                     if i.classification == IC.progression})
+    _ladder += [(f"random {_i}", _preD + _rng.sample(_poolD, _rng.randint(1, 20)))
+                for _i in range(60)]
+    _early = []
+    for _label, _items in _ladder:
+        _r = {l.name for l in state_with(_mwD, _items).reachable_locations()}
+        for _room, _unlock in sorted(_roomsD.items()):
+            if _room in _r and _unlock not in _r:
+                _early.append(f"{_room} at '{_label}' without {_unlock}")
+    if _early:
+        fail(f"{len(_early)} Danger Room(s) in logic before their unlock level: "
+             f"{_early[:4]}")
+    else:
+        ok(f"none of the {len(_roomsD)} rooms precedes its unlock level, "
+           f"across {len(_ladder)} item sets")
+
+    # ...and the gate is not a wall: with everything, every room is reachable.
+    _allD = [i.name for i in _mwD.itempool if i.classification == IC.progression] + _preD
+    _rall = {l.name for l in state_with(_mwD, _allD).reachable_locations()}
+    _wall = sorted(r for r in _roomsD if r not in _rall)
+    if _wall:
+        fail(f"Danger Rooms unreachable with the full pool: {_wall[:4]}")
+    else:
+        ok(f"all {len(_roomsD)} rooms still reachable with the full pool")
+
+
 report("all worlds, default")
 report("all worlds + shuffle_zombies", shuffle_zombies=1)
 report("all worlds + shopsanity", shopsanity=1)

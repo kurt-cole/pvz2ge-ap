@@ -97,9 +97,10 @@ before Modern Day opens at all.
 
 ## What items and locations get shuffled?
 
-**Locations** are the levels themselves — 761 of them across every world, the side paths, and the
-Danger Rooms — plus, with Shopsanity enabled, 39 one-time store purchases. Lowering **World Count**
-removes the levels of the worlds it leaves out.
+**Locations** are the levels themselves — 507 by default, or 748 with Side Paths and Danger Rooms
+both enabled — plus, with Shopsanity enabled, 39 one-time store purchases. Lowering **World Count**
+removes the levels of the worlds it leaves out. A Danger Room is in logic only once the level that
+unlocks it is, matching the game.
 
 **Items** are:
 

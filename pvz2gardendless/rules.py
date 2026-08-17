@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING
 from worlds.generic.Rules import add_rule, forbid_items_for_player, set_rule
 
 from .constants import (
-    CHEAP_ATTACKER_PLANTS, EGYPT_STRETCH_PLANTS, KEYED_WORLDS, STRETCH_PLANTS,
-    SUN_PRODUCER_PLANTS, WORLD_ENTRY_PLANTS, is_early_region,
+    CHEAP_ATTACKER_PLANTS, DANGER_ROOM_UNLOCK, EGYPT_STRETCH_PLANTS,
+    KEYED_WORLDS, STRETCH_PLANTS, SUN_PRODUCER_PLANTS, WORLD_ENTRY_PLANTS,
+    is_early_region,
 )
 from .locations import goal_locations_for
 
@@ -113,6 +114,40 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
                 continue
             set_rule(entrance, lambda state, n=need: state.has_group("Plants", player, n))
 
+    # Danger Rooms — playable only once the level that unlocks the room has
+    # been beaten. In the game a room's map node reads its own level progress,
+    # which starts at locked and is raised by exactly one thing: finishing the
+    # level whose FirstRewardParam names that room's trophy (see
+    # DANGER_ROOM_UNLOCK for the derivation). "Beat that level" is "reach that
+    # location" here, so the rule is the unlock location's own reachability.
+    #
+    # The rooms sit in whatever stretch of their world their position in
+    # locations.py put them, which for most of them is already at or past the
+    # unlock level and makes this a no-op. It bites on the five rooms that lead
+    # their world's location list -- iceage/lostcity/kongfu/eighties/dino
+    # _dangerroom -- which landed in their world's OPENING stretch while the
+    # game does not unlock them until level 14-20. Those were reachable in
+    # logic from the moment the world's key turned up, so fill could bury a
+    # world key or a gated plant in a room the player cannot enter yet.
+    #
+    # Resolved to Location objects once, as with the Modern Day goals below:
+    # this is evaluated on every sweep and Location.can_reach is what a
+    # by-name lookup ends up calling anyway. No register_indirect_condition is
+    # needed -- that is for entrances, and these are location rules, so nothing
+    # about which REGIONS are reachable depends on them.
+    danger_rooms = []
+    for room_name, unlock_name in DANGER_ROOM_UNLOCK.items():
+        try:
+            room = multiworld.get_location(room_name, player)
+        except KeyError:
+            continue  # include_danger_rooms off, or this world is not in the seed
+        # The unlock level is an ordinary level in the same world as its room,
+        # so if the room was built this cannot miss. Left to raise if it ever
+        # does: a silently ungated room looks exactly like a working one.
+        unlock = multiworld.get_location(unlock_name, player)
+        add_rule(room, lambda state, u=unlock: u.can_reach(state))
+        danger_rooms.append(room)
+
     # Keys out of the late stretches, when the option asks for it. This is an
     # item rule rather than an access rule: it does not change what any
     # location requires, only what fill is allowed to put there.
@@ -132,6 +167,12 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
                 continue
             for location in region.locations:
                 forbid_items_for_player(location, key_names, player)
+        # A Danger Room in a world's opening stretch is in an "early" region by
+        # name but is not an early CHECK any more: the rule above puts it behind
+        # a level 14-20 unlock. Leaving those open would let a key hide there
+        # and quietly undo what this option is for.
+        for room in danger_rooms:
+            forbid_items_for_player(room, key_names, player)
 
     # Modern Day — unlocked once enough world goals (trophies / completions /
     # keys, per the goal_type option) are reachable.
