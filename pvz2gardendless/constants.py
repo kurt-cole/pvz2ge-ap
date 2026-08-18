@@ -435,33 +435,33 @@ def shop_location_name(commodity: str) -> str:
 # two, so the whole side path opens when its first half does.
 SIDE_PATH_WORLD = {
     "Aloe Sidepath":            "Lost City",
-    "Appease Sidepath":         "Ancient Egypt",
-    "Atombomb Sidepath":        "Kongfu Temple",
-    "Bloominghearts Sidepath":  "Neon Mixtape Tour",
+    "Appease-mint Sidepath":         "Ancient Egypt",
+    "Atomic Bombegranate Sidepath":        "Kongfu Temple",
+    "Blooming Heart Sidepath":  "Neon Mixtape Tour",
     "Buttercup Sidepath":       "Pirate Seas",
-    "Conceal Sidepath":         "Modern Day",
-    "Doomshroom Sidepath":      "Dark Ages",
-    "Electriccurrant Sidepath": "Wild West",
-    "Enlighten Sidepath":       "Lost City",
-    "Ghostpepper Sidepath":     "Big Wave Beach",
+    "Conceal-mint Sidepath":         "Modern Day",
+    "Doom-shroom Sidepath":      "Dark Ages",
+    "Electric Currant Sidepath": "Wild West",
+    "Enlighten-mint Sidepath":       "Lost City",
+    "Ghost Pepper Sidepath":     "Big Wave Beach",
     "Goo Peashooter Sidepath":  "Dark Ages",
-    "Gloomshroom Sidepath":     "Modern Day",
-    "Goldbloom Sidepath":       "Modern Day",
-    "Hotdate Sidepath":         "Frostbite Caves",
-    "Icebloom Sidepath":        "Big Wave Beach",
-    "Iceshroom Sidepath":       "Dark Ages",
-    "Meteorflower Sidepath":    "Jurassic Marsh",
+    "Gloom-shroom Sidepath":     "Modern Day",
+    "Gold Bloom Sidepath":       "Modern Day",
+    "Hot Date Sidepath":         "Frostbite Caves",
+    "Ice Bloom Sidepath":        "Big Wave Beach",
+    "Ice-shroom Sidepath":       "Dark Ages",
+    "Meteor Flower Sidepath":    "Jurassic Marsh",
     "Parsnip Sidepath":         "Big Wave Beach",
     "Plantern Sidepath":        "Dark Ages",
-    "Reinforce Sidepath":       "Far Future",
+    "Reinforce-mint Sidepath":       "Far Future",
     "Rhythm Sidepath":          "Frostbite Caves",
-    "Sapfling Sidepath":        "Wild West",
+    "Sap-fling Sidepath":        "Wild West",
     "Seashooter Sidepath":      "Big Wave Beach",
-    "Solartomato Sidepath":     "Far Future",
+    "Solar Tomato Sidepath":     "Far Future",
     "Squash Sidepath":          "Ancient Egypt",
     "Strawburst Sidepath":      "Neon Mixtape Tour",
-    "Sweetpotato Sidepath":     "Frostbite Caves",
-    "Umbrellaleaf Sidepath":    "Modern Day",
+    "Sweet Potato Sidepath":     "Frostbite Caves",
+    "Umbrella Leaf Sidepath":    "Modern Day",
     "Vamporcini Sidepath":      "Dark Ages",
 }
 
@@ -480,18 +480,18 @@ SIDE_PATH_WORLD = {
 # With them out, sphere 1 is the tutorial, egypt1-2 and the shop, and that is
 # the whole pool fill has to open the seed with.
 SIDE_PATH_REGIONS = [
-    "Aloe Sidepath", "Appease Sidepath", "Atombomb Sidepath", "Bank Sidepath",
-    "Bloominghearts Sidepath", "Buttercup Sidepath", "Conceal Sidepath",
-    "Doomshroom Sidepath", "Electriccurrant Sidepath", "Enlighten Sidepath",
+    "Aloe Sidepath", "Appease-mint Sidepath", "Atomic Bombegranate Sidepath", "Bank Sidepath",
+    "Blooming Heart Sidepath", "Buttercup Sidepath", "Conceal-mint Sidepath",
+    "Doom-shroom Sidepath", "Electric Currant Sidepath", "Enlighten-mint Sidepath",
     "Epic Beghouled Sidepath", "Floawerpot Sidepath",
-    "Ghostpepper Sidepath", "Gloomshroom Sidepath", "Goldbloom Sidepath",
+    "Ghost Pepper Sidepath", "Gloom-shroom Sidepath", "Gold Bloom Sidepath",
     "Goo Peashooter Sidepath",
-    "Hotdate Sidepath", "Icebloom Sidepath", "Iceshroom Sidepath",
-    "Meteorflower Sidepath", "Mixed Sidepath", "Parsnip Sidepath", "Plantern Sidepath",
-    "Reinforce Sidepath", "Reinforcemint Sidepath", "Rhythm Sidepath",
-    "Sandbox Sidepath", "Sapfling Sidepath", "Seashooter Sidepath",
-    "Shootingstarfruit Sidepath", "Solartomato Sidepath", "Squash Sidepath",
-    "Strawburst Sidepath", "Sweetpotato Sidepath", "Umbrellaleaf Sidepath",
+    "Hot Date Sidepath", "Ice Bloom Sidepath", "Ice-shroom Sidepath",
+    "Meteor Flower Sidepath", "Mixed Sidepath", "Parsnip Sidepath", "Plantern Sidepath",
+    "Reinforce-mint Sidepath", "Reinforcemint Unused Sidepath", "Rhythm Sidepath",
+    "Sandbox Sidepath", "Sap-fling Sidepath", "Seashooter Sidepath",
+    "Shootingstarfruit Sidepath", "Solar Tomato Sidepath", "Squash Sidepath",
+    "Strawburst Sidepath", "Sweet Potato Sidepath", "Umbrella Leaf Sidepath",
     "Vamporcini Sidepath",
 ]
 
@@ -529,6 +529,7 @@ DANGER_ROOM_LOCATIONS = frozenset({
     "kongfu_dangerroom4",
     "eighties_dangerroom", "eighties_dangerroom2",
     "dino_dangerroom", "dino_dangerroom2",
+    "sky_dangerroom",
     "modern_dangerroom", "modern_dangerroom2",
     "mixed_dangerroom2",
 })
@@ -588,6 +589,7 @@ DANGER_ROOM_UNLOCK = {
     "kongfu_dangerroom3":                 "kongfu47",         # kongfu47
     "eighties_dangerroom":                "eighties20",        # eighties20
     "eighties_dangerroom2":               "eighties38",       # eighties38
+    "sky_dangerroom":                     "sky20",            # sky20
     "dino_dangerroom":                    "dino20",            # dino20
     "dino_dangerroom2":                   "dino36",           # dino36
     "modern_dangerroom":                  "modern20",          # modern20
@@ -655,7 +657,7 @@ UNREACHABLE_LOCATIONS = frozenset({
     "epic_beghouled1", "epic_beghouled2", "epic_beghouled3", "epic_beghouled4",
     "epic_beghouled5",
     "floawerpot1", "floawerpot2", "floawerpot3",
-    "reinforcemint_try1", "reinforcemint_try2", "reinforcemint_try3",
+    "reinforcemint_unused_try1", "reinforcemint_unused_try2", "reinforcemint_unused_try3",
     "rhythm1",
     "sandbox", "sandbox_green", "sandbox_modern", "sandbox_modern_night",
     "sandbox_sky",

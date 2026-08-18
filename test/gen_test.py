@@ -381,7 +381,7 @@ _orphan_rooms = {"kongfu_dangerroom4", "mixed_dangerroom2"}
 # dropped too, which is right: nothing in these can be launched.
 _ORPHAN_PATH_REGIONS = {
     "Bank Sidepath", "Epic Beghouled Sidepath", "Floawerpot Sidepath",
-    "Mixed Sidepath", "Reinforcemint Sidepath", "Rhythm Sidepath",
+    "Mixed Sidepath", "Reinforcemint Unused Sidepath", "Rhythm Sidepath",
     "Sandbox Sidepath", "Shootingstarfruit Sidepath",
 }
 _orphan_paths = {l.name for l in _ALL_L if l.region in _ORPHAN_PATH_REGIONS}

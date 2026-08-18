@@ -153,7 +153,7 @@ class IncludeSidePaths(Toggle):
     quest's second half sits behind Frostbite Caves 25 in game but is in logic
     from the start.
 
-    On restores the old behaviour: 703 locations instead of 516 with every
+    On restores the old behaviour: 718 locations instead of 531 with every
     world enabled, and a sphere 1 of 27 locations instead of 9. Side paths
     belonging to a world this seed left out are still dropped either way.
 
@@ -169,7 +169,7 @@ class IncludeDangerRooms(Toggle):
     """
     Include the Danger Rooms -- the game's endless survival mode.
 
-    36 locations: one to three per world, plus Big Wave Beach's eight themed
+    37 locations: one to three per world, plus Big Wave Beach's eight themed
     minigame rooms.
 
     Off (the default) drops them from the seed the way an unpicked world is
