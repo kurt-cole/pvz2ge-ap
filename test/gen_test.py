@@ -665,6 +665,34 @@ assert _md_region == _md_prefix, \
 print(f"all {len(_wl)} world/tutorial locations are named for their level id, "
       f"and the {len(_md_region)} Modern Day ones are exactly the 'modern' prefix")
 
+# ── side paths are "<Plant> <N>" ────────────────────────────────────────────
+# A quest level's number means nothing on its own -- conceal7 says neither what
+# the quest is nor what it gives -- so these are named for the plant the levels
+# declare in PlantToIntroduce, with N taken off the codename so it matches the
+# epic map's own node labels. The four mint quests (Appease, Conceal, Enlighten,
+# Reinforce) introduce several plants each and declare none, so they carry the
+# mint's name instead.
+#
+# Checked as a shape rather than a table: the point is that every side-path
+# location is "<something> <number>" and every path uses ONE label, which is
+# what stops a path drifting back to half codenames and half reward names.
+_sp_locs = [l for l in _ALL if l.region in C.SIDE_PATH_REGIONS
+            and l.name not in C.UNREACHABLE_LOCATIONS]
+_bad_shape = [l.name for l in _sp_locs
+              if not _re.fullmatch(r"[A-Z][A-Za-z\- ]*[a-z] \d+(_\d+)?", l.name)]
+assert not _bad_shape, f"side-path locations not '<Plant> <N>': {_bad_shape[:5]}"
+_labels = collections.defaultdict(set)
+for l in _sp_locs:
+    _labels[l.region].add(l.name.rsplit(" ", 1)[0])
+_split = {r: sorted(v) for r, v in _labels.items() if len(v) != 1}
+assert not _split, f"side paths using more than one label: {_split}"
+# the number has to be the level's own, or the name lies about which level it is
+_off = [(l.name, _lvl[l.name]) for l in _sp_locs
+        if not _lvl[l.name].endswith(l.name.rsplit(" ", 1)[1])]
+assert not _off, f"side-path number does not match its level id: {_off[:5]}"
+print(f"all {len(_sp_locs)} side-path locations are '<Plant> <N>' across "
+      f"{len(_labels)} paths, one label each, numbered off their level id")
+
 # Neon Mixtape Tour runs 1-42 with no gaps (it used to stop at 32).
 _e = {int(_m.group(1)) for _v in _lvl.values()
       for _m in [_re.match(r"^eighties(\d+)$", _v)] if _m}

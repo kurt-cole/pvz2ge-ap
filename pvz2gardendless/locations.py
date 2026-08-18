@@ -634,130 +634,130 @@ def _make_locs() -> List[PvZ2LocationData]:
     add("sky16", "Aerial Fortress")
 
     # ── Side Paths (always accessible from Tutorial) ──
-    add("aloe0", "Aloe Sidepath"); add("aloe1", "Aloe Sidepath"); add("aloe2", "Aloe Sidepath")
-    add("aloe3", "Aloe Sidepath"); add("aloe4", "Aloe Sidepath"); add("Aloe Unlock", "Aloe Sidepath")
+    add("Aloe 0", "Aloe Sidepath"); add("Aloe 1", "Aloe Sidepath"); add("Aloe 2", "Aloe Sidepath")
+    add("Aloe 3", "Aloe Sidepath"); add("Aloe 4", "Aloe Sidepath"); add("Aloe 5", "Aloe Sidepath")
 
-    add("appease1_0", "Appease Sidepath"); add("appease1_1", "Appease Sidepath")
-    add("appease1_2", "Appease Sidepath"); add("Dandelion Unlock", "Appease Sidepath")
-    add("appease1_4", "Appease Sidepath"); add("appease1_5", "Appease Sidepath")
-    add("Pvine Unlock", "Appease Sidepath"); add("appease2_0", "Appease Sidepath")
-    add("appease2_1", "Appease Sidepath"); add("appease2_2", "Appease Sidepath")
-    add("appease2_3", "Appease Sidepath"); add("Gatling Unlock", "Appease Sidepath")
-    add("Megagatling Unlock", "Appease Sidepath"); add("Torchwood Unlock", "Appease Sidepath")
+    add("Appease-mint 1_0", "Appease Sidepath"); add("Appease-mint 1_1", "Appease Sidepath")
+    add("Appease-mint 1_2", "Appease Sidepath"); add("Appease-mint 1_3", "Appease Sidepath")
+    add("Appease-mint 1_4", "Appease Sidepath"); add("Appease-mint 1_5", "Appease Sidepath")
+    add("Appease-mint 1_6", "Appease Sidepath"); add("Appease-mint 2_0", "Appease Sidepath")
+    add("Appease-mint 2_1", "Appease Sidepath"); add("Appease-mint 2_2", "Appease Sidepath")
+    add("Appease-mint 2_3", "Appease Sidepath"); add("Appease-mint 2_4", "Appease Sidepath")
+    add("Appease-mint 2_5", "Appease Sidepath"); add("Appease-mint 2_6", "Appease Sidepath")
 
-    add("atombomb0", "Atombomb Sidepath"); add("atombomb1", "Atombomb Sidepath")
-    add("atombomb2", "Atombomb Sidepath"); add("atombomb3", "Atombomb Sidepath")
-    add("atombomb4", "Atombomb Sidepath"); add("Atombomb Seedling Unlock", "Atombomb Sidepath")
+    add("Atomic Bombegranate 0", "Atombomb Sidepath"); add("Atomic Bombegranate 1", "Atombomb Sidepath")
+    add("Atomic Bombegranate 2", "Atombomb Sidepath"); add("Atomic Bombegranate 3", "Atombomb Sidepath")
+    add("Atomic Bombegranate 4", "Atombomb Sidepath"); add("Atomic Bombegranate 5", "Atombomb Sidepath")
 
     add("bank_theft1", "Bank Sidepath"); add("bank_theft2", "Bank Sidepath")
     add("bank_theft3", "Bank Sidepath"); add("bank_theft4", "Bank Sidepath")
     add("bank_theft5", "Bank Sidepath")
 
-    add("bloominghearts0", "Bloominghearts Sidepath"); add("bloominghearts1", "Bloominghearts Sidepath")
-    add("bloominghearts2", "Bloominghearts Sidepath"); add("bloominghearts3", "Bloominghearts Sidepath")
-    add("bloominghearts4", "Bloominghearts Sidepath"); add("Bloominghearts Unlock", "Bloominghearts Sidepath")
+    add("Blooming Heart 0", "Bloominghearts Sidepath"); add("Blooming Heart 1", "Bloominghearts Sidepath")
+    add("Blooming Heart 2", "Bloominghearts Sidepath"); add("Blooming Heart 3", "Bloominghearts Sidepath")
+    add("Blooming Heart 4", "Bloominghearts Sidepath"); add("Blooming Heart 5", "Bloominghearts Sidepath")
 
-    add("buttercup0", "Buttercup Sidepath"); add("buttercup1", "Buttercup Sidepath")
-    add("buttercup2", "Buttercup Sidepath"); add("buttercup3", "Buttercup Sidepath")
-    add("buttercup4", "Buttercup Sidepath"); add("Buttercup Unlock", "Buttercup Sidepath")
+    add("Buttercup 0", "Buttercup Sidepath"); add("Buttercup 1", "Buttercup Sidepath")
+    add("Buttercup 2", "Buttercup Sidepath"); add("Buttercup 3", "Buttercup Sidepath")
+    add("Buttercup 4", "Buttercup Sidepath"); add("Buttercup 5", "Buttercup Sidepath")
 
-    add("conceal0", "Conceal Sidepath"); add("conceal1", "Conceal Sidepath")
-    add("conceal2", "Conceal Sidepath"); add("conceal3", "Conceal Sidepath")
-    add("conceal4", "Conceal Sidepath"); add("Gloomvine Unlock", "Conceal Sidepath")
-    add("conceal6", "Conceal Sidepath"); add("Murkadamia Unlock", "Conceal Sidepath")
-    add("conceal8", "Conceal Sidepath"); add("Shadowpeashooter Unlock", "Conceal Sidepath")
-    add("conceal10", "Conceal Sidepath"); add("Noctarine Unlock", "Conceal Sidepath")
+    add("Conceal-mint 0", "Conceal Sidepath"); add("Conceal-mint 1", "Conceal Sidepath")
+    add("Conceal-mint 2", "Conceal Sidepath"); add("Conceal-mint 3", "Conceal Sidepath")
+    add("Conceal-mint 4", "Conceal Sidepath"); add("Conceal-mint 5", "Conceal Sidepath")
+    add("Conceal-mint 6", "Conceal Sidepath"); add("Conceal-mint 7", "Conceal Sidepath")
+    add("Conceal-mint 8", "Conceal Sidepath"); add("Conceal-mint 9", "Conceal Sidepath")
+    add("Conceal-mint 10", "Conceal Sidepath"); add("Conceal-mint 11", "Conceal Sidepath")
 
-    add("doomshroom0", "Doomshroom Sidepath"); add("doomshroom1", "Doomshroom Sidepath")
-    add("doomshroom2", "Doomshroom Sidepath"); add("doomshroom3", "Doomshroom Sidepath")
-    add("doomshroom4", "Doomshroom Sidepath"); add("Doomshroom Unlock", "Doomshroom Sidepath")
+    add("Doom-shroom 0", "Doomshroom Sidepath"); add("Doom-shroom 1", "Doomshroom Sidepath")
+    add("Doom-shroom 2", "Doomshroom Sidepath"); add("Doom-shroom 3", "Doomshroom Sidepath")
+    add("Doom-shroom 4", "Doomshroom Sidepath"); add("Doom-shroom 5", "Doomshroom Sidepath")
 
-    add("electriccurrant0", "Electriccurrant Sidepath"); add("electriccurrant1", "Electriccurrant Sidepath")
-    add("electriccurrant2", "Electriccurrant Sidepath"); add("electriccurrant3", "Electriccurrant Sidepath")
-    add("electriccurrant4", "Electriccurrant Sidepath"); add("Electriccurrant Unlock", "Electriccurrant Sidepath")
+    add("Electric Currant 0", "Electriccurrant Sidepath"); add("Electric Currant 1", "Electriccurrant Sidepath")
+    add("Electric Currant 2", "Electriccurrant Sidepath"); add("Electric Currant 3", "Electriccurrant Sidepath")
+    add("Electric Currant 4", "Electriccurrant Sidepath"); add("Electric Currant 5", "Electriccurrant Sidepath")
 
-    add("enlighten0", "Enlighten Sidepath"); add("enlighten1", "Enlighten Sidepath")
-    add("enlighten2", "Enlighten Sidepath"); add("enlighten3", "Enlighten Sidepath")
-    add("enlighten4", "Enlighten Sidepath"); add("enlighten5", "Enlighten Sidepath")
-    add("enlighten6", "Enlighten Sidepath"); add("Shinevine Unlock", "Enlighten Sidepath")
+    add("Enlighten-mint 0", "Enlighten Sidepath"); add("Enlighten-mint 1", "Enlighten Sidepath")
+    add("Enlighten-mint 2", "Enlighten Sidepath"); add("Enlighten-mint 3", "Enlighten Sidepath")
+    add("Enlighten-mint 4", "Enlighten Sidepath"); add("Enlighten-mint 5", "Enlighten Sidepath")
+    add("Enlighten-mint 6", "Enlighten Sidepath"); add("Enlighten-mint 7", "Enlighten Sidepath")
 
-    add("ghostpepper0", "Ghostpepper Sidepath"); add("ghostpepper1", "Ghostpepper Sidepath")
-    add("ghostpepper2", "Ghostpepper Sidepath"); add("Ghostpepper Unlock", "Ghostpepper Sidepath")
+    add("Ghost Pepper 0", "Ghostpepper Sidepath"); add("Ghost Pepper 1", "Ghostpepper Sidepath")
+    add("Ghost Pepper 2", "Ghostpepper Sidepath"); add("Ghost Pepper 3", "Ghostpepper Sidepath")
 
-    add("gloomshroom0", "Gloomshroom Sidepath"); add("gloomshroom1", "Gloomshroom Sidepath")
-    add("gloomshroom2", "Gloomshroom Sidepath"); add("gloomshroom3", "Gloomshroom Sidepath")
-    add("gloomshroom4", "Gloomshroom Sidepath"); add("gloomshroom5", "Gloomshroom Sidepath")
-    add("gloomshroom6", "Gloomshroom Sidepath"); add("Gloomshroom Unlock", "Gloomshroom Sidepath")
+    add("Gloom-shroom 0", "Gloomshroom Sidepath"); add("Gloom-shroom 1", "Gloomshroom Sidepath")
+    add("Gloom-shroom 2", "Gloomshroom Sidepath"); add("Gloom-shroom 3", "Gloomshroom Sidepath")
+    add("Gloom-shroom 4", "Gloomshroom Sidepath"); add("Gloom-shroom 5", "Gloomshroom Sidepath")
+    add("Gloom-shroom 6", "Gloomshroom Sidepath"); add("Gloom-shroom 7", "Gloomshroom Sidepath")
 
-    add("goldbloom0", "Goldbloom Sidepath"); add("goldbloom1", "Goldbloom Sidepath")
-    add("goldbloom2", "Goldbloom Sidepath"); add("Goldbloom Unlock", "Goldbloom Sidepath")
+    add("Gold Bloom 0", "Goldbloom Sidepath"); add("Gold Bloom 1", "Goldbloom Sidepath")
+    add("Gold Bloom 2", "Goldbloom Sidepath"); add("Gold Bloom 3", "Goldbloom Sidepath")
 
-    add("hotdate1", "Hotdate Sidepath"); add("hotdate2", "Hotdate Sidepath")
-    add("Hotdate Unlock", "Hotdate Sidepath")
+    add("Hot Date 1", "Hotdate Sidepath"); add("Hot Date 2", "Hotdate Sidepath")
+    add("Hot Date 3", "Hotdate Sidepath")
 
-    add("icebloom0", "Icebloom Sidepath"); add("icebloom1", "Icebloom Sidepath")
-    add("icebloom2", "Icebloom Sidepath"); add("icebloom3", "Icebloom Sidepath")
-    add("icebloom4", "Icebloom Sidepath"); add("Icebloom Unlock", "Icebloom Sidepath")
+    add("Ice Bloom 0", "Icebloom Sidepath"); add("Ice Bloom 1", "Icebloom Sidepath")
+    add("Ice Bloom 2", "Icebloom Sidepath"); add("Ice Bloom 3", "Icebloom Sidepath")
+    add("Ice Bloom 4", "Icebloom Sidepath"); add("Ice Bloom 5", "Icebloom Sidepath")
 
-    add("iceshroom0", "Iceshroom Sidepath"); add("iceshroom1", "Iceshroom Sidepath")
-    add("iceshroom2", "Iceshroom Sidepath"); add("iceshroom3", "Iceshroom Sidepath")
-    add("iceshroom4", "Iceshroom Sidepath"); add("Glaciershroom Unlock", "Iceshroom Sidepath")
+    add("Ice-shroom 0", "Iceshroom Sidepath"); add("Ice-shroom 1", "Iceshroom Sidepath")
+    add("Ice-shroom 2", "Iceshroom Sidepath"); add("Ice-shroom 3", "Iceshroom Sidepath")
+    add("Ice-shroom 4", "Iceshroom Sidepath"); add("Ice-shroom 5", "Iceshroom Sidepath")
 
-    add("meteorflower0", "Meteorflower Sidepath"); add("meteorflower1", "Meteorflower Sidepath")
-    add("meteorflower2", "Meteorflower Sidepath"); add("Meteorflower Unlock", "Meteorflower Sidepath")
+    add("Meteor Flower 0", "Meteorflower Sidepath"); add("Meteor Flower 1", "Meteorflower Sidepath")
+    add("Meteor Flower 2", "Meteorflower Sidepath"); add("Meteor Flower 3", "Meteorflower Sidepath")
 
-    add("parsnip0", "Parsnip Sidepath"); add("parsnip1", "Parsnip Sidepath")
-    add("parsnip2", "Parsnip Sidepath"); add("parsnip3", "Parsnip Sidepath")
-    add("parsnip4", "Parsnip Sidepath"); add("Parsnip Unlock", "Parsnip Sidepath")
+    add("Parsnip 0", "Parsnip Sidepath"); add("Parsnip 1", "Parsnip Sidepath")
+    add("Parsnip 2", "Parsnip Sidepath"); add("Parsnip 3", "Parsnip Sidepath")
+    add("Parsnip 4", "Parsnip Sidepath"); add("Parsnip 5", "Parsnip Sidepath")
 
-    add("plantern0", "Plantern Sidepath"); add("plantern1", "Plantern Sidepath")
-    add("plantern2", "Plantern Sidepath"); add("plantern3", "Plantern Sidepath")
-    add("plantern4", "Plantern Sidepath"); add("Plantern Unlock", "Plantern Sidepath")
+    add("Plantern 0", "Plantern Sidepath"); add("Plantern 1", "Plantern Sidepath")
+    add("Plantern 2", "Plantern Sidepath"); add("Plantern 3", "Plantern Sidepath")
+    add("Plantern 4", "Plantern Sidepath"); add("Plantern 5", "Plantern Sidepath")
 
-    add("reinforce0", "Reinforce Sidepath"); add("reinforce1", "Reinforce Sidepath")
-    add("reinforce2", "Reinforce Sidepath"); add("reinforce3", "Reinforce Sidepath")
-    add("reinforce4", "Reinforce Sidepath"); add("reinforce5", "Reinforce Sidepath")
-    add("reinforce6", "Reinforce Sidepath"); add("Pumpkin Unlock", "Reinforce Sidepath")
-    add("reinforce8", "Reinforce Sidepath"); add("Hollyknight Unlock", "Reinforce Sidepath")
-    add("reinforce10", "Reinforce Sidepath"); add("Gumnut Unlock", "Reinforce Sidepath")
+    add("Reinforce-mint 0", "Reinforce Sidepath"); add("Reinforce-mint 1", "Reinforce Sidepath")
+    add("Reinforce-mint 2", "Reinforce Sidepath"); add("Reinforce-mint 3", "Reinforce Sidepath")
+    add("Reinforce-mint 4", "Reinforce Sidepath"); add("Reinforce-mint 5", "Reinforce Sidepath")
+    add("Reinforce-mint 6", "Reinforce Sidepath"); add("Reinforce-mint 7", "Reinforce Sidepath")
+    add("Reinforce-mint 8", "Reinforce Sidepath"); add("Reinforce-mint 9", "Reinforce Sidepath")
+    add("Reinforce-mint 10", "Reinforce Sidepath"); add("Reinforce-mint 11", "Reinforce Sidepath")
 
-    add("sapfling0", "Sapfling Sidepath"); add("sapfling1", "Sapfling Sidepath")
-    add("sapfling2", "Sapfling Sidepath"); add("sapfling3", "Sapfling Sidepath")
-    add("sapfling4", "Sapfling Sidepath"); add("sapfling5", "Sapfling Sidepath")
-    add("sapfling6", "Sapfling Sidepath"); add("Sapfling Unlock", "Sapfling Sidepath")
+    add("Sap-fling 0", "Sapfling Sidepath"); add("Sap-fling 1", "Sapfling Sidepath")
+    add("Sap-fling 2", "Sapfling Sidepath"); add("Sap-fling 3", "Sapfling Sidepath")
+    add("Sap-fling 4", "Sapfling Sidepath"); add("Sap-fling 5", "Sapfling Sidepath")
+    add("Sap-fling 6", "Sapfling Sidepath"); add("Sap-fling 7", "Sapfling Sidepath")
 
-    add("seashooter0", "Seashooter Sidepath"); add("seashooter1", "Seashooter Sidepath")
-    add("seashooter2", "Seashooter Sidepath"); add("Seashooter Unlock", "Seashooter Sidepath")
+    add("Seashooter 0", "Seashooter Sidepath"); add("Seashooter 1", "Seashooter Sidepath")
+    add("Seashooter 2", "Seashooter Sidepath"); add("Seashooter 3", "Seashooter Sidepath")
 
     add("shootingstarfruit1", "Shootingstarfruit Sidepath")
     add("shootingstarfruit2", "Shootingstarfruit Sidepath")
     add("shootingstarfruit3", "Shootingstarfruit Sidepath")
 
-    add("solartomato0", "Solartomato Sidepath"); add("solartomato1", "Solartomato Sidepath")
-    add("solartomato2", "Solartomato Sidepath"); add("solartomato3", "Solartomato Sidepath")
-    add("solartomato4", "Solartomato Sidepath"); add("Solartomato Unlock", "Solartomato Sidepath")
+    add("Solar Tomato 0", "Solartomato Sidepath"); add("Solar Tomato 1", "Solartomato Sidepath")
+    add("Solar Tomato 2", "Solartomato Sidepath"); add("Solar Tomato 3", "Solartomato Sidepath")
+    add("Solar Tomato 4", "Solartomato Sidepath"); add("Solar Tomato 5", "Solartomato Sidepath")
 
-    add("squash0", "Squash Sidepath"); add("squash1", "Squash Sidepath")
-    add("squash2", "Squash Sidepath"); add("Squash Unlock", "Squash Sidepath")
+    add("Squash 0", "Squash Sidepath"); add("Squash 1", "Squash Sidepath")
+    add("Squash 2", "Squash Sidepath"); add("Squash 3", "Squash Sidepath")
 
-    add("strawburst0", "Strawburst Sidepath"); add("strawburst1", "Strawburst Sidepath")
-    add("strawburst2", "Strawburst Sidepath"); add("strawburst3", "Strawburst Sidepath")
-    add("strawburst4", "Strawburst Sidepath"); add("strawburst5", "Strawburst Sidepath")
-    add("strawburst6", "Strawburst Sidepath"); add("Strawburst Unlock", "Strawburst Sidepath")
+    add("Strawburst 0", "Strawburst Sidepath"); add("Strawburst 1", "Strawburst Sidepath")
+    add("Strawburst 2", "Strawburst Sidepath"); add("Strawburst 3", "Strawburst Sidepath")
+    add("Strawburst 4", "Strawburst Sidepath"); add("Strawburst 5", "Strawburst Sidepath")
+    add("Strawburst 6", "Strawburst Sidepath"); add("Strawburst 7", "Strawburst Sidepath")
 
-    add("sweetpotato0", "Sweetpotato Sidepath"); add("sweetpotato1", "Sweetpotato Sidepath")
-    add("sweetpotato2", "Sweetpotato Sidepath"); add("sweetpotato3", "Sweetpotato Sidepath")
-    add("sweetpotato4", "Sweetpotato Sidepath"); add("Sweetpotato Unlock", "Sweetpotato Sidepath")
+    add("Sweet Potato 0", "Sweetpotato Sidepath"); add("Sweet Potato 1", "Sweetpotato Sidepath")
+    add("Sweet Potato 2", "Sweetpotato Sidepath"); add("Sweet Potato 3", "Sweetpotato Sidepath")
+    add("Sweet Potato 4", "Sweetpotato Sidepath"); add("Sweet Potato 5", "Sweetpotato Sidepath")
 
-    add("umbrellaleaf0", "Umbrellaleaf Sidepath"); add("umbrellaleaf1", "Umbrellaleaf Sidepath")
-    add("umbrellaleaf2", "Umbrellaleaf Sidepath"); add("umbrellaleaf3", "Umbrellaleaf Sidepath")
-    add("umbrellaleaf4", "Umbrellaleaf Sidepath"); add("umbrellaleaf5", "Umbrellaleaf Sidepath")
-    add("umbrellaleaf6", "Umbrellaleaf Sidepath"); add("umbrellaleaf7", "Umbrellaleaf Sidepath")
-    add("umbrellaleaf8", "Umbrellaleaf Sidepath"); add("umbrellaleaf9", "Umbrellaleaf Sidepath")
-    add("umbrellaleaf10", "Umbrellaleaf Sidepath"); add("Umbrellaleaf Unlock", "Umbrellaleaf Sidepath")
+    add("Umbrella Leaf 0", "Umbrellaleaf Sidepath"); add("Umbrella Leaf 1", "Umbrellaleaf Sidepath")
+    add("Umbrella Leaf 2", "Umbrellaleaf Sidepath"); add("Umbrella Leaf 3", "Umbrellaleaf Sidepath")
+    add("Umbrella Leaf 4", "Umbrellaleaf Sidepath"); add("Umbrella Leaf 5", "Umbrellaleaf Sidepath")
+    add("Umbrella Leaf 6", "Umbrellaleaf Sidepath"); add("Umbrella Leaf 7", "Umbrellaleaf Sidepath")
+    add("Umbrella Leaf 8", "Umbrellaleaf Sidepath"); add("Umbrella Leaf 9", "Umbrellaleaf Sidepath")
+    add("Umbrella Leaf 10", "Umbrellaleaf Sidepath"); add("Umbrella Leaf 11", "Umbrellaleaf Sidepath")
 
-    add("vamporcini0", "Vamporcini Sidepath"); add("vamporcini1", "Vamporcini Sidepath")
-    add("vamporcini2", "Vamporcini Sidepath"); add("Vamporcini Unlock", "Vamporcini Sidepath")
+    add("Vamporcini 0", "Vamporcini Sidepath"); add("Vamporcini 1", "Vamporcini Sidepath")
+    add("Vamporcini 2", "Vamporcini Sidepath"); add("Vamporcini 3", "Vamporcini Sidepath")
 
     add("epic_beghouled1", "Epic Beghouled Sidepath")
     add("epic_beghouled2", "Epic Beghouled Sidepath")
@@ -828,21 +828,21 @@ def _make_locs() -> List[PvZ2LocationData]:
     # own node labels are 1-5. Missed until now because the location list was
     # built from level definitions rather than map nodes.
     #
-    # Named for the plant (PlantFeatures id 206, NAME.en "Goo Peashooter")
-    # rather than its codename `poisonpeashooter`, which is what the level
-    # files use. The last level keeps the "<Plant> Unlock" form every other
-    # path uses -- that is the name trackers and !hint read.
+    # Named "<Plant> <N>" like every other side path: the plant is the one the
+    # levels declare in PlantToIntroduce (PlantFeatures id 206, NAME.en "Goo
+    # Peashooter"), and N is the number off the codename, so it lines up with
+    # the epic map's own node labels 1-5. 0 is the demo level.
     #
     # The plant itself is NOT an item: the client's plant tables stop at id
     # 165, so all 43 plants above that are unshuffled. Aloe, Seashooter and
     # Ice Bloom are already in the seed on the same footing, so this path is
     # consistent with them -- it adds checks, not a new plant.
-    add("Goo Peashooter Demo", "Goo Peashooter Sidepath")    # poisonpeashooter0
-    add("Goo Peashooter 1", "Goo Peashooter Sidepath")       # poisonpeashooter1
-    add("Goo Peashooter 2", "Goo Peashooter Sidepath")       # poisonpeashooter2
-    add("Goo Peashooter 3", "Goo Peashooter Sidepath")       # poisonpeashooter3
-    add("Goo Peashooter 4", "Goo Peashooter Sidepath")       # poisonpeashooter4
-    add("Goo Peashooter Unlock", "Goo Peashooter Sidepath")  # poisonpeashooter5
+    add("Goo Peashooter 0", "Goo Peashooter Sidepath")  # poisonpeashooter0
+    add("Goo Peashooter 1", "Goo Peashooter Sidepath")  # poisonpeashooter1
+    add("Goo Peashooter 2", "Goo Peashooter Sidepath")  # poisonpeashooter2
+    add("Goo Peashooter 3", "Goo Peashooter Sidepath")  # poisonpeashooter3
+    add("Goo Peashooter 4", "Goo Peashooter Sidepath")  # poisonpeashooter4
+    add("Goo Peashooter 5", "Goo Peashooter Sidepath")  # poisonpeashooter5
 
     return locs
 
