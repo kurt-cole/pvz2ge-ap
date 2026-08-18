@@ -821,6 +821,29 @@ def _make_locs() -> List[PvZ2LocationData]:
     add("eighties42", "Neon Mixtape Tour")
     add("eighties_dangerroom2", "Neon Mixtape Tour")
 
+    # ── Goo Peashooter side path (added 2026-08-17) ──────────────────────────
+    # Branches off dark16, which carries the otherNextIslands entry for it, and
+    # is laid out exactly like every other plant quest: a demo level on the
+    # Dark Ages map (node "16-1"), then five levels on the epic_dark map whose
+    # own node labels are 1-5. Missed until now because the location list was
+    # built from level definitions rather than map nodes.
+    #
+    # Named for the plant (PlantFeatures id 206, NAME.en "Goo Peashooter")
+    # rather than its codename `poisonpeashooter`, which is what the level
+    # files use. The last level keeps the "<Plant> Unlock" form every other
+    # path uses -- that is the name trackers and !hint read.
+    #
+    # The plant itself is NOT an item: the client's plant tables stop at id
+    # 165, so all 43 plants above that are unshuffled. Aloe, Seashooter and
+    # Ice Bloom are already in the seed on the same footing, so this path is
+    # consistent with them -- it adds checks, not a new plant.
+    add("Goo Peashooter Demo", "Goo Peashooter Sidepath")    # poisonpeashooter0
+    add("Goo Peashooter 1", "Goo Peashooter Sidepath")       # poisonpeashooter1
+    add("Goo Peashooter 2", "Goo Peashooter Sidepath")       # poisonpeashooter2
+    add("Goo Peashooter 3", "Goo Peashooter Sidepath")       # poisonpeashooter3
+    add("Goo Peashooter 4", "Goo Peashooter Sidepath")       # poisonpeashooter4
+    add("Goo Peashooter Unlock", "Goo Peashooter Sidepath")  # poisonpeashooter5
+
     return locs
 
 

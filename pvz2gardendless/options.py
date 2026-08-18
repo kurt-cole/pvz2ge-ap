@@ -143,18 +143,20 @@ class IncludeSidePaths(Toggle):
     nothing routes through them, so they become free play with no checks.
 
     They are off by default because logic cannot gate them the way the game
-    does. A side path is one flat region attached to the opening of the world
-    it branches from, so a path that spans two worlds is only gated on the
-    earlier one -- the Appease quest's second half sits behind Frostbite Caves
-    level 25 in game but is in logic from the start -- and the seven the game
-    ties to no world hang off the tutorial.
+    does. In game a path opens when a specific numbered level is cleared -- the
+    Squash quest at Ancient Egypt 6, Aloe at Lost City 8, Goo Peashooter at
+    Dark Ages 16 -- and its later levels sit behind clearing the path's own
+    first level. Here a path is one flat region hung off the opening of the
+    world it branches from, so all of that is in logic as soon as the world is.
+    A path spanning two worlds is gated only on the earlier one: the Appease
+    quest's second half sits behind Frostbite Caves 25 in game but is in logic
+    from the start.
 
-    On restores the old behaviour: 761 locations instead of 554 with every
-    world enabled, and a sphere 1 of 50 locations instead of 7. Side paths
+    On restores the old behaviour: 703 locations instead of 516 with every
+    world enabled, and a sphere 1 of 27 locations instead of 9. Side paths
     belonging to a world this seed left out are still dropped either way.
 
-    A small seed can end up with fewer locations than there are plants: a
-    one-world seed with this off is 101 locations against 149 items. Nothing
+    A small seed can end up with fewer locations than there are plants. Nothing
     fails there -- the pool ships fewer of the plants that gate nothing, and
     every progression plant, world key and upgrade still goes in. Turning this
     on is the way to get the full plant list into a small seed.

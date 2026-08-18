@@ -1621,12 +1621,24 @@ window.electron = electron;
     'sky14':'sky14',
     'sky15':'sky15',
     'World Key - Aerial Fortress':'sky16',
-    'aloe0':'aloe0.JSON',
-    'aloe1':'aloe1.JSON',
-    'aloe2':'aloe2.JSON',
-    'aloe3':'aloe3.JSON',
-    'aloe4':'aloe4.JSON',
-    'Aloe Unlock':'aloe5.JSON',
+    // The game's level ids carry no extension -- these six read 'aloe0.JSON'
+    // and so on until 2026-08-17, and isFinished() looks the id up as an exact
+    // key in cp.levelProps, so none of the six Aloe checks could ever fire and
+    // a received Aloe check wrote a key the game never reads. "aloe0.JSON"
+    // appears in zero resource files; the whole map is the only place the
+    // suffix existed.
+    'aloe0':'aloe0',
+    'aloe1':'aloe1',
+    'aloe2':'aloe2',
+    'aloe3':'aloe3',
+    'aloe4':'aloe4',
+    'Aloe Unlock':'aloe5',
+    'Goo Peashooter Demo':'poisonpeashooter0',
+    'Goo Peashooter 1':'poisonpeashooter1',
+    'Goo Peashooter 2':'poisonpeashooter2',
+    'Goo Peashooter 3':'poisonpeashooter3',
+    'Goo Peashooter 4':'poisonpeashooter4',
+    'Goo Peashooter Unlock':'poisonpeashooter5',
     'appease1_0':'appease1_0',
     'appease1_1':'appease1_1',
     'appease1_2':'appease1_2',

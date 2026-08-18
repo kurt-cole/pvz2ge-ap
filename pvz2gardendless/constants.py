@@ -444,6 +444,7 @@ SIDE_PATH_WORLD = {
     "Electriccurrant Sidepath": "Wild West",
     "Enlighten Sidepath":       "Lost City",
     "Ghostpepper Sidepath":     "Big Wave Beach",
+    "Goo Peashooter Sidepath":  "Dark Ages",
     "Gloomshroom Sidepath":     "Modern Day",
     "Goldbloom Sidepath":       "Modern Day",
     "Hotdate Sidepath":         "Frostbite Caves",
@@ -484,6 +485,7 @@ SIDE_PATH_REGIONS = [
     "Doomshroom Sidepath", "Electriccurrant Sidepath", "Enlighten Sidepath",
     "Epic Beghouled Sidepath", "Floawerpot Sidepath",
     "Ghostpepper Sidepath", "Gloomshroom Sidepath", "Goldbloom Sidepath",
+    "Goo Peashooter Sidepath",
     "Hotdate Sidepath", "Icebloom Sidepath", "Iceshroom Sidepath",
     "Meteorflower Sidepath", "Mixed Sidepath", "Parsnip Sidepath", "Plantern Sidepath",
     "Reinforce Sidepath", "Reinforcemint Sidepath", "Rhythm Sidepath",
@@ -631,6 +633,33 @@ UNREACHABLE_LOCATIONS = frozenset({
     #     Room"; it is the sole location of the Mixed Sidepath region, which is
     #     now always empty.
     "kongfu_dangerroom4", "mixed_dangerroom2",
+    # An alternate "Iceage 24" -- the preset-plant variant where the lawn
+    # starts frozen and the seed bank is five Hot Potatoes, with no sun
+    # dropper. Frostbite Caves' map chain is nodes 1-40 carrying a plain
+    # iceage24; there is no 24-B node, the world table does not list it, and
+    # index.js never names it. It is the ONLY level asset in the game with a
+    # capital letter in its name (checked across all 1183), so there is no
+    # variant family behind it -- just this one stray.
+    "iceage24_B",
+    # The eight side paths with no map node anywhere. Each appears in exactly
+    # one resource file -- its own definition -- and the world chooser has no
+    # icon for the aggregate `epic` map that would otherwise reach them.
+    # Nothing else can launch a level either: Level of the Day is gated on
+    # feature_lod, which is never set true in this build, and the only seven
+    # ForceNextLevel entries are the tutorial chain.
+    #
+    # They were the whole reason side paths "hang off the tutorial" in
+    # regions.py -- there is nothing to hang them off, because they cannot be
+    # reached at all.
+    "bank_theft1", "bank_theft2", "bank_theft3", "bank_theft4", "bank_theft5",
+    "epic_beghouled1", "epic_beghouled2", "epic_beghouled3", "epic_beghouled4",
+    "epic_beghouled5",
+    "floawerpot1", "floawerpot2", "floawerpot3",
+    "reinforcemint_try1", "reinforcemint_try2", "reinforcemint_try3",
+    "rhythm1",
+    "sandbox", "sandbox_green", "sandbox_modern", "sandbox_modern_night",
+    "sandbox_sky",
+    "shootingstarfruit1", "shootingstarfruit2", "shootingstarfruit3",
 })
 
 

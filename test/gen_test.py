@@ -368,14 +368,32 @@ print(f"none of the {len(C.UNREACHABLE_LOCATIONS)} unreachable levels is ever bu
 from pvz2gardendless.locations import ALL_LOCATIONS as _ALL_L, LOC_NAME_TO_ID
 for _n in C.UNREACHABLE_LOCATIONS:
     assert _n in LOC_NAME_TO_ID, f"{_n} was deleted from the table, renumbering IDs"
-# The set is the random_* family plus the two orphaned Danger Rooms -- if a new
-# random_* is added to the game data it must be added here too, and nothing else
-# may be swept in. The two rooms are named explicitly rather than derived: every
-# OTHER dangerroom location is a real level, so any rule loose enough to catch
-# these two would catch all 37.
+# Four families, and nothing else may be swept in. Named explicitly rather than
+# derived by any rule: each was established by checking the game's map scenes
+# for a node that can launch the level, which this suite cannot read (it runs
+# with no game source). A rule loose enough to catch them from the names alone
+# would also catch the real levels sitting next to them -- every OTHER
+# dangerroom location is live, and every OTHER side path is reachable.
 _rand = {l.name for l in _ALL_L if l.name.startswith("random_")}
 _orphan_rooms = {"kongfu_dangerroom4", "mixed_dangerroom2"}
-assert _rand | _orphan_rooms == set(C.UNREACHABLE_LOCATIONS),     f"random_* family and UNREACHABLE_LOCATIONS disagree: {(_rand | _orphan_rooms) ^ set(C.UNREACHABLE_LOCATIONS)}"
+# The eight side paths with no map node anywhere. Whole regions, so this is
+# expressed as "every location in them" -- if one gains a location later it is
+# dropped too, which is right: nothing in these can be launched.
+_ORPHAN_PATH_REGIONS = {
+    "Bank Sidepath", "Epic Beghouled Sidepath", "Floawerpot Sidepath",
+    "Mixed Sidepath", "Reinforcemint Sidepath", "Rhythm Sidepath",
+    "Sandbox Sidepath", "Shootingstarfruit Sidepath",
+}
+_orphan_paths = {l.name for l in _ALL_L if l.region in _ORPHAN_PATH_REGIONS}
+_expected = _rand | _orphan_rooms | _orphan_paths | {"iceage24_B"}
+assert _expected == set(C.UNREACHABLE_LOCATIONS),     f"UNREACHABLE_LOCATIONS disagrees: {_expected ^ set(C.UNREACHABLE_LOCATIONS)}"
+# Those eight regions must end up completely empty, under every option combo --
+# include_side_paths on is the case that used to build them.
+for _sp in (0, 1):
+    _ow, _ = run(f"orphan side paths: side_paths={_sp}", include_side_paths=_sp)
+    _obuilt = {l.region for l in _ow.active_locations()}
+    _leak = _ORPHAN_PATH_REGIONS & _obuilt
+    assert not _leak, f"unreachable side path built locations: {sorted(_leak)}"
 # No goal or victory condition may depend on one, in any goal mode.
 for _gt in (0, 1, 2):
     _gw, _gsd = run(f"unreachable: goal_type={_gt}", goal_type=_gt, worlds_required=11)
