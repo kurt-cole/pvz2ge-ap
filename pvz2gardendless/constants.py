@@ -525,7 +525,7 @@ DANGER_ROOM_LOCATIONS = frozenset({
     "lostcity_dangerroom", "lostcity_dangerroom2",
     "kongfu_dangerroom", "kongfu_dangerroom2", "kongfu_dangerroom3",
     "kongfu_dangerroom4",
-    "eighties_dangerroom",
+    "eighties_dangerroom", "eighties_dangerroom2",
     "dino_dangerroom", "dino_dangerroom2",
     "modern_dangerroom", "modern_dangerroom2",
     "mixed_dangerroom2",
@@ -585,6 +585,7 @@ DANGER_ROOM_UNLOCK = {
     "kongfu_dangerroom2":                 "Dangerroom Kongfu2 Unlock",         # kongfu30
     "kongfu_dangerroom3":                 "Dangerroom Kongfu3 Unlock",         # kongfu47
     "eighties_dangerroom":                "Dangerroom Eighties Unlock",        # eighties20
+    "eighties_dangerroom2":               "Dangerroom Eighties2 Unlock",       # eighties38
     "dino_dangerroom":                    "Dangerroom Dino Unlock",            # dino20
     "dino_dangerroom2":                   "Dangerroom Dino2 Unlock",           # dino36
     "modern_dangerroom":                  "Dangerroom Modern Unlock",          # modern20

@@ -166,7 +166,7 @@ class IncludeDangerRooms(Toggle):
     """
     Include the Danger Rooms -- the game's endless survival mode.
 
-    35 locations: one to three per world, plus Big Wave Beach's eight themed
+    36 locations: one to three per world, plus Big Wave Beach's eight themed
     minigame rooms.
 
     Off (the default) drops them from the seed the way an unpicked world is

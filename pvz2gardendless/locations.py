@@ -791,6 +791,36 @@ def _make_locs() -> List[PvZ2LocationData]:
     for commodity in SHOP_COMMODITIES:
         add(shop_location_name(commodity), SHOP_REGION, shop=True)
 
+    # ── Neon Mixtape Tour, second half (added 2026-08-17) ────────────────────
+    # The world runs to eighties42; this list stopped at eighties32. Its map
+    # chain is nodes 1-42 unbroken -- verified against the world table and the
+    # map scene -- so these are ordinary playable levels that simply had no
+    # check. eighties39 is also one of the two levels a gem-priced shop card
+    # gates on, so shopsanity players had no check for it either.
+    #
+    # Appended here rather than in the Neon Mixtape Tour block above for the
+    # same reason the shop is: IDs are assigned by increment, so inserting
+    # them in reading order would renumber every location after eighties32 and
+    # break every seed already generated. Position in this list also decides
+    # which stretch regions.py puts a location in, and these come last in the
+    # world, so the tail of the list is where they belong anyway.
+    #
+    # eighties32 is the world's Zomboss and carries worldtrophy_eighties;
+    # eighties42 is the "2.0" rematch that closes the world. Every world is
+    # built that way (egypt25/egypt35, dino32/dino42 ...), which is why
+    # WORLD_COMPLETION_LOCS now points at eighties42 rather than the trophy.
+    add("eighties33", "Neon Mixtape Tour")
+    add("eighties34", "Neon Mixtape Tour")
+    add("eighties35", "Neon Mixtape Tour")
+    add("eighties36", "Neon Mixtape Tour")
+    add("eighties37", "Neon Mixtape Tour")
+    add("Dangerroom Eighties2 Unlock", "Neon Mixtape Tour")  # eighties38
+    add("eighties39", "Neon Mixtape Tour")
+    add("eighties40", "Neon Mixtape Tour")
+    add("eighties41", "Neon Mixtape Tour")
+    add("eighties42", "Neon Mixtape Tour")
+    add("eighties_dangerroom2", "Neon Mixtape Tour")
+
     return locs
 
 
@@ -889,12 +919,17 @@ WORLD_TROPHY_LOCS = [
 ]  # 10 total (Kongfu excluded — no trophy in game data)
 
 # World Completion locations — the final regular level of each world.
-# Modern Day and Aerial Fortress are excluded. Neon Mixtape Tour has no
-# separate final-level location -- it's shorter than the other worlds and
-# its trophy check (eighties32) is also its last level, per the client's
-# level mapping (build_pvzge_ap.py's LOC_LEVELS), so it reuses the same
-# location name as WORLD_TROPHY_LOCS instead of a distinct "eighties32" name
-# that was never added to _make_locs().
+# Modern Day and Aerial Fortress are excluded.
+#
+# Neon Mixtape Tour used to reuse its trophy location here, on the belief that
+# the world "is shorter than the other worlds and its trophy check (eighties32)
+# is also its last level". Both halves of that were wrong: at 42 levels it is
+# joint second-longest, and eighties32 is its mid-world Zomboss. Every world is
+# built the same way -- a Zomboss at the trophy (egypt25, dino32, eighties32)
+# and a "2.0" rematch at the final level (egypt35, dino42, eighties42) -- so
+# this world's completion goal was met ten levels before every other world's,
+# and world_completions was indistinguishable from world_trophies for it.
+# Fixed 2026-08-17, together with adding eighties33-42.
 WORLD_COMPLETION_LOCS = [
     "egypt35",    # Ancient Egypt
     "pirate35",   # Pirate Seas
@@ -905,7 +940,7 @@ WORLD_COMPLETION_LOCS = [
     "iceage40",   # Frostbite Caves
     "lostcity42", # Lost City
     "kongfu48",   # Kongfu Temple
-    "Worldtrophy Eighties Unlock", # Neon Mixtape Tour (eighties32; also its trophy)
+    "eighties42", # Neon Mixtape Tour
     "dino42",     # Jurassic Marsh
 ]  # 11 total
 

@@ -582,6 +582,52 @@ for _gt in (0, 1, 2):
 print(f"include_danger_rooms removes exactly the {len(_buildable_rooms)} rooms "
       "and no goal location")
 
+# ── each world's completion goal is really its last level ───────────────────
+# Every world is built the same way: a Zomboss at the mid-world trophy
+# (egypt25, dino32, eighties32) and a "2.0" rematch at the final level
+# (egypt35, dino42, eighties42). The completion goal has to be the latter.
+#
+# HARDCODED from the game's own world table (WORLDMAPS[w].LEVELS in
+# import/01/01c3025f0.json), not derived from LOC_LEVELS. Deriving it would
+# restate whatever the location list happens to hold, which is exactly the bug
+# being pinned: Neon Mixtape Tour's completion goal was eighties32 because the
+# location list stopped there, so a derived "highest level in this world" test
+# would have called it correct. The suite has no game source to read, so the
+# expected values live here.
+_WORLD_FINAL_LEVEL = {
+    "egypt": 35, "pirate": 35, "cowboy": 35, "future": 35, "dark": 30,
+    "beach": 42, "iceage": 40, "lostcity": 42, "kongfu": 48, "eighties": 42,
+    "dino": 42,
+}
+from pvz2gardendless.locations import WORLD_COMPLETION_LOCS as _WC, WORLD_TROPHY_LOCS as _WT
+_seen = set()
+for _n in _WC:
+    _lv = _lvl.get(_n)
+    assert _lv, f"completion goal {_n} has no LOC_LEVELS entry"
+    _m = _re.match(r"^([a-z]+)(\d+)$", _lv)
+    assert _m, f"completion goal {_n} maps to {_lv}, which is not a numbered level"
+    _w, _num = _m.group(1), int(_m.group(2))
+    assert _w in _WORLD_FINAL_LEVEL, f"unknown world {_w} in completion goals"
+    assert _num == _WORLD_FINAL_LEVEL[_w], (
+        f"{_n} -> {_lv}, but {_w} really ends at {_w}{_WORLD_FINAL_LEVEL[_w]}; "
+        "a completion goal short of the world's last level makes that world "
+        "cheaper than every other")
+    _seen.add(_w)
+assert len(_seen) == len(_WC), "two completion goals in the same world"
+# ...and completion must be a strictly later ask than the trophy, or the two
+# goal types collapse into each other for that world.
+_both = set(_WC) & set(_WT)
+assert not _both, f"location used as BOTH trophy and completion goal: {sorted(_both)}"
+print(f"all {len(_WC)} completion goals are their world's real final level, "
+      "and none doubles as a trophy goal")
+
+# Neon Mixtape Tour runs 1-42 with no gaps (it used to stop at 32).
+_e = {int(_m.group(1)) for _v in _lvl.values()
+      for _m in [_re.match(r"^eighties(\d+)$", _v)] if _m}
+assert _e == set(range(1, 43)), \
+    f"Neon Mixtape Tour is missing levels: {sorted(set(range(1,43)) - _e)}"
+print(f"Neon Mixtape Tour covers eighties1-42 with no gaps")
+
 # ── small seeds trim useful plants rather than failing ──────────────────────
 # A one-world seed with side paths off has 101 locations (140 with shopsanity)
 # against a 149-item block. The useful plants are the only part that can give:
