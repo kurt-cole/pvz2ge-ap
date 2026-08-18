@@ -15,7 +15,7 @@ from .constants import (
     KEYED_WORLDS, SIDE_PATH_REGIONS, STRETCH_PLANTS, SUN_PRODUCER_PLANTS,
     WORLD_ENTRY_PLANTS, is_early_region,
 )
-from .locations import goal_locations_for
+from .locations import SHOP_LOC_UNLOCK, goal_locations_for
 
 if TYPE_CHECKING:
     from . import PvZ2GardendlessWorld
@@ -148,6 +148,37 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         add_rule(room, lambda state, u=unlock: u.can_reach(state))
         danger_rooms.append(room)
 
+    # Shop checks wait for the card to reach the shelf. The Shop region only
+    # models the store BUTTON, which the game grows once egypt6 is cleared;
+    # the shelf itself fills in over the whole run, because readCommodity
+    # destroys a card whose UnlockLevel is not cleared yet:
+    #
+    #   getPlantProgressByID(id).progress > 0 ||
+    #   (UnlockLevel && getLevelProgressByID(UnlockLevel).progress < 3)
+    #
+    # So 29 of the 39 checks were in logic from Egypt 6 while the game does not
+    # put them on sale until Modern Day 14, Aerial Fortress 31, Kongfu 38 and so
+    # on -- fill could bury a key behind a purchase that cannot be made for
+    # another ten worlds. Same rule shape as the Danger Rooms above, and the
+    # same reason no indirect condition is needed: it is a location rule, so no
+    # region's reachability turns on it.
+    #
+    # The other ten cards carry no UnlockLevel and stay on the Shop region's
+    # own gate. Cards whose world this seed left out are not built at all --
+    # active_locations drops them, since nothing could ever clear their level.
+    shop_gated = []
+    for loc_name, unlock_name in SHOP_LOC_UNLOCK.items():
+        try:
+            shop_loc = multiworld.get_location(loc_name, player)
+        except KeyError:
+            continue  # shopsanity off, or this card's world is not in the seed
+        # active_locations only keeps the card when its unlock level's world is
+        # in the seed, so this cannot miss. Left to raise if it ever does: an
+        # ungated card looks exactly like a working one.
+        unlock = multiworld.get_location(unlock_name, player)
+        add_rule(shop_loc, lambda state, u=unlock: u.can_reach(state))
+        shop_gated.append(shop_loc)
+
     # Keys out of the late stretches, when the option asks for it. This is an
     # item rule rather than an access rule: it does not change what any
     # location requires, only what fill is allowed to put there.
@@ -194,6 +225,11 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         # and quietly undo what this option is for.
         for room in danger_rooms:
             forbid_items_for_player(room, key_names, player)
+        # Same for a shop card that is not on sale yet: "Shop" is an early
+        # region by name, but a card gated on modern31 or sky31 is one of the
+        # last checks in the seed.
+        for shop_loc in shop_gated:
+            forbid_items_for_player(shop_loc, key_names, player)
 
     # Modern Day — unlocked once enough world goals (trophies / completions /
     # keys, per the goal_type option) are reachable.

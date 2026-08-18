@@ -9,8 +9,9 @@ from BaseClasses import Location
 
 from .constants import (
     ALL_WORLD_REGIONS, BASE_ID, DANGER_ROOM_LOCATIONS, GAME_NAME,
-    SHOP_COMMODITIES, SHOP_REGION, SIDE_PATH_REGIONS, SIDE_PATH_WORLD,
-    UNREACHABLE_LOCATIONS, WORLD_REGIONS, shop_location_name,
+    SHOP_COMMODITIES, SHOP_REGION, SHOP_UNLOCK, SIDE_PATH_REGIONS,
+    SIDE_PATH_WORLD, UNREACHABLE_LOCATIONS, WORLD_REGIONS,
+    shop_location_name,
 )
 from .options import GoalType
 
@@ -889,6 +890,22 @@ if _unclassified_regions:
                      f"{sorted(_unclassified_regions)}")
 
 
+# Shop check -> the level whose clearing puts that card on the shelf, keyed by
+# location name rather than by commodity so both the filter below and rules.py
+# can use it directly. SHOP_UNLOCK holds the game's own table; see it for the
+# derivation.
+SHOP_LOC_UNLOCK = {shop_location_name(c): lvl for c, lvl in SHOP_UNLOCK.items()}
+
+# Every location's declared region, for resolving a shop card's unlock level to
+# the world it is in. Built from ALL_LOCATIONS so it cannot drift from them.
+_REGION_OF = {l.name: l.region for l in ALL_LOCATIONS}
+
+_missing_unlocks = sorted(set(SHOP_LOC_UNLOCK.values()) - set(_REGION_OF))
+if _missing_unlocks:
+    raise ValueError(f"shop cards unlock at levels that are not locations: "
+                     f"{_missing_unlocks}")
+
+
 def active_locations(shopsanity: bool,
                      enabled_regions: Set[str],
                      side_paths: bool = True,
@@ -906,6 +923,11 @@ def active_locations(shopsanity: bool,
     locations exist with nothing that can reach them and generation fails.
     Tutorial and Shop are always kept.
 
+    Shop checks are filtered the same way, one card at a time: 29 of the 39
+    carry an UnlockLevel naming a specific level (SHOP_UNLOCK), so a card whose
+    level is in a world this seed left out goes with that world. The other ten
+    are on sale from the moment the store button exists and are always kept.
+
     side_paths=False drops every side path, worldless ones included; that is
     the include_side_paths option. danger_rooms=False drops the 37 Danger Room
     levels, which sit inside their world's own region rather than a region of
@@ -922,6 +944,13 @@ def active_locations(shopsanity: bool,
         if loc.name in UNREACHABLE_LOCATIONS:
             return False
         if loc.is_shop and not shopsanity:
+            return False
+        # A card only reaches the shelf once its UnlockLevel is cleared, so a
+        # card unlocked by a world this seed left out can never be bought --
+        # the same reasoning that drops a dropped world's side paths. Without
+        # this a one-world seed carries checks nothing can reach.
+        unlock = SHOP_LOC_UNLOCK.get(loc.name)
+        if unlock is not None and _REGION_OF[unlock] not in enabled_regions:
             return False
         # Checked before the region tests: a Danger Room lives in a world
         # region (or, for the Mixed one, a side path), so it would otherwise be

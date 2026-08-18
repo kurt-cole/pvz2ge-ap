@@ -210,6 +210,15 @@ class Shopsanity(Toggle):
     The store itself does not exist until you clear Egypt level 6, which is the
     game's own rule, so logic puts these checks behind Ancient Egypt's sun
     producer gate rather than in the opening.
+
+    Each card is then gated on the level that puts it on the shelf, from the
+    game's own store data: Shrinking Violet after Modern Day 14, FloawerPot
+    after Aerial Fortress 31, Bamboozle after Kongfu Temple 38. 29 of the 39
+    work that way; the other ten are on sale as soon as the store exists.
+
+    A card whose level is in a world this seed left out is dropped, since
+    nothing could ever make it appear -- so a small seed adds fewer than 39.
+    An Egypt-only seed adds 14.
     """
     display_name = "Shopsanity"
 

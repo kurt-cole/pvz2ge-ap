@@ -378,6 +378,55 @@ SHOP_UPGRADE_COMMODITIES = [
 SHOP_COMMODITIES = SHOP_PLANT_COMMODITIES + SHOP_UPGRADE_COMMODITIES
 SHOP_REGION = "Shop"
 
+# Which level makes each shop card appear, from the store data itself
+# (`StoreCommodityFeatures.Plants[].UnlockLevel` in `import/0f/0fc6e99c8.json`).
+#
+# The game destroys a card before drawing it unless its UnlockLevel is cleared:
+#
+#   getPlantProgressByID(id).progress > 0 ||
+#   (UnlockLevel && getLevelProgressByID(UnlockLevel).progress < 3)
+#
+# so the store is not one shop that opens at egypt6 -- it is 39 cards that
+# appear one at a time across the whole run. 29 of the 34 gem-priced plants
+# carry an UnlockLevel; jalapeno, mirrornut, wasabiwhip, pyrevine and cranjelly
+# do not, and neither does any of the five upgrade commodities, so those ten
+# are on sale as soon as the store button exists.
+#
+# Read straight out of the store file and NOT from anything else that names the
+# same level. These collide with the side-path branch levels in three places
+# (beach14, eighties14, lostcity14) and mean something unrelated each time.
+SHOP_UNLOCK = {
+    "iceweed":            "egypt9",
+    "snowdrop":           "egypt28",
+    "starfruit":          "future20",
+    "pinkstarfruit":      "future28",
+    "asparagus":          "sky14",
+    "hypnoshroom":        "dark8",
+    "peanut":             "dark18",
+    "homingthistle":      "beach31",
+    "chomper":            "beach14",
+    "hurrikale":          "iceage14",
+    "lavaguava":          "lostcity14",
+    "toadstool":          "lostcity31",
+    "powerlily":          "kongfu22",
+    "bamboozle":          "kongfu38",
+    "firepeashooter":     "iceage29",
+    "cactus":             "eighties14",
+    "electricblueberry":  "eighties31",
+    "caulipower":         "eighties39",
+    "jackolantern":       "iceage34",
+    "grapeshot":          "dino3",
+    "escaperoot":         "modern31",
+    "explodeonut":        "dino39",
+    "applemortar":        "future31",
+    "floawerPot":         "sky31",
+    "coldsnapdragon":     "dino19",
+    "missiletoe":         "beach35",
+    "electricpeashooter": "cowboy28",
+    "zoybeanpod":         "lostcity37",
+    "shrinkingviolet":    "modern14",
+}  # 29 of the 39 shop checks
+
 # ── Permanent upgrades ────────────────────────────────────────────────────────
 # The game's fourteen permanent upgrades, as (item name, game codename), in
 # the game's own UpgradeEnum order. The codenames are what the save file keys

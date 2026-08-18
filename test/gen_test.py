@@ -463,6 +463,44 @@ assert len(_deep) == 16, f"{len(_deep)} side paths are gated past a world openin
 print(f"all {len(C.SIDE_PATH_UNLOCK)} branch side paths hang off their unlock level's "
       f"region ({len(_deep)} past the world opening), Hot Date chains off Sweet Potato")
 
+# Shop cards: the gate table has to agree with the commodity list and with the
+# locations, or a card is either ungated or gated on something that is not there.
+_shop_names = {C.shop_location_name(c) for c in C.SHOP_COMMODITIES}
+assert set(C.SHOP_UNLOCK) <= set(C.SHOP_COMMODITIES),     f"SHOP_UNLOCK names commodities that are not sold: "     f"{sorted(set(C.SHOP_UNLOCK) - set(C.SHOP_COMMODITIES))}"
+# The ten with no UnlockLevel in the game's store data. Pinned as literals from
+# `StoreCommodityFeatures` rather than derived, so a card losing its gate by
+# accident shows up here instead of quietly becoming an egypt6 check.
+assert set(C.SHOP_COMMODITIES) - set(C.SHOP_UNLOCK) == {
+    "jalapeno", "mirrornut", "wasabiwhip", "pyrevine", "cranjelly",
+    "upgrade_sunshovel_lvl3", "upgrade_8_slots", "upgrade_pf_slots_lvl2",
+    "upgrade_starting_sun_lvl2", "upgrade_manual_mowers_2",
+}, "the set of shop cards with no UnlockLevel changed"
+for _c, _lvl in C.SHOP_UNLOCK.items():
+    assert _lvl in _lnames, f"{_c} unlocks at {_lvl}, which is not a location"
+    assert _lvl not in C.UNREACHABLE_LOCATIONS, f"{_c} unlocks at unreachable {_lvl}"
+    assert _lnames[_lvl] in C.ALL_WORLD_REGIONS,         f"{_c} unlocks at {_lvl}, which is not in a world region"
+
+# A card whose unlock level is in a world this seed left out can never be
+# bought, so it must not be built. Egypt-only is the sharp case: the game sells
+# 39 cards, but only the ten ungated ones plus the two Egypt ones can ever
+# appear. Counted rather than named, so adding a card does not break the test.
+_e1w, _ = run("shop cards drop with their world", world_count=1, shopsanity=1,
+              worlds_required=11)
+_e1shop = {l.name for l in _e1w.active_locations() if l.is_shop}
+_egypt_cards = {C.shop_location_name(_c) for _c, _l in C.SHOP_UNLOCK.items()
+                if _lnames[_l] in C.WORLD_REGIONS["Ancient Egypt"]}
+_modern_cards = {C.shop_location_name(_c) for _c, _l in C.SHOP_UNLOCK.items()
+                 if _lnames[_l] in C.WORLD_REGIONS["Modern Day"]}
+_ungated_cards = {C.shop_location_name(_c) for _c in C.SHOP_COMMODITIES
+                  if _c not in C.SHOP_UNLOCK}
+_want_1w = _ungated_cards | _egypt_cards | _modern_cards
+assert _e1shop == _want_1w,     f"one-world shop checks wrong: missing {sorted(_want_1w - _e1shop)}, "     f"extra {sorted(_e1shop - _want_1w)}"
+# ...and every world back in restores all 39, so the filter is not just deleting.
+_eall, _ = run("shop cards with every world", shopsanity=1)
+assert {l.name for l in _eall.active_locations() if l.is_shop} == _shop_names,     "some shop checks are missing from an all-worlds seed"
+print(f"shop: {len(C.SHOP_UNLOCK)} of {len(C.SHOP_COMMODITIES)} cards gated on their "
+      f"UnlockLevel, {len(_e1shop)} survive an Egypt-only seed")
+
 # No goal or victory condition may depend on one, in any goal mode.
 for _gt in (0, 1, 2):
     _gw, _gsd = run(f"unreachable: goal_type={_gt}", goal_type=_gt, worlds_required=11)

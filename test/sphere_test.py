@@ -314,6 +314,52 @@ else:
         ok(f"all {len(_locsS)} paths still fully reachable with the full pool")
 
 
+# Shop cards wait for the level that stocks them, same shape again. The Shop
+# region only models the store BUTTON (egypt6), so all 39 checks used to be in
+# logic from there while the game does not put shrinkingviolet on the shelf
+# until Modern Day 14 or floawerPot until Aerial Fortress 31.
+print("\n=== shop cards wait for the level that stocks them ===")
+from pvz2gardendless.locations import SHOP_LOC_UNLOCK as _UNLOCKC
+_mwC, _wC = build(shopsanity=1)
+_preC = [i.name for i in _mwC.precollected]
+_keysC = [i.name for i in _mwC.itempool if i.name.endswith(" Key")]
+_placedC = {l.name for r in _mwC.regions for l in r.locations}
+_cardsC = {c: u for c, u in _UNLOCKC.items() if c in _placedC}
+if not _cardsC:
+    fail("no gated shop cards were built, so this proves nothing")
+else:
+    _ladderC = [("precollected only", _preC), ("+keys", _preC + _keysC)]
+    _ladderC += [(f"+keys +{_p}", _preC + _keysC + [_p]) for _p in _SUND]
+    _ladderC += [(f"+keys +{_n} plants", _preC + _keysC + PROG_PLANTS[:_n])
+                 for _n in range(1, 14)]
+    _ladderC.append(("+keys +all plants", _preC + _keysC + PROG_PLANTS))
+    _rngC = _rndD.Random(2)
+    _poolC = sorted({i.name for i in _mwC.itempool
+                     if i.classification == IC.progression})
+    _ladderC += [(f"random {_i}", _preC + _rngC.sample(_poolC, _rngC.randint(1, 20)))
+                 for _i in range(60)]
+    _earlyC = []
+    for _label, _items in _ladderC:
+        _rC = {l.name for l in state_with(_mwC, _items).reachable_locations()}
+        for _card, _unlock in sorted(_cardsC.items()):
+            if _card in _rC and _unlock not in _rC:
+                _earlyC.append(f"{_card} at '{_label}' without {_unlock}")
+    if _earlyC:
+        fail(f"{len(_earlyC)} shop card(s) on sale before their unlock level: "
+             f"{_earlyC[:4]}")
+    else:
+        ok(f"none of the {len(_cardsC)} gated cards precedes its unlock level, "
+           f"across {len(_ladderC)} item sets")
+
+    _allC = [i.name for i in _mwC.itempool if i.classification == IC.progression] + _preC
+    _rallC = {l.name for l in state_with(_mwC, _allC).reachable_locations()}
+    _wallC = sorted(c for c in _cardsC if c not in _rallC)
+    if _wallC:
+        fail(f"shop cards unreachable with the full pool: {_wallC[:4]}")
+    else:
+        ok(f"all {len(_cardsC)} gated cards still reachable with the full pool")
+
+
 report("all worlds, default")
 report("all worlds + shuffle_zombies", shuffle_zombies=1)
 report("all worlds + shopsanity", shopsanity=1)
@@ -502,12 +548,28 @@ else:
     else:
         ok(f"all {len(_shop_locs)} shop checks are behind the egypt6 gate")
 
+    # A sun producer opens the store BUTTON, which is all the Shop region
+    # models. It puts exactly the ten cards with no UnlockLevel on sale; the
+    # other 29 wait for their own level, so a rule that expected all 39 here
+    # would be asserting the bug this gating removed.
+    from pvz2gardendless.locations import SHOP_LOC_UNLOCK as _SHOPU
     _open = {l.name for l in state_with(_mws, _pres + ["Sunflower"]).reachable_locations()}
-    _shut = [n for n in _shop_locs if n not in _open]
+    _ungated = [n for n in _shop_locs if n not in _SHOPU]
+    _shut = [n for n in _ungated if n not in _open]
+    # A gated card may legitimately be open here if its own level already is --
+    # iceweed unlocks at egypt9, which is in the very region the Shop hangs
+    # off. What must never happen is a card opening ahead of its level.
+    _early = [n for n in _shop_locs
+              if n in _SHOPU and n in _open and _SHOPU[n] not in _open]
     if _shut:
-        fail(f"a sun producer does not open the shop: {_shut[:3]}")
+        fail(f"a sun producer does not open the ungated cards: {_shut[:3]}")
+    elif _early:
+        fail(f"cards on sale before their unlock level: {_early[:3]}")
     else:
-        ok("a sun producer opens the shop, same as egypt6-9")
+        _still = [n for n in _shop_locs if n in _SHOPU and n not in _open]
+        ok(f"a sun producer opens the {len(_ungated)} cards with no UnlockLevel; "
+           f"{len(_still)} of the {len(_shop_locs) - len(_ungated)} gated ones "
+           f"stay shut behind their own level")
 
 # THE structural guarantee, and the reason no early_items nudge is needed:
 # a sun producer is the ONLY way out of sphere 1. Every world's entrance wants
