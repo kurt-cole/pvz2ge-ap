@@ -12,8 +12,8 @@ from worlds.generic.Rules import add_rule, forbid_items_for_player, set_rule
 
 from .constants import (
     CHEAP_ATTACKER_PLANTS, DANGER_ROOM_UNLOCK, EGYPT_STRETCH_PLANTS,
-    KEYED_WORLDS, STRETCH_PLANTS, SUN_PRODUCER_PLANTS, WORLD_ENTRY_PLANTS,
-    is_early_region,
+    KEYED_WORLDS, SIDE_PATH_REGIONS, STRETCH_PLANTS, SUN_PRODUCER_PLANTS,
+    WORLD_ENTRY_PLANTS, is_early_region,
 )
 from .locations import goal_locations_for
 
@@ -162,8 +162,29 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # set does not have to track which worlds the seed kept.
     if world.options.early_world_keys:
         key_names = {f"{w} Key" for w in KEYED_WORLDS}
+
+        # A side path is named neither " Mid" nor " Late", so is_early_region
+        # reads every one of them as early. That was true when they all hung
+        # off their world's opening; regions.py now hangs each one off the
+        # stretch holding the level that reveals it, so Ice Bloom sits behind
+        # Big Wave Beach 40 while still answering "early" by name. Resolve a
+        # side path to whatever it actually hangs off and judge that instead,
+        # following the chain for Hot Date, which hangs off another side path.
+        side_paths = set(SIDE_PATH_REGIONS)
+
+        def effective_region(name: str) -> str:
+            seen = set()
+            while name in side_paths and name not in seen:
+                seen.add(name)
+                try:
+                    name = multiworld.get_entrance(f"Enter {name}",
+                                                   player).parent_region.name
+                except KeyError:
+                    break  # not built in this seed
+            return name
+
         for region in multiworld.get_regions(player):
-            if is_early_region(region.name):
+            if is_early_region(effective_region(region.name)):
                 continue
             for location in region.locations:
                 forbid_items_for_player(location, key_names, player)

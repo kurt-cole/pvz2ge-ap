@@ -394,6 +394,75 @@ for _sp in (0, 1):
     _obuilt = {l.region for l in _ow.active_locations()}
     _leak = _ORPHAN_PATH_REGIONS & _obuilt
     assert not _leak, f"unreachable side path built locations: {sorted(_leak)}"
+# Every side path is accounted for: it either branches off a world level, is
+# chained behind another path, or is one of the eight with no map node at all.
+# A path missing from all three would silently keep hanging off its world's
+# opening, which is the bug SIDE_PATH_UNLOCK exists to fix.
+_covered = set(C.SIDE_PATH_UNLOCK) | set(C.SIDE_PATH_CHAIN) | _ORPHAN_PATH_REGIONS
+assert _covered == set(C.SIDE_PATH_REGIONS),     f"side paths with no gate: {sorted(set(C.SIDE_PATH_REGIONS) - _covered)}, "     f"unknown: {sorted(_covered - set(C.SIDE_PATH_REGIONS))}"
+# Each of the three tables says something different, and they have to agree:
+# the unlock level must be a real location, in the world SIDE_PATH_WORLD claims
+# the path branches from, and a chain target must itself be a gated side path.
+_lnames = {l.name: l.region for l in _ALL_L}
+for _sp, _lvl in C.SIDE_PATH_UNLOCK.items():
+    assert _lvl in _lnames, f"{_sp} unlocks at {_lvl}, which is not a location"
+    assert _lvl not in C.UNREACHABLE_LOCATIONS, f"{_sp} unlocks at unreachable {_lvl}"
+    _owner = C.SIDE_PATH_WORLD[_sp]
+    assert _lnames[_lvl] in C.WORLD_REGIONS[_owner],         f"{_sp} is a {_owner} path but unlocks at {_lvl} in {_lnames[_lvl]}"
+for _sp, _target in C.SIDE_PATH_CHAIN.items():
+    assert _target in C.SIDE_PATH_UNLOCK, f"{_sp} chains off ungated {_target}"
+
+# The gate is a region connection, so check the graph rather than the table:
+# every side path must hang off the region holding the level that reveals it.
+# Ancient Egypt is the case that matters -- its opening is ungated, so a path
+# left on the world region is in sphere 1, which is how two world keys ended up
+# in Appease-mint. Danger rooms on so the stretch cut sees its real location
+# counts, side paths on so the regions exist at all.
+_pw, _ = run("side path parents", include_side_paths=1, include_danger_rooms=1)
+_pmw = _pw.multiworld
+_ploc_region = {l.name: r.name for r in _pmw.regions for l in r.locations}
+_pregions = {r.name: r for r in _pmw.regions}
+_bad = []
+for _sp in C.SIDE_PATH_REGIONS:
+    try:
+        _parent = _pmw.get_entrance(f"Enter {_sp}", 1).parent_region.name
+    except KeyError:
+        continue
+    if _sp in C.SIDE_PATH_CHAIN:
+        _want = C.SIDE_PATH_CHAIN[_sp]
+    elif _sp in C.SIDE_PATH_UNLOCK:
+        _want = _ploc_region[C.SIDE_PATH_UNLOCK[_sp]]
+    else:
+        # No map node anywhere, so there is no level to gate it on. Where it
+        # hangs does not matter as long as it stays empty, which the orphan
+        # check above already proves; Rhythm keeps a SIDE_PATH_WORLD entry and
+        # so lands on Frostbite Caves rather than Tutorial.
+        assert not _pregions[_sp].locations,             f"{_sp} has no map node but was given locations"
+        continue
+    if _parent != _want:
+        _bad.append(f"{_sp}: hangs off {_parent}, want {_want}")
+assert not _bad, f"side paths on the wrong region: {_bad}"
+# ...and the fix is load-bearing. Two pins, both literal and both sourced from
+# the world-map scenes rather than from this code: Egypt's map labels the Squash
+# branch "6-1" and the Appease-mint branch "29-1", and locations.py puts egypt6
+# in Mid1 and egypt29 in Mid2. Those two are the whole reason for the change --
+# Egypt's opening is ungated, so a path left on it is in sphere 1.
+for _sp, _want_region in (("Squash Sidepath", "Ancient Egypt Mid1"),
+                          ("Appease-mint Sidepath", "Ancient Egypt Mid2")):
+    _got = _pmw.get_entrance(f"Enter {_sp}", 1).parent_region.name
+    assert _got == _want_region, f"{_sp} hangs off {_got}, want {_want_region}"
+# 16 of the 27 land past their world's opening stretch. The other 11 branch
+# early enough that the opening third really is where the game puts them
+# (dark4, beach7, lostcity8, dark9, modern10, kongfu12, iceage12, future13,
+# beach14, eighties14, dark16), so a bigger number here would mean the stretch
+# cut had moved, not that the gating got better.
+_deep = [_sp for _sp in C.SIDE_PATH_UNLOCK
+         if _pmw.get_entrance(f"Enter {_sp}", 1).parent_region.name
+         not in C.ALL_WORLD_REGIONS]
+assert len(_deep) == 16, f"{len(_deep)} side paths are gated past a world opening, want 16"
+print(f"all {len(C.SIDE_PATH_UNLOCK)} branch side paths hang off their unlock level's "
+      f"region ({len(_deep)} past the world opening), Hot Date chains off Sweet Potato")
+
 # No goal or victory condition may depend on one, in any goal mode.
 for _gt in (0, 1, 2):
     _gw, _gsd = run(f"unreachable: goal_type={_gt}", goal_type=_gt, worlds_required=11)

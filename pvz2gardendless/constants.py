@@ -83,10 +83,15 @@ LATE_REGION_SUFFIXES = (" Mid", " Mid1", " Mid2", " Late")
 def is_early_region(name: str) -> bool:
     """Is this region reachable without grinding deeper into a world?
 
-    True for a world's opening stretch, the side paths, the Danger Rooms, the
-    tutorial and the store. Entering a world's opening costs only its key --
-    the plant-count gates sit on the later stretches -- so anything in an early
-    region is reachable as soon as the key for it turns up.
+    True for a world's opening stretch, the Danger Rooms, the tutorial and the
+    store. Entering a world's opening costs only its key -- the plant-count
+    gates sit on the later stretches -- so anything in an early region is
+    reachable as soon as the key for it turns up.
+
+    Side paths answer True here by name and must not be judged on it: they hang
+    off the stretch holding the level that reveals them, so Ice Bloom is behind
+    Big Wave Beach 40 while still being called "Ice Bloom Sidepath". rules.py
+    resolves a side path to what it hangs off before asking this.
 
     Used by the early_world_keys option to keep World Keys from hiding behind
     each other's endgames. Modern Day is excluded as well: it opens only once
@@ -465,6 +470,69 @@ SIDE_PATH_WORLD = {
     "Vamporcini Sidepath":      "Dark Ages",
 }
 
+# Which world level opens each side path, read off the world-map scenes.
+#
+# A branch island is labelled "<N>-1" and carries the quest's demo level, so
+# `[9,"6-1",["squash0"]]` in Ancient Egypt's map means the Squash quest appears
+# once egypt6 is cleared. The same convention labels a world's own optional
+# levels (`[.."20-1",["egypt20_1"]]`), where "clear level N to reveal N-1" is
+# already known to be how it reads.
+#
+# All 27 branch nodes, swept 2026-08-18 out of every scene carrying LevelIsland
+# data (26 files -- the 11 world maps plus the epic maps, which carry no branch
+# nodes of their own). Nothing else in the game reveals a quest: see
+# level-and-shop-gating for the full list of ways a level can start.
+#
+# Two-step in game, and only the first step is modelled here: clearing this
+# level reveals the quest's level 0, and clearing THAT opens the epic portal to
+# levels 1..k. A side path is one flat region, so it is gated on the branch
+# level alone and its own internal chain is not expressed.
+#
+# Appease-mint spans two worlds -- appease1_* branches at egypt29 and appease2_*
+# at iceage25 -- and is one region, so it is gated on the earlier half.
+SIDE_PATH_UNLOCK = {
+    "Squash Sidepath":              "egypt6",       # 6-1   -> squash0
+    "Appease-mint Sidepath":        "egypt29",      # 29-1  -> appease1_0
+    "Buttercup Sidepath":           "pirate33",     # 33-1  -> buttercup0
+    "Sap-fling Sidepath":           "cowboy29",     # 29-1  -> sapfling0
+    "Electric Currant Sidepath":    "cowboy34",     # 34-1  -> electriccurrant0
+    "Reinforce-mint Sidepath":      "future13",     # 13-1  -> reinforce0
+    "Solar Tomato Sidepath":        "future28",     # 28-1  -> solartomato0
+    "Vamporcini Sidepath":          "dark4",        # 4-1   -> vamporcini0
+    "Plantern Sidepath":            "dark9",        # 9-1   -> plantern0
+    "Goo Peashooter Sidepath":      "dark16",       # 16-1  -> poisonpeashooter0
+    "Ice-shroom Sidepath":          "dark22",       # 22-1  -> iceshroom0
+    "Doom-shroom Sidepath":         "dark28",       # 28-1  -> doomshroom0
+    "Seashooter Sidepath":          "beach7",       # 7-1   -> seashooter0
+    "Ghost Pepper Sidepath":        "beach14",      # 14-1  -> ghostpepper0
+    "Parsnip Sidepath":             "beach22",      # 22-1  -> parsnip0
+    "Ice Bloom Sidepath":           "beach40",      # 40-1  -> icebloom0
+    "Sweet Potato Sidepath":        "iceage12",     # 12-1  -> sweetpotato0
+    "Aloe Sidepath":                "lostcity8",    # 8-1   -> aloe0
+    "Enlighten-mint Sidepath":      "lostcity38",   # 38-1  -> enlighten0
+    "Atomic Bombegranate Sidepath": "kongfu12",     # 12-1  -> atombomb0
+    "Strawburst Sidepath":          "eighties14",   # 14-1  -> strawburst0
+    "Blooming Heart Sidepath":      "eighties25",   # 25-1  -> bloominghearts0
+    "Meteor Flower Sidepath":       "dino40",       # 40-1  -> meteorflower0
+    "Umbrella Leaf Sidepath":       "modern10",     # 10-1  -> umbrellaleaf0
+    "Conceal-mint Sidepath":        "modern25",     # 25-1  -> conceal0
+    "Gold Bloom Sidepath":          "modern28",     # 28-1  -> goldbloom0
+    "Gloom-shroom Sidepath":        "modern40",     # 40-1  -> gloomshroom0
+}
+
+# Side paths reached through another side path rather than from a world map.
+#
+# Hot Date is the only one. It has no branch node and no portal of its own --
+# 27 chain-starts have one, Hot Date has none -- because it sits on the SAME
+# epic_iceage chain immediately after sweetpotato5, so it is revealed by that
+# chain cascading rather than by clearing a world level. Gating it on entering
+# the Sweet Potato path is as close as a flat region gets to the game's "finish
+# the Sweet Potato path"; the levels between are inside that one region and
+# cannot be asked for separately.
+SIDE_PATH_CHAIN = {
+    "Hot Date Sidepath": "Sweet Potato Sidepath",
+}
+
 # The seven side paths the game data ties to no world: Sandbox, the Bank Theft
 # levels, Epic Beghouled, FloawerPot, the Mixed Danger Room, Reinforcemint and
 # ShootingStarFruit. They are standalone content reached from the world
@@ -474,11 +542,11 @@ SIDE_PATH_WORLD = {
 # UNREACHABLE_LOCATIONS.
 #
 # The whole list is dropped unless include_side_paths is on, which it is not by
-# default: logic cannot gate a side path the way the game does (a path is one
-# flat region hung off the opening of the world it branches from, and these
-# seven hang off the tutorial), so leaving them in put late content in sphere 1.
-# With them out, sphere 1 is the tutorial, egypt1-2 and the shop, and that is
-# the whole pool fill has to open the seed with.
+# default. That default is now a content choice rather than a logic one: each
+# path is gated on the level that reveals it (SIDE_PATH_UNLOCK), so leaving
+# them in no longer puts late content in sphere 1. It used to -- a path hung
+# off the opening of its world, and Ancient Egypt's opening is ungated, so
+# Squash and Appease-mint were sphere 1 whatever the game says.
 SIDE_PATH_REGIONS = [
     "Aloe Sidepath", "Appease-mint Sidepath", "Atomic Bombegranate Sidepath", "Bank Sidepath",
     "Blooming Heart Sidepath", "Buttercup Sidepath", "Conceal-mint Sidepath",

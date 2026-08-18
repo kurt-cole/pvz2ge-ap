@@ -11,8 +11,9 @@ from typing import Dict, TYPE_CHECKING
 from BaseClasses import Region, ItemClassification
 
 from .constants import (
-    ALL_WORLD_REGIONS, KEYED_WORLDS, SHOP_REGION, SIDE_PATH_REGIONS,
-    SIDE_PATH_WORLD, WORLD_REGIONS, WORLD_STRETCHES,
+    ALL_WORLD_REGIONS, KEYED_WORLDS, SHOP_REGION, SIDE_PATH_CHAIN,
+    SIDE_PATH_REGIONS, SIDE_PATH_UNLOCK, SIDE_PATH_WORLD, WORLD_REGIONS,
+    WORLD_STRETCHES,
 )
 from .items import PvZ2Item
 from .locations import ALL_REGIONS, PvZ2Location
@@ -75,23 +76,6 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
     # (see rules.py); there is no Modern Day Key.
     tutorial.connect(regions["Modern Day"], "Enter Modern Day")
 
-    # Side paths hang off the world they branch from, not off Tutorial. A side
-    # path is entered from a node on a world map, so it is not reachable until
-    # that world is -- you cannot walk into a Far Future side path from Egypt.
-    # The seven the game ties to no world are standalone content reached from
-    # the chooser, and stay connected to Tutorial.
-    #
-    # Connected to the world's opening stretch rather than to the stretch its
-    # branch node actually sits in: the entry level is usually early in the
-    # world, and gating a side path deeper than the game does would be a
-    # stricter rule than the game enforces.
-    for sp in SIDE_PATH_REGIONS:
-        if sp not in regions:
-            continue  # its world is not in this seed, so neither is it
-        owner = SIDE_PATH_WORLD.get(sp)
-        parent = regions[owner] if owner in regions else tutorial
-        parent.connect(regions[sp], f"Enter {sp}")
-
     # Shop — the store button does not exist until egypt6 is cleared. That is
     # the game's own rule, in index.js's feature-unlock chain:
     #   feature_coins   <- tutorial4      feature_powerup/zengarden <- egypt5
@@ -139,6 +123,53 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
         for i, l in enumerate(w_locs):
             idx = min(i // size, len(WORLD_STRETCHES) - 1)
             stretch_of[l.name] = regions[w + WORLD_STRETCHES[idx]]
+
+    # Side paths hang off the stretch holding the level that reveals them, not
+    # off Tutorial and not off their world's opening. A side path is entered
+    # from a branch node on a world map, so it is not reachable until the level
+    # that node hangs off is -- you cannot walk into a Far Future side path
+    # from Egypt, and you cannot walk into the Squash quest before Egypt 6.
+    #
+    # They used to connect to the world's opening on the reasoning that gating
+    # deeper than the game does would be too strict. That had it backwards: the
+    # game gates Squash at egypt6 and Appease-mint at egypt29, both strictly
+    # deeper than the opening, and Ancient Egypt's opening is ungated -- so its
+    # two side paths, 18 checks including anything fill cared to hide there,
+    # were sphere 1. A real seed put two world keys in Appease-mint.
+    #
+    # Stretch granularity is the most this model can say. `can_reach` on the
+    # unlock level is exactly "its region is reachable", so connecting to that
+    # region is the same rule an access rule would express, without needing an
+    # indirect condition on the entrance.
+    #
+    # The eight paths the game ties to no world are standalone content reached
+    # from the world chooser, and stay connected to Tutorial. All eight are
+    # empty in every seed (see UNREACHABLE_LOCATIONS), so this only decides
+    # where an empty region hangs.
+    declared_region = {l.name: l.region for l in active}
+    for sp in SIDE_PATH_REGIONS:
+        if sp not in regions:
+            continue  # its world is not in this seed, so neither is it
+        parent = None
+        chain_target = SIDE_PATH_CHAIN.get(sp)
+        if chain_target is not None:
+            # Reached through another side path rather than from a world map.
+            parent = regions.get(chain_target)
+        else:
+            unlock = SIDE_PATH_UNLOCK.get(sp)
+            if unlock is not None:
+                # stretch_of first: it is the finer of the two, and holds every
+                # world the stretch cut applied to. Ancient Egypt is not in it
+                # -- it declares its own four regions -- so fall back to what
+                # locations.py declared. A world too small to cut has neither,
+                # and lands on the world region below.
+                parent = stretch_of.get(unlock)
+                if parent is None and unlock in declared_region:
+                    parent = regions.get(declared_region[unlock])
+        if parent is None:
+            owner = SIDE_PATH_WORLD.get(sp)
+            parent = regions[owner] if owner in regions else tutorial
+        parent.connect(regions[sp], f"Enter {sp}")
 
     # Add all locations to their regions. Indexed, not .get(name, tutorial):
     # ALL_REGIONS is derived from these same locations, so a miss is

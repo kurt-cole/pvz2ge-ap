@@ -126,11 +126,12 @@ def report(label, **kw):
     first = len(state_with(mw, pre).reachable_locations())
     # Shop is NOT counted here any more: it hangs off Ancient Egypt Mid1, since
     # the game only grows a store button once egypt6 is cleared.
-    from pvz2gardendless.constants import SHOP_REGION
-    ungated = len([l for l in w.active_locations()
-                   if l.region not in ALL_WORLD_REGIONS and l.region != SHOP_REGION])
+    # Side paths are NOT counted here any more either: each one hangs off the
+    # stretch holding the level that reveals it, so the only thing left that is
+    # ungated by design is the tutorial.
+    ungated = len([l for l in w.active_locations() if l.region == "Tutorial"])
     print(f"        sphere 1 {first} of {total} ({first / total * 100:.0f}%) "
-          f"-- {ungated} of those are ungated by design (side paths, tutorial)")
+          f"-- {ungated} of those are the tutorial, ungated by design")
 
     # --- 3. the stretches actually gate something ---------------------------
     stretch_regions = [r for r in mw.regions if r.name.endswith((" Mid", " Late"))]
@@ -231,6 +232,86 @@ else:
         fail(f"Danger Rooms unreachable with the full pool: {_wall[:4]}")
     else:
         ok(f"all {len(_roomsD)} rooms still reachable with the full pool")
+
+
+# Side paths wait for the level that reveals them, same shape as the rooms above
+# and for the same reason: a path used to hang off its world's OPENING, so every
+# check in it was in logic the moment the world was. In Ancient Egypt, whose
+# opening is ungated, that meant Squash's 4 and Appease-mint's 14 were sphere 1 --
+# a real seed put the Lost City and Neon Mixtape Tour keys in Appease-mint, which
+# in game sits behind Egypt 29.
+#
+# Asserted per LOCATION, not per region: the region could be connected correctly
+# and still leak if something else reached inside it. Hot Date has no branch node
+# of its own and chains off Sweet Potato, so it is held to Sweet Potato's level.
+print("\n=== side paths wait for the level that reveals them ===")
+from pvz2gardendless.constants import (
+    SIDE_PATH_CHAIN as _CHAIN, SIDE_PATH_UNLOCK as _UNLOCK,
+)
+_mwS, _wS = build(include_side_paths=1, include_danger_rooms=1)
+_preS = [i.name for i in _mwS.precollected]
+_keysS = [i.name for i in _mwS.itempool if i.name.endswith(" Key")]
+
+# Resolve each built path to the world level it ultimately waits on, following
+# the chain, and to the locations that must not precede it.
+_rootS = {}
+for _sp in list(_UNLOCK) + list(_CHAIN):
+    _cur = _sp
+    while _cur in _CHAIN:
+        _cur = _CHAIN[_cur]
+    if _cur in _UNLOCK:
+        _rootS[_sp] = _UNLOCK[_cur]
+_locsS = {}
+for _r in _mwS.regions:
+    if _r.name in _rootS and _r.locations:
+        _locsS[_r.name] = {l.name for l in _r.locations}
+if not _locsS:
+    fail("no side paths were built, so this proves nothing")
+else:
+    _ladderS = [("precollected only", _preS), ("+keys", _preS + _keysS)]
+    _ladderS += [(f"+keys +{_p}", _preS + _keysS + [_p]) for _p in _SUND]
+    _ladderS += [(f"+keys +{_n} plants", _preS + _keysS + PROG_PLANTS[:_n])
+                 for _n in range(1, 14)]
+    _ladderS.append(("+keys +all plants", _preS + _keysS + PROG_PLANTS))
+    _rngS = _rndD.Random(1)
+    _poolS = sorted({i.name for i in _mwS.itempool
+                     if i.classification == IC.progression})
+    _ladderS += [(f"random {_i}", _preS + _rngS.sample(_poolS, _rngS.randint(1, 20)))
+                 for _i in range(60)]
+    _earlyS = []
+    for _label, _items in _ladderS:
+        _rS = {l.name for l in state_with(_mwS, _items).reachable_locations()}
+        for _sp, _unlock in sorted(_rootS.items()):
+            if _sp not in _locsS or _unlock in _rS:
+                continue
+            _leak = _locsS[_sp] & _rS
+            if _leak:
+                _earlyS.append(f"{_sp} at '{_label}' without {_unlock} "
+                               f"({len(_leak)} checks)")
+    if _earlyS:
+        fail(f"{len(_earlyS)} side path(s) in logic before their unlock level: "
+             f"{_earlyS[:4]}")
+    else:
+        ok(f"none of the {len(_locsS)} paths precedes its unlock level, "
+           f"across {len(_ladderS)} item sets")
+
+    # Sphere 1 with side paths on is the number that regressed: it was 27 with
+    # every world enabled, against 9 without them.
+    _s1 = {l.name for l in state_with(_mwS, _preS).reachable_locations()}
+    _s1paths = sorted(_sp for _sp, _l in _locsS.items() if _l & _s1)
+    if _s1paths:
+        fail(f"side paths in sphere 1: {_s1paths}")
+    else:
+        ok(f"sphere 1 is {len(_s1)} locations and none of the "
+           f"{sum(len(_l) for _l in _locsS.values())} side path checks is in it")
+
+    _allS = [i.name for i in _mwS.itempool if i.classification == IC.progression] + _preS
+    _rallS = {l.name for l in state_with(_mwS, _allS).reachable_locations()}
+    _wallS = sorted(_sp for _sp, _l in _locsS.items() if not _l <= _rallS)
+    if _wallS:
+        fail(f"side paths unreachable with the full pool: {_wallS[:4]}")
+    else:
+        ok(f"all {len(_locsS)} paths still fully reachable with the full pool")
 
 
 report("all worlds, default")

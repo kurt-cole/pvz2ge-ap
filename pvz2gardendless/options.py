@@ -143,19 +143,23 @@ class IncludeSidePaths(Toggle):
     the way an unpicked world is removed. Nothing can be placed there and
     nothing routes through them, so they become free play with no checks.
 
-    They are off by default because logic cannot gate them the way the game
-    does. In game a path opens when a specific numbered level is cleared -- the
-    Squash quest at Ancient Egypt 6, Aloe at Lost City 8, Goo Peashooter at
-    Dark Ages 16 -- and its later levels sit behind clearing the path's own
-    first level. Here a path is one flat region hung off the opening of the
-    world it branches from, so all of that is in logic as soon as the world is.
-    A path spanning two worlds is gated only on the earlier one: the Appease
-    quest's second half sits behind Frostbite Caves 25 in game but is in logic
-    from the start.
+    Each path is gated on the level that reveals it in game -- the Squash quest
+    at Ancient Egypt 6, Aloe at Lost City 8, Goo Peashooter at Dark Ages 16 --
+    read off the world maps, where a branch island is labelled "<N>-1". A path
+    spanning two worlds is gated on the earlier half: the Appease quest's
+    second half sits behind Frostbite Caves 25, and the quest is one region, so
+    the whole thing waits on Ancient Egypt 29. Hot Date has no branch node of
+    its own and waits on the Sweet Potato path instead, the same way the game
+    chains it.
 
-    On restores the old behaviour: 718 locations instead of 531 with every
-    world enabled, and a sphere 1 of 27 locations instead of 9. Side paths
-    belonging to a world this seed left out are still dropped either way.
+    Two things the game does that this still does not: a path's later levels
+    sit behind clearing its own first level, and a gate lands on the stretch
+    holding its level rather than on the level itself, so Appease-mint opens
+    with the rest of Egypt's Mid2 rather than at 29 exactly.
+
+    On adds 187 locations -- 718 instead of 531 with every world enabled.
+    Sphere 1 stays at 9 either way. Side paths belonging to a world this seed
+    left out are still dropped either way.
 
     A small seed can end up with fewer locations than there are plants. Nothing
     fails there -- the pool ships fewer of the plants that gate nothing, and
