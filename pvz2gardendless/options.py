@@ -65,8 +65,9 @@ class GoalType(Choice):
     world_completions: Beat the final regular level of N worlds (e.g. egypt35).
       All 11 non-Modern-Day worlds are eligible; maximum is 11.
 
-    world_keys: Check the "World Key - X" location in N worlds. All 11
-      non-Modern-Day worlds are eligible; maximum is 11.
+    world_keys: Check the world-key level of N worlds (e.g. egypt8). All 11
+      non-Modern-Day worlds are eligible; maximum is 11. Which level that is
+      differs per world -- hint the "World Key Levels" group to see them.
     """
     display_name = "Modern Day Goal Type"
     option_world_trophies    = 0

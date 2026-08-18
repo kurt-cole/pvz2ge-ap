@@ -534,9 +534,11 @@ print("early_world_keys holds down to the smallest seed each setting allows")
 # DANGER_ROOM_LOCATIONS is a hand-written set in constants.py, so it can drift
 # from what the client actually maps. Pin it to the derivation it claims: every
 # location whose LOC_LEVELS codename contains "dangerroom", and nothing else.
-# The 28 "Dangerroom <World> Unlock" locations are ordinary numbered levels
-# (egypt12, pirate4, beach20) whose reward is unlocking the room -- naming one
-# of those would delete a real level from the seed.
+# The levels that UNLOCK a room are ordinary numbered levels (egypt12, pirate4,
+# beach20) -- naming one of those would delete a real level from the seed. They
+# used to be spotted by a "Dangerroom " name prefix; since world locations are
+# named for their level id that prefix is gone, so the unlock set now comes
+# from DANGER_ROOM_UNLOCK, which is where the pairing actually lives.
 import re as _re
 from pvz2gardendless.build_pvzge_ap import TMPPATCH_CONTENT as _JS
 from pvz2gardendless.locations import ALL_LOCATIONS as _ALL
@@ -548,7 +550,7 @@ assert _derived == set(C.DANGER_ROOM_LOCATIONS), (
     "DANGER_ROOM_LOCATIONS drifted from LOC_LEVELS: "
     f"missing {sorted(_derived - set(C.DANGER_ROOM_LOCATIONS))[:5]}, "
     f"extra {sorted(set(C.DANGER_ROOM_LOCATIONS) - _derived)[:5]}")
-_unlocks = {l.name for l in _ALL if l.name.startswith("Dangerroom ")}
+_unlocks = set(C.DANGER_ROOM_UNLOCK.values())
 assert _unlocks and not (_unlocks & set(C.DANGER_ROOM_LOCATIONS)),     "an unlock level was swept into DANGER_ROOM_LOCATIONS"
 # Every room that can be built names the level that unlocks it, and that level
 # is a real location. A room missing from DANGER_ROOM_UNLOCK gets no rule at
@@ -562,7 +564,8 @@ _region_of = {l.name: l.region for l in _ALL}
 _world_of = {r: w for w, rs in C.WORLD_REGIONS.items() for r in rs}
 for _room, _ul in C.DANGER_ROOM_UNLOCK.items():
     assert _ul in _region_of, f"{_room} unlocks off unknown location {_ul}"
-    assert _ul in _unlocks, f"{_room} unlocks off {_ul}, not a Dangerroom level"
+    assert _ul not in C.DANGER_ROOM_LOCATIONS, \
+        f"{_room} unlocks off {_ul}, which is itself a Danger Room"
     # Same world, or the rule reaches across a world the seed may have dropped
     # -- and rules.py would raise looking the unlock location up. Not the same
     # REGION: Egypt's rooms sit in Ancient Egypt Late while their unlock levels
@@ -638,6 +641,29 @@ _both = set(_WC) & set(_WT)
 assert not _both, f"location used as BOTH trophy and completion goal: {sorted(_both)}"
 print(f"all {len(_WC)} completion goals are their world's real final level, "
       "and none doubles as a trophy goal")
+
+# ── world locations are named for their level id ────────────────────────────
+# Every location in a world (and the tutorial) is called exactly what the game
+# calls the level: egypt2, not "Cabbagepult Unlock". The reward names described
+# something the player does not receive under AP -- the client clears the
+# game's own plant grants and hands out only what the multiworld sent -- and
+# they made the client's Modern Day lookup depend on a list of plant names.
+#
+# Side paths are deliberately exempt: a quest level's number means nothing on
+# its own, so those keep readable names (Goo Peashooter 1, Aloe Unlock).
+_wl = [l for l in _ALL if not l.is_shop
+       and (l.region in C.ALL_WORLD_REGIONS or l.region == "Tutorial")]
+_misnamed = [(l.name, _lvl[l.name]) for l in _wl if _lvl[l.name] != l.name]
+assert not _misnamed, \
+    f"world locations not named for their level id: {_misnamed[:5]}"
+# ...and the client's Modern Day set is exactly the 'modern' prefix, which is
+# what getRegion() relies on now that the thirteen-prefix list is gone.
+_md_region = {l.name for l in _ALL if l.region == "Modern Day"}
+_md_prefix = {l.name for l in _ALL if not l.is_shop and l.name.startswith("modern")}
+assert _md_region == _md_prefix, \
+    f"'modern' prefix no longer matches the Modern Day region: {_md_region ^ _md_prefix}"
+print(f"all {len(_wl)} world/tutorial locations are named for their level id, "
+      f"and the {len(_md_region)} Modern Day ones are exactly the 'modern' prefix")
 
 # Neon Mixtape Tour runs 1-42 with no gaps (it used to stop at 32).
 _e = {int(_m.group(1)) for _v in _lvl.values()

@@ -556,42 +556,42 @@ DANGER_ROOM_LOCATIONS = frozenset({
 # One level can open several rooms: beach24 opens all eight of Big Wave
 # Beach's themed minigame rooms at once.
 DANGER_ROOM_UNLOCK = {
-    "egypt_dangerroom":                   "Dangerroom Egypt Unlock",           # egypt12
-    "egypt_dangerroom_minigame":          "Dangerroom Egypt Minigame Unlock",  # egypt23
-    "egypt_dangerroom2":                  "Dangerroom Egypt2 Unlock",          # egypt31
-    "pirate_dangerroom":                  "Dangerroom Pirate Unlock",          # pirate4
-    "pirate_dangerroom2":                 "Dangerroom Pirate2 Unlock",         # pirate33
-    "cowboy_dangerroom":                  "Dangerroom Cowboy Unlock",          # cowboy3
-    "cowboy_dangerroom2":                 "Dangerroom Cowboy2 Unlock",         # cowboy33
-    "future_dangerroom":                  "Dangerroom Future Unlock",          # future4
-    "future_dangerroom2":                 "Dangerroom Future2 Unlock",         # future32
-    "future_dangerroom_sunbomb":          "Dangerroom Future Sunbomb Unlock",  # future33
-    "dark_dangerroom":                    "Dangerroom Dark Unlock",            # dark12
-    "dark_dangerroom2":                   "Dangerroom Dark2 Unlock",           # dark26
-    "dark_dangerroom_potion":             "Dangerroom Dark Potion Unlock",     # dark27
-    "beach_dangerroom":                   "Dangerroom Beach Unlock",           # beach20
-    "beach_dangerroom2":                  "Dangerroom Beach2 Unlock",          # beach36
-    "beach_dangerroom_minigame_egypt":    "Dangerroom Beach Minigame Unlock",  # beach24
-    "beach_dangerroom_minigame_pirate":   "Dangerroom Beach Minigame Unlock",  # beach24
-    "beach_dangerroom_minigame_cowboy":   "Dangerroom Beach Minigame Unlock",  # beach24
-    "beach_dangerroom_minigame_future":   "Dangerroom Beach Minigame Unlock",  # beach24
-    "beach_dangerroom_minigame_dark":     "Dangerroom Beach Minigame Unlock",  # beach24
-    "beach_dangerroom_minigame_beach":    "Dangerroom Beach Minigame Unlock",  # beach24
-    "beach_dangerroom_minigame_iceage":   "Dangerroom Beach Minigame Unlock",  # beach24
-    "beach_dangerroom_minigame_lostcity": "Dangerroom Beach Minigame Unlock",  # beach24
-    "iceage_dangerroom":                  "Dangerroom Iceage Unlock",          # iceage20
-    "iceage_dangerroom2":                 "Dangerroom Iceage2 Unlock",         # iceage35
-    "lostcity_dangerroom":                "Dangerroom Lostcity Unlock",        # lostcity20
-    "lostcity_dangerroom2":               "Dangerroom Lostcity2 Unlock",       # lostcity39
-    "kongfu_dangerroom":                  "Dangerroom Kongfu Unlock",          # kongfu14
-    "kongfu_dangerroom2":                 "Dangerroom Kongfu2 Unlock",         # kongfu30
-    "kongfu_dangerroom3":                 "Dangerroom Kongfu3 Unlock",         # kongfu47
-    "eighties_dangerroom":                "Dangerroom Eighties Unlock",        # eighties20
-    "eighties_dangerroom2":               "Dangerroom Eighties2 Unlock",       # eighties38
-    "dino_dangerroom":                    "Dangerroom Dino Unlock",            # dino20
-    "dino_dangerroom2":                   "Dangerroom Dino2 Unlock",           # dino36
-    "modern_dangerroom":                  "Dangerroom Modern Unlock",          # modern20
-    "modern_dangerroom2":                 "Dangerroom Modern2 Unlock",         # modern40
+    "egypt_dangerroom":                   "egypt12",           # egypt12
+    "egypt_dangerroom_minigame":          "egypt23",  # egypt23
+    "egypt_dangerroom2":                  "egypt31",          # egypt31
+    "pirate_dangerroom":                  "pirate4",          # pirate4
+    "pirate_dangerroom2":                 "pirate33",         # pirate33
+    "cowboy_dangerroom":                  "cowboy3",          # cowboy3
+    "cowboy_dangerroom2":                 "cowboy33",         # cowboy33
+    "future_dangerroom":                  "future4",          # future4
+    "future_dangerroom2":                 "future32",         # future32
+    "future_dangerroom_sunbomb":          "future33",  # future33
+    "dark_dangerroom":                    "dark12",            # dark12
+    "dark_dangerroom2":                   "dark26",           # dark26
+    "dark_dangerroom_potion":             "dark27",     # dark27
+    "beach_dangerroom":                   "beach20",           # beach20
+    "beach_dangerroom2":                  "beach36",          # beach36
+    "beach_dangerroom_minigame_egypt":    "beach24",  # beach24
+    "beach_dangerroom_minigame_pirate":   "beach24",  # beach24
+    "beach_dangerroom_minigame_cowboy":   "beach24",  # beach24
+    "beach_dangerroom_minigame_future":   "beach24",  # beach24
+    "beach_dangerroom_minigame_dark":     "beach24",  # beach24
+    "beach_dangerroom_minigame_beach":    "beach24",  # beach24
+    "beach_dangerroom_minigame_iceage":   "beach24",  # beach24
+    "beach_dangerroom_minigame_lostcity": "beach24",  # beach24
+    "iceage_dangerroom":                  "iceage20",          # iceage20
+    "iceage_dangerroom2":                 "iceage35",         # iceage35
+    "lostcity_dangerroom":                "lostcity20",        # lostcity20
+    "lostcity_dangerroom2":               "lostcity39",       # lostcity39
+    "kongfu_dangerroom":                  "kongfu14",          # kongfu14
+    "kongfu_dangerroom2":                 "kongfu30",         # kongfu30
+    "kongfu_dangerroom3":                 "kongfu47",         # kongfu47
+    "eighties_dangerroom":                "eighties20",        # eighties20
+    "eighties_dangerroom2":               "eighties38",       # eighties38
+    "dino_dangerroom":                    "dino20",            # dino20
+    "dino_dangerroom2":                   "dino36",           # dino36
+    "modern_dangerroom":                  "modern20",          # modern20
+    "modern_dangerroom2":                 "modern40",         # modern40
 }
 
 

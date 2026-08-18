@@ -361,15 +361,13 @@ else:
 # they are what sphere 1 is made of, and gating them would leave a seed with
 # nowhere to begin.
 #
-# Location names rather than level codes because that is what the regions hold;
-# the mapping is the client's own LOC_LEVELS (egypt1 = Map Unlock,
-# egypt2 = Cabbagepult Unlock, egypt3 = Bloomerang Unlock ... egypt9).
+# World locations are named for their level id, so these are just the level
+# codes. They used to be spelled out as reward names ('Map Unlock',
+# 'Cabbagepult Unlock' ...) with the codes in a trailing comment.
 _mw, _w = build()
 _pre = [i.name for i in _mw.precollected]
-_open_egypt = ['Map Unlock', 'Cabbagepult Unlock', 'Bloomerang Unlock',
-               'Powerupgadget Unlock', 'Iceburg Unlock']            # egypt1-5
-_gated_egypt = ['Branch Unlock Egypt 6', 'Note Egypt Unlock',
-                'World Key - Ancient Egypt', 'Gravebuster Unlock']  # egypt6-9
+_open_egypt = ['egypt1', 'egypt2', 'egypt3', 'egypt4', 'egypt5']
+_gated_egypt = ['egypt6', 'egypt7', 'egypt8', 'egypt9']
 
 _no_sun = {l.name for l in state_with(_mw, _pre).reachable_locations()}
 _with_sun = {l.name for l in state_with(_mw, _pre + ['Sunflower']).reachable_locations()}
