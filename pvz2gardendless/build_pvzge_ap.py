@@ -2983,6 +2983,11 @@ window.electron = electron;
         break;
       case 'ConnectionRefused':
         setStatus('Refused: '+(pkt.errors||[]).join(', '),'#f44');break;
+      case 'PrintJSON':
+        // Chat is the command channel; everything else here is the room's
+        // ordinary traffic and is left to the rest of the client.
+        handleChatCommand(pkt);
+        break;
       case 'ReceivedItems':
         (pkt.items||[]).forEach((item,i)=>{
           const gi=(pkt.index||0)+i;
@@ -3414,6 +3419,97 @@ window.electron = electron;
       if(st[c.seen] !== have){ st[c.seen] = have; dirty = true; }
     }
     if(dirty) svSt();
+  }
+
+  // ── Chat commands ─────────────────────────────────────────────────────────
+  // Typed as an ordinary chat line in any Archipelago client, including the
+  // stock text one. The server rebroadcasts every message except "!admin" to
+  // the whole room as a PrintJSON with type "Chat", carrying the sending team
+  // and slot plus the raw text, so no special client is needed.
+  //
+  // No "!" prefix: the server would also parse it as one of its own commands
+  // and answer "unknown command" every time. No "/" prefix either: that is the
+  // text client's OWN marker (_cmd_connect, _cmd_items, ...) and is handled
+  // locally, so the line never reaches the server. A plain message is the only
+  // form that arrives here untouched.
+  const AP_CHAT_PREFIX = 'pvz2';
+
+  function apChatLedger(){
+    const APP = window._AP_AllPlayerProperties;
+    const cp  = APP ? APP.currentPlayer : null;
+    const out = [];
+    for(const c of CURRENCY_FIELDS){
+      const granted = st[c.granted] || 0, applied = st[c.applied] || 0;
+      out.push(c.field + ': granted ' + granted + ', applied ' + applied +
+               ', pending ' + (granted - applied) +
+               ', on the save ' + (cp ? (cp[c.field] || 0) : '?'));
+    }
+    return out;
+  }
+
+  // Re-push everything this seed has ever granted. For a save whose balance was
+  // lost: applyPendingCurrency() only ever moves granted-minus-applied, so once
+  // those are equal a wiped balance is gone for good. Clearing applied makes the
+  // whole total pending again.
+  //
+  // Idempotent, because it ADDS and a second run would hand out a second copy.
+  // st.resyncAt remembers the granted total each currency was last reconciled
+  // at, so running it twice does nothing -- but a later grant raises granted
+  // above that mark and makes it available again.
+  function apChatResync(){
+    const at = st.resyncAt || (st.resyncAt = {});
+    const done = [];
+    for(const c of CURRENCY_FIELDS){
+      const granted = st[c.granted] || 0;
+      if(!granted || at[c.field] === granted) continue;
+      st[c.applied] = 0;
+      at[c.field] = granted;
+      done.push(c.field);
+    }
+    svSt();
+    if(!done.length){
+      return ['Nothing to restore: every currency is already reconciled.']
+        .concat(apChatLedger());
+    }
+    applyPendingCurrency();
+    return ['Re-applied: ' + done.join(', ')].concat(apChatLedger());
+  }
+
+  const AP_CHAT_COMMANDS = {
+    ledger: { help: 'show granted / applied / pending currency', run: apChatLedger },
+    resync: { help: 're-apply every coin and gem this seed has granted',
+              run: apChatResync },
+    help:   { help: 'list these commands', run: function(){
+      return Object.keys(AP_CHAT_COMMANDS).sort().map(
+        k => AP_CHAT_PREFIX + ' ' + k + ' -- ' + AP_CHAT_COMMANDS[k].help);
+    } },
+  };
+
+  // Acts only on messages from THIS slot. Chat is visible to the whole room, so
+  // without that check anyone could drive another player's client.
+  function handleChatCommand(pkt){
+    if(!pkt || pkt.type !== 'Chat') return false;
+    if(pkt.slot !== apSlotId || (pkt.team || 0) !== apTeam) return false;
+    const raw = String(pkt.message == null ? '' : pkt.message).trim();
+    const parts = raw.split(/\s+/);
+    if(!parts.length || parts[0].toLowerCase() !== AP_CHAT_PREFIX) return false;
+    const name = (parts[1] || 'help').toLowerCase();
+    const cmd = AP_CHAT_COMMANDS[name];
+    if(!cmd){
+      toast('Unknown command: ' + name, '#fa0');
+      log('Chat command not recognised: ' + name + ' (try "' +
+          AP_CHAT_PREFIX + ' help")');
+      return true;
+    }
+    let lines;
+    // A command that throws must not take the socket down with it: onPkt is
+    // handling a live packet when this runs.
+    try { lines = cmd.run() || []; }
+    catch(e){ toast('Command failed: ' + name, '#f44');
+              log('Chat command ' + name + ' failed: ' + e); return true; }
+    for(const line of lines) log(line);
+    toast(AP_CHAT_PREFIX + ' ' + name, '#4f4');
+    return true;
   }
 
   function applyPendingCurrency(){

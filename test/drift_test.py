@@ -44,7 +44,13 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # currency_fn.js harness: reset() rebuilds module scope between cases,
          # svSt counts saves. restoreLostCurrency/observeCurrency themselves
          # ARE real client functions and are checked.
-         "currency_fn.js:reset", "currency_fn.js:restoreDone"}
+         "currency_fn.js:reset", "currency_fn.js:restoreDone",
+         # command_fn.js harness: reset() rebuilds module scope between cases,
+         # and applyPendingCurrency is modelled rather than copied -- the real
+         # one drives the live HUD component, which this suite has no use for.
+         # The currency suite checks the real one. apChatLedger, apChatResync
+         # and handleChatCommand themselves ARE copies and are checked.
+         "command_fn.js:reset", "command_fn.js:applyPendingCurrency"}
 
 _ws = re.compile(r"\s+")
 norm = lambda s: _ws.sub(" ", s).strip()
