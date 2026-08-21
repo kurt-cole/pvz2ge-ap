@@ -385,7 +385,14 @@ _ORPHAN_PATH_REGIONS = {
     "Sandbox Sidepath", "Shootingstarfruit Sidepath",
 }
 _orphan_paths = {l.name for l in _ALL_L if l.region in _ORPHAN_PATH_REGIONS}
-_expected = _rand | _orphan_rooms | _orphan_paths | {"iceage24_B"}
+# Shop cards the game no longer sells. The store table swapped three
+# commodities upstream: the build sells witchhazel, slingpea and chillypepper
+# where the older snapshot had mirrornut, wasabiwhip and pyrevine. A card that
+# is not in StoreCommodityFeatures is never drawn, so its check can never fire.
+# Named from the constant so the two cannot drift, but pinned by count here.
+_absent_shop = {C.shop_location_name(c) for c in C.SHOP_ABSENT_COMMODITIES}
+assert len(_absent_shop) == 3, f"expected 3 absent shop cards, got {sorted(_absent_shop)}"
+_expected = _rand | _orphan_rooms | _orphan_paths | {"iceage24_B"} | _absent_shop
 assert _expected == set(C.UNREACHABLE_LOCATIONS),     f"UNREACHABLE_LOCATIONS disagrees: {_expected ^ set(C.UNREACHABLE_LOCATIONS)}"
 # Those eight regions must end up completely empty, under every option combo --
 # include_side_paths on is the case that used to build them.
@@ -465,13 +472,15 @@ print(f"all {len(C.SIDE_PATH_UNLOCK)} branch side paths hang off their unlock le
 
 # Shop cards: the gate table has to agree with the commodity list and with the
 # locations, or a card is either ungated or gated on something that is not there.
-_shop_names = {C.shop_location_name(c) for c in C.SHOP_COMMODITIES}
+_shop_names = {C.shop_location_name(c) for c in C.SHOP_COMMODITIES} - _absent_shop
 assert set(C.SHOP_UNLOCK) <= set(C.SHOP_COMMODITIES),     f"SHOP_UNLOCK names commodities that are not sold: "     f"{sorted(set(C.SHOP_UNLOCK) - set(C.SHOP_COMMODITIES))}"
 # The ten with no UnlockLevel in the game's store data. Pinned as literals from
 # `StoreCommodityFeatures` rather than derived, so a card losing its gate by
 # accident shows up here instead of quietly becoming an egypt6 check.
 assert set(C.SHOP_COMMODITIES) - set(C.SHOP_UNLOCK) == {
-    "jalapeno", "mirrornut", "wasabiwhip", "pyrevine", "cranjelly",
+    "jalapeno", "cranjelly", "chillypepper",
+    # Still listed, still ungated, but no longer sold -- see SHOP_ABSENT_COMMODITIES.
+    "mirrornut", "wasabiwhip", "pyrevine",
     "upgrade_sunshovel_lvl3", "upgrade_8_slots", "upgrade_pf_slots_lvl2",
     "upgrade_starting_sun_lvl2", "upgrade_manual_mowers_2",
 }, "the set of shop cards with no UnlockLevel changed"
@@ -493,7 +502,8 @@ _modern_cards = {C.shop_location_name(_c) for _c, _l in C.SHOP_UNLOCK.items()
                  if _lnames[_l] in C.WORLD_REGIONS["Modern Day"]}
 _ungated_cards = {C.shop_location_name(_c) for _c in C.SHOP_COMMODITIES
                   if _c not in C.SHOP_UNLOCK}
-_want_1w = _ungated_cards | _egypt_cards | _modern_cards
+# The three the store no longer stocks are never built, in any seed.
+_want_1w = (_ungated_cards | _egypt_cards | _modern_cards) - _absent_shop
 assert _e1shop == _want_1w,     f"one-world shop checks wrong: missing {sorted(_want_1w - _e1shop)}, "     f"extra {sorted(_e1shop - _want_1w)}"
 # ...and every world back in restores all 39, so the filter is not just deleting.
 _eall, _ = run("shop cards with every world", shopsanity=1)

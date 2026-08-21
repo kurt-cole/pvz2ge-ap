@@ -9,7 +9,8 @@ from BaseClasses import Location
 
 from .constants import (
     ALL_WORLD_REGIONS, BASE_ID, DANGER_ROOM_LOCATIONS, GAME_NAME,
-    SHOP_COMMODITIES, SHOP_REGION, SHOP_UNLOCK, SIDE_PATH_REGIONS,
+    SHOP_COMMODITIES, SHOP_EXTRA_COMMODITIES, SHOP_LEGACY_COMMODITIES,
+    SHOP_REGION, SHOP_UNLOCK, SIDE_PATH_REGIONS,
     SIDE_PATH_WORLD, UNREACHABLE_LOCATIONS, WORLD_REGIONS,
     shop_location_name,
 )
@@ -789,7 +790,10 @@ def _make_locs() -> List[PvZ2LocationData]:
     # had. These stay in the static location_name_to_id map either way --
     # AP requires that mapping to be constant across option combinations --
     # but the Location objects are only built when the option is enabled.
-    for commodity in SHOP_COMMODITIES:
+    # SHOP_LEGACY_COMMODITIES, not SHOP_COMMODITIES: this block is not last in
+    # the function, so a name inserted here renumbers every location after it.
+    # Commodities added upstream later go at the end, below.
+    for commodity in SHOP_LEGACY_COMMODITIES:
         add(shop_location_name(commodity), SHOP_REGION, shop=True)
 
     # ── Neon Mixtape Tour, second half (added 2026-08-17) ────────────────────
@@ -861,6 +865,12 @@ def _make_locs() -> List[PvZ2LocationData]:
     for _sky in range(17, 32):
         add(f"sky{_sky}", "Aerial Fortress")
     add("sky_dangerroom", "Aerial Fortress")
+
+    # ── Shop commodities added upstream after the ids above were assigned ────
+    # Kurt's build sells these; the older snapshot did not. They must stay last
+    # so nothing above them moves. See SHOP_EXTRA_COMMODITIES.
+    for commodity in SHOP_EXTRA_COMMODITIES:
+        add(shop_location_name(commodity), SHOP_REGION, shop=True)
 
     return locs
 

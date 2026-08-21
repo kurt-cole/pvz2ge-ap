@@ -375,7 +375,28 @@ SHOP_UPGRADE_COMMODITIES = [
     'upgrade_starting_sun_lvl2', 'upgrade_manual_mowers_2',
 ]  # 5, all gem-priced
 
-SHOP_COMMODITIES = SHOP_PLANT_COMMODITIES + SHOP_UPGRADE_COMMODITIES
+# Sold by the game NOW but added upstream after the two lists above were
+# written, so it cannot go in them: location ids are assigned by increment and
+# the shop block is not last in _make_locs(), so appending there would renumber
+# every location after it. locations.py adds these at the very end instead.
+SHOP_EXTRA_COMMODITIES = ['chillypepper']  # 40 gem, no UnlockLevel
+
+# In those lists, but NOT in the store the game actually loads. Kurt's build
+# sells witchhazel, slingpea and chillypepper where this table has mirrornut,
+# wasabiwhip and pyrevine -- 43 commodities either way, three swapped upstream
+# (confirmed 2026-08-18 against PVZGE-Electron/pvzge_web, not the `Base Game`
+# snapshot, which is older and still lists the old three).
+#
+# A card that is not in StoreCommodityFeatures is never drawn, so its check can
+# never fire. Kept here rather than deleted for the same id reason, and routed
+# into UNREACHABLE_LOCATIONS so no seed ever builds them.
+SHOP_ABSENT_COMMODITIES = ['mirrornut', 'wasabiwhip', 'pyrevine']
+
+SHOP_COMMODITIES = (SHOP_PLANT_COMMODITIES + SHOP_UPGRADE_COMMODITIES
+                    + SHOP_EXTRA_COMMODITIES)
+# The order locations.py must keep for the ids already assigned. Anything new
+# goes in SHOP_EXTRA_COMMODITIES, never in the middle of this.
+SHOP_LEGACY_COMMODITIES = SHOP_PLANT_COMMODITIES + SHOP_UPGRADE_COMMODITIES
 SHOP_REGION = "Shop"
 
 # Which level makes each shop card appear, from the store data itself
@@ -779,7 +800,7 @@ UNREACHABLE_LOCATIONS = frozenset({
     "sandbox", "sandbox_green", "sandbox_modern", "sandbox_modern_night",
     "sandbox_sky",
     "shootingstarfruit1", "shootingstarfruit2", "shootingstarfruit3",
-})
+}) | frozenset(shop_location_name(c) for c in SHOP_ABSENT_COMMODITIES)
 
 
 # Every side path named above has to be a real region, or its entry silently
