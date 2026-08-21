@@ -9,8 +9,8 @@ from BaseClasses import Location
 
 from .constants import (
     ALL_WORLD_REGIONS, BASE_ID, DANGER_ROOM_LOCATIONS, GAME_NAME,
-    SHOP_COMMODITIES, SHOP_EXTRA_COMMODITIES, SHOP_LEGACY_COMMODITIES,
-    SHOP_REGION, SHOP_UNLOCK, SIDE_PATH_REGIONS,
+    SHOP_CHECK_COMMODITIES, SHOP_COMMODITIES, SHOP_EXTRA_COMMODITIES,
+    SHOP_LEGACY_COMMODITIES, SHOP_REGION, SHOP_UNLOCK, SIDE_PATH_REGIONS,
     SIDE_PATH_WORLD, UNREACHABLE_LOCATIONS, WORLD_REGIONS,
     shop_location_name,
 )
@@ -906,6 +906,12 @@ if _unclassified_regions:
 # derivation.
 SHOP_LOC_UNLOCK = {shop_location_name(c): lvl for c, lvl in SHOP_UNLOCK.items()}
 
+# The shop locations a seed actually builds: the cards the game stocks by
+# clearing a level, plus the upgrades. The ungated gem plants keep their ids --
+# removing a name would renumber every location after it -- but are never
+# built. See SHOP_CHECK_COMMODITIES for why they are out.
+SHOP_CHECK_LOCS = {shop_location_name(c) for c in SHOP_CHECK_COMMODITIES}
+
 # Every location's declared region, for resolving a shop card's unlock level to
 # the world it is in. Built from ALL_LOCATIONS so it cannot drift from them.
 _REGION_OF = {l.name: l.region for l in ALL_LOCATIONS}
@@ -953,8 +959,12 @@ def active_locations(shopsanity: bool,
         # unreachable check is not a preference.
         if loc.name in UNREACHABLE_LOCATIONS:
             return False
-        if loc.is_shop and not shopsanity:
-            return False
+        if loc.is_shop:
+            if not shopsanity:
+                return False
+            # Only cards the game stocks by clearing a level, plus upgrades.
+            if loc.name not in SHOP_CHECK_LOCS:
+                return False
         # A card only reaches the shelf once its UnlockLevel is cleared, so a
         # card unlocked by a world this seed left out can never be bought --
         # the same reasoning that drops a dropped world's side paths. Without

@@ -472,7 +472,7 @@ print(f"all {len(C.SIDE_PATH_UNLOCK)} branch side paths hang off their unlock le
 
 # Shop cards: the gate table has to agree with the commodity list and with the
 # locations, or a card is either ungated or gated on something that is not there.
-_shop_names = {C.shop_location_name(c) for c in C.SHOP_COMMODITIES} - _absent_shop
+_shop_names = {C.shop_location_name(c) for c in C.SHOP_CHECK_COMMODITIES}
 assert set(C.SHOP_UNLOCK) <= set(C.SHOP_COMMODITIES),     f"SHOP_UNLOCK names commodities that are not sold: "     f"{sorted(set(C.SHOP_UNLOCK) - set(C.SHOP_COMMODITIES))}"
 # The ten with no UnlockLevel in the game's store data. Pinned as literals from
 # `StoreCommodityFeatures` rather than derived, so a card losing its gate by
@@ -500,14 +500,25 @@ _egypt_cards = {C.shop_location_name(_c) for _c, _l in C.SHOP_UNLOCK.items()
                 if _lnames[_l] in C.WORLD_REGIONS["Ancient Egypt"]}
 _modern_cards = {C.shop_location_name(_c) for _c, _l in C.SHOP_UNLOCK.items()
                  if _lnames[_l] in C.WORLD_REGIONS["Modern Day"]}
-_ungated_cards = {C.shop_location_name(_c) for _c in C.SHOP_COMMODITIES
-                  if _c not in C.SHOP_UNLOCK}
-# The three the store no longer stocks are never built, in any seed.
-_want_1w = (_ungated_cards | _egypt_cards | _modern_cards) - _absent_shop
+# Upgrades are the only ungated cards that are checks; the ungated PLANTS are
+# out entirely, since every upstream store change has landed in that set.
+_upgrade_cards = {C.shop_location_name(_c) for _c in C.SHOP_UPGRADE_COMMODITIES}
+_want_1w = _upgrade_cards | _egypt_cards | _modern_cards
 assert _e1shop == _want_1w,     f"one-world shop checks wrong: missing {sorted(_want_1w - _e1shop)}, "     f"extra {sorted(_e1shop - _want_1w)}"
 # ...and every world back in restores all 39, so the filter is not just deleting.
 _eall, _ = run("shop cards with every world", shopsanity=1)
-assert {l.name for l in _eall.active_locations() if l.is_shop} == _shop_names,     "some shop checks are missing from an all-worlds seed"
+_all_shop = {l.name for l in _eall.active_locations() if l.is_shop}
+assert _all_shop == {C.shop_location_name(_c) for _c in C.SHOP_CHECK_COMMODITIES},     f"all-worlds shop set wrong: {_all_shop ^ {C.shop_location_name(_c) for _c in C.SHOP_CHECK_COMMODITIES}}"
+# Every check is gated on a level or is an upgrade -- no ungated plant survives.
+_upg = set(C.SHOP_UPGRADE_COMMODITIES)
+for _n in _all_shop:
+    _c = _n[len("Shop: "):]
+    assert _c in C.SHOP_UNLOCK or _c in _upg,         f"{_n} is a check but is gated on nothing"
+# ...and the ungated plants really are gone, including the ones the store no
+# longer stocks. This is the whole point of the policy.
+assert not (_all_shop & {C.shop_location_name(_c) for _c in
+                         ("jalapeno", "cranjelly", "chillypepper",
+                          "mirrornut", "wasabiwhip", "pyrevine")}),     "an ungated plant card is still being built"
 print(f"shop: {len(C.SHOP_UNLOCK)} of {len(C.SHOP_COMMODITIES)} cards gated on their "
       f"UnlockLevel, {len(_e1shop)} survive an Egypt-only seed")
 

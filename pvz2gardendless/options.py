@@ -196,10 +196,16 @@ class Shopsanity(Toggle):
     """
     Turn the in-game store's one-time purchases into location checks.
 
-    Adds 39 checks: 34 plants and 5 upgrades, all priced in gems. The gem,
+    Adds 34 checks: 29 plants and 5 upgrades, all priced in gems. The gem,
     coin and sprout bundles are excluded because they can be bought
-    repeatedly, and the four ticket-priced plants are excluded because
-    tickets are pure grind with no Archipelago source.
+    repeatedly, and the ticket-priced plants are excluded because tickets are
+    pure grind with no Archipelago source.
+
+    Only plants the game stocks by CLEARING A LEVEL are used. The handful it
+    sells from the start are left alone: every change the game has made to its
+    store has been in that set -- three of them were swapped for three others
+    between game versions -- and each change either kills an Archipelago check
+    or misses a new one. Cards tied to a level have never moved.
 
     Note no store check is priced in coins, so coins only help indirectly,
     by buying gem bundles.
@@ -211,14 +217,14 @@ class Shopsanity(Toggle):
     game's own rule, so logic puts these checks behind Ancient Egypt's sun
     producer gate rather than in the opening.
 
-    Each card is then gated on the level that puts it on the shelf, from the
-    game's own store data: Shrinking Violet after Modern Day 14, FloawerPot
-    after Aerial Fortress 31, Bamboozle after Kongfu Temple 38. 29 of the 39
-    work that way; the other ten are on sale as soon as the store exists.
+    Each card is gated on the level that puts it on the shelf, from the game's
+    own store data: Shrinking Violet after Modern Day 14, FloawerPot after
+    Aerial Fortress 31, Bamboozle after Kongfu Temple 38. The five upgrades are
+    the exception and are on sale as soon as the store exists.
 
     A card whose level is in a world this seed left out is dropped, since
-    nothing could ever make it appear -- so a small seed adds fewer than 39.
-    An Egypt-only seed adds 14.
+    nothing could ever make it appear -- so a small seed adds fewer than 34.
+    An Egypt-only seed adds 9.
     """
     display_name = "Shopsanity"
 

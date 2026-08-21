@@ -446,7 +446,28 @@ SHOP_UNLOCK = {
     "electricpeashooter": "cowboy28",
     "zoybeanpod":         "lostcity37",
     "shrinkingviolet":    "modern14",
-}  # 29 of the 39 shop checks
+}  # 29 gated cards
+
+# Which commodities are actually used as AP checks: the ones the game puts on
+# the shelf by CLEARING A LEVEL, plus the five upgrades.
+#
+# The ungated gem plants are deliberately left out. Every bit of upstream churn
+# has happened in exactly that set -- mirrornut, wasabiwhip and pyrevine were
+# swapped for witchhazel, slingpea and chillypepper between the snapshot in
+# `Base Game` and the build the installer clones, while all 29 UnlockLevel
+# entries agreed exactly. A card with no UnlockLevel is a shelf item the game
+# can add or drop without touching anything else, and each time it does, an AP
+# check either dies or is missed.
+#
+# So the rule is derived rather than listed: a plant is a check IF AND ONLY IF
+# it has an UnlockLevel. Upstream reshuffling the ungated tail now costs
+# nothing. It also means every shop check is gated on a level, which is what
+# rules.py was already doing for 29 of them.
+#
+# The names stay in the lists above so their ids never move; locations.py
+# filters them out of every seed instead.
+SHOP_CHECK_COMMODITIES = ([c for c in SHOP_PLANT_COMMODITIES if c in SHOP_UNLOCK]
+                          + list(SHOP_UPGRADE_COMMODITIES))
 
 # ── Permanent upgrades ────────────────────────────────────────────────────────
 # The game's fourteen permanent upgrades, as (item name, game codename), in
