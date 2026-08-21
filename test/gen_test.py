@@ -501,6 +501,38 @@ assert {l.name for l in _eall.active_locations() if l.is_shop} == _shop_names,  
 print(f"shop: {len(C.SHOP_UNLOCK)} of {len(C.SHOP_COMMODITIES)} cards gated on their "
       f"UnlockLevel, {len(_e1shop)} survive an Egypt-only seed")
 
+# Hint buckets. The point is that "!hint World Keys" answers where all of them
+# are in one command, so the group has to hold every key -- and the singular has
+# to resolve to the same set, since AP matches a group name exactly and a player
+# types whichever reads naturally.
+from pvz2gardendless.items import ITEM_NAME_GROUPS, ALL_ITEMS, KEY_ITEMS
+_keynames = {i.name for i in KEY_ITEMS}
+assert ITEM_NAME_GROUPS["World Keys"] == _keynames,     f"World Keys group is not the key items: {ITEM_NAME_GROUPS['World Keys'] ^ _keynames}"
+assert ITEM_NAME_GROUPS["World Key"] == ITEM_NAME_GROUPS["World Keys"],     "the singular alias does not match the plural"
+for _p, _sg in (("Plants", "Plant"), ("Traps", "Trap"), ("Upgrades", "Upgrade"),
+                ("Costumes", "Costume"), ("Coins", "Coin"), ("Gems", "Gem")):
+    assert ITEM_NAME_GROUPS[_sg] == ITEM_NAME_GROUPS[_p], f"{_sg} does not match {_p}"
+# Every item hintable as part of something. The currencies and the costume were
+# in no group at all, so there was no way to ask about them as a set.
+_allnames = {i.name for i in ALL_ITEMS}
+_ungrouped = _allnames - set().union(*ITEM_NAME_GROUPS.values())
+assert not _ungrouped, f"items in no hint group: {sorted(_ungrouped)}"
+# A group naming something that is not an item would hint nothing.
+for _g, _members in ITEM_NAME_GROUPS.items():
+    assert _members, f"hint group {_g} is empty"
+    _ghost = _members - _allnames
+    assert not _ghost, f"group {_g} names non-items: {sorted(_ghost)}"
+# Negative currency stays out of Coins/Gems: those are traps, and answering
+# "where are my coins" with the places that take them away is worse than
+# answering nothing.
+assert not (ITEM_NAME_GROUPS["Currency"] & ITEM_NAME_GROUPS["Traps"]),     "a currency trap leaked into the Currency group"
+# ...and a real seed's keys are all in the group, not just the static table.
+_hw, _ = run("hint groups", shopsanity=1)
+_pool_keys = {i.name for i in _hw.multiworld.itempool if i.name.endswith(" Key")}
+assert _pool_keys <= ITEM_NAME_GROUPS["World Keys"],     f"keys in the pool but not the group: {sorted(_pool_keys - ITEM_NAME_GROUPS['World Keys'])}"
+print(f"hint groups: {len(ITEM_NAME_GROUPS)} buckets over {len(_allnames)} items, "
+      f"World Keys covers all {len(_pool_keys)} keys in the pool")
+
 # No goal or victory condition may depend on one, in any goal mode.
 for _gt in (0, 1, 2):
     _gw, _gsd = run(f"unreachable: goal_type={_gt}", goal_type=_gt, worlds_required=11)

@@ -309,12 +309,48 @@ if len(ITEM_NAME_TO_ITEM) != len(ALL_ITEMS):
     raise ValueError("duplicate item names: "
                      f"{sorted(n for n, c in _seen.items() if c > 1)}")
 
+# Buckets for !hint. Hinting a group name resolves to every item in it, so
+# "!hint World Keys" answers where all eleven keys are in one command instead of
+# eleven. Every item belongs to at least one, checked below -- the currencies
+# and the costume used to belong to none, so there was no way to ask about them
+# except by their exact name.
 ITEM_NAME_GROUPS: Dict[str, set] = {
     "Plants":     {i.name for i in PLANT_ITEMS},
     "World Keys": {i.name for i in KEY_ITEMS},
     "Traps":      {i.name for i in TRAP_POOL},
     "Upgrades":   {i.name for i in UPGRADE_ITEMS},
+    "Costumes":   {i.name for i in COSTUME_ITEMS},
+    # Positive currency only. The two negative ones are traps and are in
+    # "Traps"; folding them in here would answer "where are my coins" with the
+    # places that take them away.
+    "Coins":      {i.name for i in FILLER_ITEMS if i.name.endswith("Coins")},
+    "Gems":       {i.name for i in FILLER_ITEMS if i.name.endswith("Gems")},
+    "Filler":     {i.name for i in FILLER_ITEMS} | {i.name for i in COSTUME_ITEMS},
 }
+ITEM_NAME_GROUPS["Currency"] = ITEM_NAME_GROUPS["Coins"] | ITEM_NAME_GROUPS["Gems"]
+
+# Singular aliases. A player typing "!hint World Key" means the group, and AP
+# resolves a group name only on an exact match -- so without this the natural
+# phrasing falls through to fuzzy-matching one item and hints a single key.
+for _plural, _singular in (
+    ("Plants", "Plant"), ("World Keys", "World Key"), ("Traps", "Trap"),
+    ("Upgrades", "Upgrade"), ("Costumes", "Costume"), ("Coins", "Coin"),
+    ("Gems", "Gem"),
+):
+    ITEM_NAME_GROUPS[_singular] = ITEM_NAME_GROUPS[_plural]
+
+# Same rule the location groups follow: a group sharing a name with an item
+# makes !hint ambiguous, and AP cannot tell the player which one it picked.
+_item_group_clashes = set(ITEM_NAME_GROUPS) & set(ITEM_NAME_TO_ITEM)
+if _item_group_clashes:
+    raise ValueError("item group names collide with item names: "
+                     f"{sorted(_item_group_clashes)}")
+
+# An item in no group cannot be hinted as part of anything, which is how the
+# currencies and the costume were missed.
+_ungrouped = {i.name for i in ALL_ITEMS} - set().union(*ITEM_NAME_GROUPS.values())
+if _ungrouped:
+    raise ValueError(f"items in no hint group: {sorted(_ungrouped)}")
 
 # Order filler is dealt out in. It deliberately interleaves the currencies
 # instead of reusing FILLER_ITEMS order, which is grouped by type and would
