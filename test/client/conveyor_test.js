@@ -123,11 +123,41 @@ const { CONVEYOR_GROUPS } = require('./conveyor_fn.js');
 const GROUP_OF = {};
 for (const k of Object.keys(CONVEYOR_GROUPS)) for (const cn of CONVEYOR_GROUPS[k]) GROUP_OF[cn] = k;
 
+const { CONVEYOR_SHADOW, CONVEYOR_BELT_LOCKED } = require('./conveyor_fn.js');
+const SHADOW = new Set(CONVEYOR_SHADOW);
+// A shadow belt is a whole-belt reroll, not a per-slot swap, so it is exempt
+// from the group rule by design -- it is checked on its own terms below. A
+// level counts as one only if EVERY swappable slot came out a shadow plant;
+// anything less would mean the two paths had mixed, which must never happen.
+// Read from the hook's own stamp rather than inferred from the belt: a
+// one-slot belt whose plant happens to swap to a Shadow plant looks exactly
+// like a shadow deck, which made this detector report 5 false positives and
+// two failures that were the test's fault, not the client's.
+const lastWasShadow = () => window._AP_conveyorLastShadow === true;
+// How many slots the hook would consider swappable, for the min-slots rule.
+const slotCountOf = (before) => {
+  let slots = 0;
+  for (let i = 0; i < before.length; i++) {
+    const a = before[i] && before[i].PlantType;
+    if (!KNOWN.has(a) || !GROUP_OF[a] || CONVEYOR_BELT_LOCKED.has(a) ||
+        window._AP_conveyorTerrainLocked.has(a)) continue;
+    slots++;
+  }
+  return slots;
+};
+
 let crossings = 0, sameGroup = 0, ungrouped = 0, roleBreaks = 0;
+let shadowBelts = 0, shadowNoMoon = 0, shadowLevels = [];
 const roleOf = k => k.split(':')[0];
 for (const l of LEVELS) {
   const before = clone(l).InitialPlantList;
   const after = run(clone(l)).InitialPlantList;
+  if (lastWasShadow()) {
+    shadowBelts++;
+    shadowLevels.push({ picks: after.map(e => e.PlantType), slots: slotCountOf(before) });
+    if (!after.some(e => e.PlantType === 'moonflower')) shadowNoMoon++;
+    continue;
+  }
   for (let i = 0; i < before.length; i++) {
     const a = before[i].PlantType, b = after[i].PlantType;
     if (!KNOWN.has(a)) continue;
@@ -145,34 +175,88 @@ if (crossings) fail(`${crossings} swap(s) left the original's group (${roleBreak
 else ok(`all ${sameGroup} swaps stayed inside the original's power band`);
 ok(`${ungrouped} entries had no comparable plant and were left alone`);
 
-// spot-check the two constraints that matter most for a level being winnable
-const sunCns = CONVEYOR_GROUPS['sun:budget'].concat(CONVEYOR_GROUPS['sun:low']);
-let sunChecked = 0;
-for (const l of LEVELS) {
-  const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
-  for (let i = 0; i < before.length; i++) {
-    if (!sunCns.includes(before[i].PlantType)) continue;
-    sunChecked++;
-    if (!GROUP_OF[after[i].PlantType] || roleOf(GROUP_OF[after[i].PlantType]) !== 'sun') {
-      fail(`sun producer ${before[i].PlantType} became ${after[i].PlantType}`);
-    }
-  }
-}
-ok(`${sunChecked} sun-producer entries stayed sun producers`);
-
+// spot-check the constraint that matters most for a level being winnable: a
+// plant that is used up must not become one that stays on the lawn, or the
+// level's pacing is gone. Shadow belts are exempt for the reason above.
 let oneShot = 0;
 for (const l of LEVELS) {
   const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
+  if (lastWasShadow()) continue;
   for (let i = 0; i < before.length; i++) {
     const g = GROUP_OF[before[i].PlantType];
-    if (!g || roleOf(g) !== 'single-use') continue;
+    if (!g || roleOf(g) !== 'instant') continue;
     oneShot++;
-    if (roleOf(GROUP_OF[after[i].PlantType] || '') !== 'single-use') {
+    if (roleOf(GROUP_OF[after[i].PlantType] || '') !== 'instant') {
       fail(`one-shot ${before[i].PlantType} became ${after[i].PlantType}`);
     }
   }
 }
 ok(`${oneShot} one-shot entries stayed one-shots`);
+
+// Moonflower is belt-locked: the three levels that put it on a belt are built
+// around the Shadow plants it empowers, so it must never be traded away.
+let moonSeen = 0;
+for (const l of LEVELS) {
+  const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
+  for (let i = 0; i < before.length; i++) {
+    if (before[i].PlantType !== 'moonflower') continue;
+    moonSeen++;
+    if (after[i].PlantType !== 'moonflower') {
+      fail(`belt-locked moonflower became ${after[i].PlantType}`);
+    }
+  }
+}
+ok(`${moonSeen} moonflower entries were left exactly where the level put them`);
+
+// ── the shadow belt ──────────────────────────────────────────────────────────
+// It has to fire sometimes, never without Moonflower, and never on a belt too
+// small to be a deck. "Sometimes" is checked as a range: zero would mean the
+// roll is dead, and everything would mean it had swallowed the normal path.
+if (!shadowBelts) fail('the shadow belt never fired across ' + LEVELS.length + ' levels');
+else if (shadowBelts > LEVELS.length * 0.30) {
+  fail(`the shadow belt fired on ${shadowBelts}/${LEVELS.length} levels, far past its 12% chance`);
+} else ok(`shadow belt fired on ${shadowBelts}/${LEVELS.length} levels ` +
+          `(${(shadowBelts / LEVELS.length * 100).toFixed(0)}%)`);
+if (shadowNoMoon) fail(`${shadowNoMoon} shadow belt(s) came out without moonflower`);
+else ok(`all ${shadowBelts} shadow belts contain moonflower`);
+const tooSmall = shadowLevels.filter(r => r.slots < 2).length;
+if (tooSmall) fail(`${tooSmall} shadow belt(s) fired on a belt with fewer than 2 slots`);
+else ok('no shadow belt fired on a belt too small to be a deck');
+const offSet = shadowLevels.flatMap(r => r.picks)
+  .filter(p => !SHADOW.has(p) && KNOWN.has(p) && GROUP_OF[p]).length;
+if (offSet) fail(`${offSet} plant(s) on a shadow belt are not in the shadow set`);
+else ok('every plant on a shadow belt is one of the 8 haveDarkMode plants');
+
+// ── Family preference ────────────────────────────────────────────────────────
+// Step two of the three. It is a preference, not a filter, so this asserts it
+// BITES rather than that it always holds: with 75% weighting a same-Family
+// trade should be far more common than picking uniformly from the group would
+// give. Measured against that uniform baseline, so it cannot pass by accident
+// on a pool that happens to be family-heavy.
+const { CONVEYOR_FAMILIES } = require('./conveyor_fn.js');
+const FAM_OF = {};
+for (const f of Object.keys(CONVEYOR_FAMILIES)) for (const cn of CONVEYOR_FAMILIES[f]) FAM_OF[cn] = f;
+let famSame = 0, famTotal = 0, baseline = 0;
+for (const l of LEVELS) {
+  const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
+  if (lastWasShadow()) continue;
+  for (let i = 0; i < before.length; i++) {
+    const a = before[i].PlantType, b = after[i].PlantType;
+    if (!KNOWN.has(a) || !GROUP_OF[a] || a === b) continue;
+    const group = CONVEYOR_GROUPS[GROUP_OF[a]];
+    const kin = group.filter(cn => FAM_OF[cn] === FAM_OF[a]);
+    if (kin.length < 2) continue;  // no partner: the preference cannot apply
+    famTotal++;
+    baseline += (kin.length - 1) / (group.length - 1);
+    if (FAM_OF[b] === FAM_OF[a]) famSame++;
+  }
+}
+if (!famTotal) fail('no swap had a same-Family partner, so the preference is untested');
+else if (famSame <= baseline) {
+  fail(`Family preference does nothing: ${famSame} same-Family of ${famTotal}, ` +
+       `uniform picking would give ${baseline.toFixed(1)}`);
+} else ok(`Family preference bites: ${famSame}/${famTotal} same-Family trades, ` +
+          `vs ${baseline.toFixed(1)} expected from uniform picking`);
 
 // ── terrain: a belt must never hand out a plant the lawn cannot host ─────────
 // Regression, found in play testing: an Ancient Egypt level dealt out Lily Pad

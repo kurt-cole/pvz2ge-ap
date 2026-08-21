@@ -502,6 +502,73 @@ window.electron = electron;
             hasWater = list.some(e => e && window._AP_conveyorTerrainLocked.has(e.PlantType) &&
                                       e.PlantType !== 'goldleaf');
           }
+          // Which entries are real plants this hook may touch? Tools
+          // (tool_projectile_*, zombiepotion_*) and belt-locked plants are not,
+          // and the shadow roll has to count slots the same way the swap does.
+          // Same test the swap below applies, so the two paths touch exactly the
+          // same slots: a real plant, in a group, not locked to its belt or its
+          // terrain. glaciershroom and rotobaga are in no group and so are left
+          // alone by both.
+          const swappableAt = list.map(e => !!(e && known && known.has(e.PlantType) &&
+                                               swaps[e.PlantType] &&
+                                               !window._AP_conveyorBeltLocked.has(e.PlantType) &&
+                                               !window._AP_conveyorTerrainLocked.has(e.PlantType)));
+          const slotCount = swappableAt.filter(Boolean).length;
+
+          // The shadow belt. Rolled FIRST and from the same stream, so a level
+          // either becomes a shadow deck or goes through the ordinary swap --
+          // never half of each, which would leave Moonflower powering nothing.
+          // Rolled unconditionally so the stream stays aligned whether or not
+          // the belt is eligible.
+          const shadowRoll = rnd();
+          const shadowSet = window._AP_conveyorShadow || [];
+          // Which path this belt took, for the offline suite. Inferring it from
+          // the result does not work: a one-slot belt whose plant happens to
+          // swap to a Shadow plant is indistinguishable from a shadow deck.
+          window._AP_conveyorLastShadow = false;
+          if (shadowSet.length && slotCount >= (window._AP_conveyorShadowMinSlots || 2) &&
+              shadowRoll < (window._AP_conveyorShadowChance || 0)) {
+            const usableShadow = shadowSet.filter(
+              cn => window._AP_conveyorPlantable(cn, hasWater));
+            // Moonflower is the whole point: without it the other seven never
+            // reach ShadowPowered, so a set that lost it to terrain is no set.
+            if (usableShadow.indexOf('moonflower') !== -1) {
+              const picks = [];
+              const takenShadow = new Set();
+              for (let i = 0; i < list.length; i++) {
+                if (!swappableAt[i]) { picks.push(null); continue; }
+                // Keep the slot's own role where the shadow set can cover it,
+                // so a belt of blockers does not become a belt of one-shots.
+                const roleOf = window._AP_conveyorRole || {};
+                const want = roleOf[list[i].PlantType];
+                let pool = usableShadow.filter(cn => roleOf[cn] === want);
+                if (!pool.length) pool = usableShadow;
+                let pick = pool[Math.floor(rnd() * pool.length)];
+                for (let tries = 0; tries < 8 && takenShadow.has(pick); tries++) {
+                  pick = pool[Math.floor(rnd() * pool.length)];
+                }
+                takenShadow.add(pick);
+                picks.push(pick);
+              }
+              // Guarantee Moonflower. Overwrite the last real slot rather than a
+              // random one: it is the latest arrival on the belt, so the deck
+              // still opens with an attacker.
+              if (picks.indexOf('moonflower') === -1) {
+                for (let i = list.length - 1; i >= 0; i--) {
+                  if (picks[i]) { picks[i] = 'moonflower'; break; }
+                }
+              }
+              patched = Object.assign(
+                Object.create(Object.getPrototypeOf(props) || Object.prototype), props);
+              patched.InitialPlantList = list.map(
+                (e, i) => picks[i] ? Object.assign({}, e, { PlantType: picks[i] }) : e);
+              window._AP_conveyorLastShadow = true;
+              const args0 = Array.prototype.slice.call(arguments);
+              args0[0] = patched;
+              return _origSetConveyor.apply(this, args0);
+            }
+          }
+
           const used = new Set();
           const newList = list.map(function (entry) {
             // Only genuine plants are swapped. A conveyor also delivers
@@ -521,15 +588,27 @@ window.electron = electron;
             // takes away the only thing that makes its water columns usable,
             // which is the same class of bug in the other direction.
             if (window._AP_conveyorTerrainLocked.has(entry.PlantType)) return entry;
+            // Moonflower and anything else the level is built around.
+            if (window._AP_conveyorBeltLocked.has(entry.PlantType)) return entry;
             // Drop candidates this lawn cannot host, then apply the group rule
             // that a plant with nothing left to trade for stays put -- the
             // original is always in its own group, so fewer than two survivors
             // means there is no alternative.
             const usable = candidates.filter(cn => window._AP_conveyorPlantable(cn, hasWater));
             if (usable.length < 2) return entry;
+            // Step two of the three: inside the role-and-power group, prefer a
+            // plant of the same Family, so a Peashooter tends to become another
+            // Peashooter and a Lobber another Lobber. A preference rather than
+            // a filter -- 40 of the 133 have no same-Family partner in their
+            // group, and narrowing to nothing would just stop them swapping.
+            // The roll happens either way so the stream does not fork.
+            const familyOf = window._AP_conveyorFamily || {};
+            const kin = usable.filter(cn => familyOf[cn] === familyOf[entry.PlantType]);
+            const preferKin = rnd() < 0.75 && kin.length >= 2;
+            const from = preferKin ? kin : usable;
             let pick = entry.PlantType;
             for (let tries = 0; tries < 20; tries++) {
-              const candidate = usable[Math.floor(rnd() * usable.length)];
+              const candidate = from[Math.floor(rnd() * from.length)];
               // Keep one belt from being three copies of the same plant while
               // the group has alternatives. Bounded, so a small group still
               // terminates rather than spinning.
@@ -832,68 +911,193 @@ window.electron = electron;
     152:2, 153:2, 154:2, 155:1, 156:1, 157:1, 160:2, 161:1, 164:2, 165:1
   };
 
-  // Conveyor swap groups: which plants count as interchangeable when the belt
-  // is randomized. Keyed role:tier, where role separates plants that stay on
-  // the lawn from those consumed or timed out, and sun producers from both --
-  // a conveyor level that hands out Sunflower and gets an attacker back has no
-  // sun economy left and cannot be won. tier buckets the game's own sun cost,
-  // which is its pricing of a plant's power: budget <75, low 75-149,
-  // mid 150-249, high 250+.
+  // Conveyor swap groups. A belt entry is traded for a plant that plays the
+  // same part, decided in three steps: ROLE, then Family, then power.
   //
-  // Derived from the game's own tables, not by hand -- _PLANTPROPERTIES for
-  // Cost / IsConsumable / Lifetime and PlantProps for Family. rotobaga is
-  // absent because it has no sun cost anywhere in the data, so it is left
-  // alone rather than guessed at.
+  // ROLE keys the group, from explicit properties only:
+  //   instant  IsConsumable, or a Lifetime -- it is used up or times out
+  //   attacker fires a projectile, or chews/contacts/explodes for >= 20
+  //   blocker  no attack and Toughness >= 1000 (the median plant is 300)
+  //   support  everything else
+  // Requiring a damage NUMBER for "attacker" was not enough: the live table
+  // names Banana's, Citron's and Gatling Pea's projectile without pricing it,
+  // and all seven landed in "support" where a Wall-nut could replace them.
+  // Naming a projectile or a shoot interval is itself proof of an attack.
+  //
+  // POWER is the band, from derived DPS where the data gives one (35 of 133)
+  // and from the game's own sun cost otherwise. Those two are not the same
+  // scale, so a band means "about this much plant", not a DPS figure.
+  //
+  // Family is applied INSIDE a group as a preference, not as part of the key --
+  // see CONVEYOR_FAMILIES.
+  //
+  // Two plants are deliberately in no group and so are never swapped:
+  // glaciershroom, whose damage is not in any table the game loads, and
+  // rotobaga, which has no sun cost anywhere. An unknown is not a zero.
+  //
+  // Sun producers no longer have a role of their own. They used to, to stop a
+  // belt losing its sun economy -- but of the 504 levels with a conveyor, THREE
+  // put a sun producer on the belt and all three are Moonflower, which is there
+  // to power Shadow plants. Sunflower and Sun-shroom never appear on a belt at
+  // all. The old sun:* groups were also built from Family == "Sun", so they
+  // held plantern, toadstool and moonbean, none of which produce sun.
   const CONVEYOR_GROUPS = {
-    'sustained:mid': [
-      'akee', 'bambooshoot', 'bamboozle', 'bloomerang', 'bloominghearts', 'bonkchoy',
-      'bowlingbulb', 'cactus', 'chomper', 'coldsnapdragon', 'doomshroom', 'dragonbruit',
-      'dusklobber', 'electricblueberry', 'electriccurrant', 'electricpeashooter',
-      'firegourd', 'firepeashooter', 'hotdate', 'iceweed', 'jackolantern', 'laser_bean',
-      'lychee', 'parsnip', 'peanut', 'pepperpult', 'phatbeet', 'primalpeashooter',
-      'pumpkin', 'pvine', 'redstinger', 'repeater', 'skyshooter', 'snapdragon',
-      'snowdrop', 'snowpea', 'sporeshroom', 'starfruit', 'sweetpotato', 'torchwood'
+    'attacker:low': [
+      'applemortar', 'bloominghearts', 'bowlingbulb', 'cabbagepult',
+      'cactus', 'chardguard', 'cranjelly', 'dusklobber', 'endurian',
+      'fumeshroom', 'gloomvine', 'guacodile', 'lightningreed', 'peanut',
+      'peapod', 'peashooter', 'pepperpult', 'primalpeashooter',
+      'puffshroom', 'pvine', 'redstinger', 'repeater', 'sapfling',
+      'snowpea', 'spikeweed', 'splitpea', 'sporeshroom', 'starfruit',
+      'threepeater', 'vamporcini'
     ],
-    'sustained:low': [
-      'cabbagepult', 'chardguard', 'cranjelly', 'endurian', 'fumeshroom', 'gloomvine',
-      'guacodile', 'intensivecarrot', 'kernelpult', 'lightningreed', 'magnetshroom',
-      'nightshade', 'peach', 'peapod', 'peashooter', 'primalwallnut', 'sapfling',
-      'spikeweed', 'splitpea', 'tallnut', 'umbrellaleaf', 'vamporcini'
+    'attacker:mid': [
+      'akee', 'bambooshoot', 'bamboozle', 'bonkchoy', 'chomper',
+      'coldsnapdragon', 'dandelion', 'doomshroom', 'dragonbruit',
+      'electriccurrant', 'firegourd', 'firepeashooter', 'homingthistle',
+      'hotdate', 'iceweed', 'jackolantern', 'laser_bean', 'lychee',
+      'melonpult', 'parsnip', 'phatbeet', 'skyshooter', 'snapdragon',
+      'snowdrop', 'strawburst', 'torchwood', 'wintermelon'
     ],
-    'single-use:budget': [
-      'blover', 'chilibean', 'empea', 'escaperoot', 'goldbloom', 'goldleaf',
-      'gravebuster', 'hotpotato', 'iceburg', 'potatomine', 'primalpotatomine',
-      'shadowshroom', 'shrinkingviolet', 'solarsage', 'squash', 'stallia', 'stunion',
-      'sunbean', 'tanglekelp'
+    'instant:budget': [
+      'blover', 'chilibean', 'empea', 'escaperoot', 'goldbloom',
+      'goldleaf', 'grapeshot', 'gravebuster', 'hotpotato', 'iceburg',
+      'potatomine', 'primalpotatomine', 'shadowshroom', 'shrinkingviolet',
+      'squash', 'stallia', 'stunion', 'sunbean', 'tanglekelp'
     ],
-    'sustained:high': [
-      'applemortar', 'banana', 'cantaloupe', 'citron', 'coconutcannon', 'dandelion',
-      'gatling', 'glaciershroom', 'gloomshroom', 'homingthistle', 'melonpult',
-      'meteorflower', 'missiletoe', 'shootingstarfruit', 'spikerock', 'strawburst',
-      'threepeater', 'wintermelon'
+    'attacker:high': [
+      'banana', 'cantaloupe', 'citron', 'coconutcannon', 'gatling',
+      'gloomshroom', 'meteorflower', 'missiletoe', 'nightshade',
+      'shootingstarfruit', 'spikerock'
     ],
-    'sustained:budget': [
-      'buttercup', 'celerystalker', 'explodeonut', 'garlic', 'imitater', 'lilypad',
-      'moonflower', 'puffshroom', 'scaredyshroom', 'seashroom', 'springbean', 'turnip',
-      'wallnut'
+    'attacker:budget': [
+      'bloomerang', 'buttercup', 'celerystalker', 'electricpeashooter',
+      'explodeonut', 'kernelpult', 'magnifyinggrass', 'scaredyshroom',
+      'seashroom'
     ],
-    'single-use:low': [
-      'ghostpepper', 'grimrose', 'hurrikale', 'hypnoshroom', 'jalapeno', 'lavaguava',
-      'solartomato', 'thymewarp'
+    'instant:low': [
+      'ghostpepper', 'grimrose', 'hurrikale', 'hypnoshroom', 'jalapeno',
+      'lavaguava', 'solarsage', 'solartomato', 'thymewarp'
     ],
-    'single-use:mid': [
-      'cherry_bomb', 'grapeshot', 'perfumeshroom', 'powerlily'
+    'support:budget': [
+      'garlic', 'lilypad', 'moonbean', 'moonflower', 'springbean',
+      'sunflower', 'sunshroom'
     ],
-    'sun:budget': [
-      'magnifyinggrass', 'moonbean', 'sunflower', 'sunshroom'
+    'support:low': [
+      'intensivecarrot', 'magnetshroom', 'peach', 'plantern',
+      'primalsunflower', 'twinsunflower', 'umbrellaleaf'
     ],
-    'sun:low': [
-      'plantern', 'primalsunflower', 'twinsunflower'
+    'blocker:budget': [
+      'imitater', 'turnip', 'wallnut'
     ],
-    'sun:mid': [
-      'toadstool'
-    ]
+    'instant:mid': [
+      'cherry_bomb', 'perfumeshroom', 'powerlily'
+    ],
+    'blocker:low': [
+      'primalwallnut', 'tallnut'
+    ],
+    'blocker:mid': [
+      'pumpkin', 'sweetpotato'
+    ],
+    'support:mid': [
+      'electricblueberry', 'toadstool'
+    ],
   };
+
+  const CONVEYOR_FAMILIES = {
+    'Cold': [
+      'coldsnapdragon', 'glaciershroom', 'iceburg', 'iceweed',
+      'missiletoe', 'snowdrop', 'snowpea', 'wintermelon'
+    ],
+    'Defence': [
+      'bamboozle', 'chardguard', 'endurian', 'lychee', 'peach', 'peanut',
+      'primalwallnut', 'pumpkin', 'sweetpotato', 'tallnut', 'turnip',
+      'umbrellaleaf', 'wallnut'
+    ],
+    'Electricity': [
+      'citron', 'electricblueberry', 'electriccurrant',
+      'electricpeashooter', 'empea', 'lightningreed'
+    ],
+    'Explosive': [
+      'cherry_bomb', 'doomshroom', 'escaperoot', 'explodeonut',
+      'grapeshot', 'potatomine', 'primalpotatomine', 'strawburst'
+    ],
+    'Fire': [
+      'firegourd', 'firepeashooter', 'ghostpepper', 'hotdate',
+      'hotpotato', 'jackolantern', 'jalapeno', 'lavaguava',
+      'meteorflower', 'pepperpult', 'snapdragon'
+    ],
+    'Lobber': [
+      'akee', 'applemortar', 'banana', 'cabbagepult', 'cantaloupe',
+      'coconutcannon', 'kernelpult', 'melonpult'
+    ],
+    'Magic': [
+      'hypnoshroom', 'intensivecarrot', 'shrinkingviolet'
+    ],
+    'Melee': [
+      'bonkchoy', 'celerystalker', 'chomper', 'guacodile', 'parsnip',
+      'phatbeet', 'squash', 'tanglekelp'
+    ],
+    'Nope': [
+      'goldleaf', 'imitater', 'lilypad', 'perfumeshroom', 'powerlily',
+      'rotobaga', 'thymewarp'
+    ],
+    'Peashooter': [
+      'bowlingbulb', 'dandelion', 'gatling', 'peapod', 'peashooter',
+      'primalpeashooter', 'pvine', 'redstinger', 'repeater',
+      'shootingstarfruit', 'skyshooter', 'splitpea', 'starfruit',
+      'threepeater', 'torchwood'
+    ],
+    'Poison': [
+      'bloominghearts', 'chilibean', 'fumeshroom', 'garlic', 'puffshroom',
+      'scaredyshroom', 'seashroom', 'sporeshroom', 'vamporcini'
+    ],
+    'Shadow': [
+      'dragonbruit', 'dusklobber', 'gloomshroom', 'gloomvine', 'grimrose',
+      'moonflower', 'nightshade', 'shadowshroom'
+    ],
+    'Sharp': [
+      'bambooshoot', 'bloomerang', 'cactus', 'homingthistle',
+      'laser_bean', 'spikerock', 'spikeweed'
+    ],
+    'Slow': [
+      'blover', 'buttercup', 'cranjelly', 'gravebuster', 'hurrikale',
+      'magnetshroom', 'sapfling', 'springbean', 'stallia', 'stunion'
+    ],
+    'Sun': [
+      'goldbloom', 'magnifyinggrass', 'moonbean', 'plantern',
+      'primalsunflower', 'solarsage', 'solartomato', 'sunbean',
+      'sunflower', 'sunshroom', 'toadstool', 'twinsunflower'
+    ],
+  };
+
+  // The Shadow belt. Moonflower empowers a neighbouring plant when that plant
+  // has haveDarkMode, which judgeShadowPlantMode() reads:
+  //     if (this.haveDarkMode) { if (this.inLnC?.shadowCD > 0 || MintBoosted) ... }
+  // haveDarkMode is a prefab property, set on exactly 13 plants -- the Shadow
+  // Family minus Conceal-mint, which empowers rather than being empowered.
+  // Eight of the 13 are in this pool; the rest are past the id-165 cutoff.
+  // Derived from the prefabs, not from Family, even though the two agree here.
+  //
+  // Moonflower's own output scales with how many of them sit next to it
+  // (sunValue = SunValueList[l-1]), so a belt of these is a real deck rather
+  // than a theme. The game ships one by hand: modern44 is Chomper, Dusk Lobber,
+  // Fume-shroom, Moonflower, Nightshade, Shadow-shroom.
+  const CONVEYOR_SHADOW = [
+    'moonflower', 'dragonbruit', 'dusklobber', 'gloomshroom', 'gloomvine',
+    'grimrose', 'nightshade', 'shadowshroom'
+  ];
+  // Roughly one belt in eight. Rolled from the same seeded stream as the swaps,
+  // so it is stable per level and a retry is not a reroll.
+  const CONVEYOR_SHADOW_CHANCE = 0.12;
+  // A shadow belt is pointless without Moonflower -- the other seven never
+  // power up -- and pointless on a belt with fewer than two real plant slots.
+  const CONVEYOR_SHADOW_MIN_SLOTS = 2;
+
+  // Left exactly where the level put it, like the terrain-locked plants below.
+  // Moonflower is on a belt only in levels built around Shadow plants, so
+  // trading it away takes the level's premise with it.
+  const CONVEYOR_BELT_LOCKED = new Set(['moonflower']);
 
   // Conveyor randomization pool, also exposed for the hook in that IIFE.
   // Neither of these two is a plant you would hand a player off a belt:
@@ -957,6 +1161,26 @@ window.electron = electron;
     if (members.length < 2) continue;
     for (const cn of members) window._AP_conveyorSwaps[cn] = members;
   }
+
+  // codename -> Family, inverted once so the hook can prefer a like-for-like
+  // trade without scanning the family lists on every belt entry.
+  window._AP_conveyorFamily = {};
+  for (const fam of Object.keys(CONVEYOR_FAMILIES)) {
+    for (const cn of CONVEYOR_FAMILIES[fam]) window._AP_conveyorFamily[cn] = fam;
+  }
+  // codename -> role, the part of the group key before the colon. Used by the
+  // shadow belt to keep each slot playing the part the level gave it.
+  window._AP_conveyorRole = {};
+  for (const key of Object.keys(CONVEYOR_GROUPS)) {
+    const role = key.split(':')[0];
+    for (const cn of CONVEYOR_GROUPS[key]) window._AP_conveyorRole[cn] = role;
+  }
+  window._AP_conveyorShadow = CONVEYOR_SHADOW.slice();
+  window._AP_conveyorShadowChance = CONVEYOR_SHADOW_CHANCE;
+  window._AP_conveyorShadowMinSlots = CONVEYOR_SHADOW_MIN_SLOTS;
+  // Belt-locked plants are left alone the same way terrain-locked ones are, so
+  // the hook only has to consult one set.
+  window._AP_conveyorBeltLocked = new Set([...CONVEYOR_BELT_LOCKED]);
 
   // Mirrors the conveyor slot_data onto window for that hook. Persisted on st
   // so a page reload keeps randomizing before the socket is back up, and read
