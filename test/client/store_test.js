@@ -144,6 +144,47 @@ scoutShopLocations();
 if (sent.length) fail('scouted with shopsanity off');
 else ok('shopsanity off sends no scout');
 
+// ── never scout a location this slot does not have ───────────────────────────
+// location_name_to_id is the GAME's table and carries every shop entry that
+// ever existed; a slot builds only the ones its options kept. Scouting one of
+// the others is fatal -- the server answers
+//     KeyError: 'No location 3517167295 for player 1'
+// and drops the client. That is exactly what happened when the ungated shop
+// cards stopped being built while the client still scouted all of them.
+const { setSlotLocations } = require('./store_fn.js');
+setupRoom();
+// The room knows all three names, but this SLOT only has two of them.
+setSlotLocations([3520000, 3520002]);
+scoutShopLocations();
+{
+  const scout = sent.find(p => p.cmd === 'LocationScouts');
+  if (!scout) fail('no scout sent when the slot has some shop locations');
+  else {
+    const extra = scout.locations.filter(id => id !== 3520000 && id !== 3520002);
+    if (extra.length) fail(`scouted ${extra} which this slot does not have`);
+    else if (scout.locations.length !== 2)
+      fail(`scouted ${scout.locations.length} locations, expected 2`);
+    else ok('scouts only the shop locations this slot actually has');
+  }
+}
+
+// A slot with none of them must send nothing at all rather than an empty scout.
+setupRoom();
+setSlotLocations([999999]);
+scoutShopLocations();
+if (sent.some(p => p.cmd === 'LocationScouts'))
+  fail('scouted when the slot has no shop locations');
+else ok('a slot with no shop locations sends no scout');
+
+// Before Connected lands the set is empty, which must mean "not known yet"
+// rather than "none" -- otherwise the scout would never fire on a normal boot.
+setupRoom();
+setSlotLocations([]);
+scoutShopLocations();
+if (!sent.some(p => p.cmd === 'LocationScouts'))
+  fail('an empty slot table suppressed the scout instead of allowing it');
+else ok('an empty slot table is treated as "not known yet", not as "none"');
+
 setupRoom();
 applyLocationInfo([
   { location: 3520000, item: 77, player: 1 },   // Shop: iceweed  -> ours

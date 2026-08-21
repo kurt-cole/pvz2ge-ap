@@ -120,11 +120,19 @@ function saveShopLabelCache(){
   svSt();
 }
 
+let slotLocationIds = new Set();
+function setSlotLocations(ids){ slotLocationIds = new Set(ids || []); }
+// Copied verbatim from build_pvzge_ap.py.
+function slotHasLocation(id){
+  return !slotLocationIds.size || slotLocationIds.has(id);
+}
+
 function scoutShopLocations(){
   if(!st.shopsanity) return;
   const ids = Object.keys(locIds)
     .filter(n => n.startsWith('Shop: '))
-    .map(n => locIds[n]);
+    .map(n => locIds[n])
+    .filter(id => id && slotHasLocation(id));
   if(!ids.length) return;   // DataPackage not in yet; it re-runs this on arrival
   send([{cmd:'LocationScouts', locations:ids, create_as_hint:0}]);
 }
@@ -183,6 +191,7 @@ function applyLocationInfo(locations){
 }
 
 module.exports = {
+  setSlotLocations,
   installStoreHook, window, st, sent,
   shopRewardLabel, scoutShopLocations, fetchScoutedGames,
   resetShopState, setLocations, applyLocationInfo,

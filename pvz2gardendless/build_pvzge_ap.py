@@ -2729,6 +2729,15 @@ window.electron = electron;
   let slotGame        = st.slotGame        || {};   // slot id -> game name
   let slotName        = st.slotName        || {};   // slot id -> player name
   let shopScout       = st.shopScout       || {};   // commodity -> {item, player}
+  // Every location id THIS SLOT actually has, from the Connected packet.
+  // location_name_to_id is the GAME's static table and always carries all 40
+  // shop entries, but a slot only builds the ones its options and world
+  // selection kept -- shopsanity now uses 34 of them. Sending an id the slot
+  // does not have kills the connection outright:
+  //     KeyError: 'No location 3517167295 for player 1'
+  // and the server drops the client. Empty until Connected arrives, and every
+  // use below treats empty as "not known yet" rather than "none".
+  let slotLocationIds = new Set();
 
   // Mirrors shopsanity onto window for the store hook, which lives in the
   // other IIFE and cannot see st. Also kicks off building the logo sprite,
@@ -2748,14 +2757,17 @@ window.electron = electron;
 
   // Ask for every shop location at once, with create_as_hint 0 so this reveals
   // the items to us without spending anyone's hints or announcing them.
-  // Read straight off locIds by prefix rather than from a copy of the
-  // commodity list -- location_name_to_id is the server's own answer to which
-  // shop locations exist, so this cannot drift from constants.py.
+  //
+  // Read off locIds by prefix, then filtered to what this slot actually has.
+  // locIds is the GAME's table, not the slot's: it lists all 40 shop entries
+  // while a seed builds 34, and scouting one of the other six is fatal --
+  // 'No location 3517167295 for player 1' and the connection is dropped.
   function scoutShopLocations(){
     if(!st.shopsanity) return;
     const ids = Object.keys(locIds)
       .filter(n => n.startsWith('Shop: '))
-      .map(n => locIds[n]);
+      .map(n => locIds[n])
+      .filter(id => id && slotHasLocation(id));
     if(!ids.length) return;   // DataPackage not in yet; it re-runs this on arrival
     send([{cmd:'LocationScouts', locations:ids, create_as_hint:0}]);
   }
@@ -2963,9 +2975,12 @@ window.electron = electron;
         // Locations the server already has for this slot. Merged in before
         // the rebuild so any level we'd forgotten comes back marked cleared.
         serverCheckedIds = (pkt.checked_locations || []).slice();
+        // missing + checked is the whole of this slot's location table.
+        slotLocationIds = new Set([...(pkt.missing_locations || []),
+                                   ...(pkt.checked_locations || [])]);
         mergeServerChecks();
         rebuildAPSave();
-        const ids=st.checked.map(n=>locIds[n]).filter(Boolean);
+        const ids=st.checked.map(n=>locIds[n]).filter(id=>id&&slotHasLocation(id));
         if(ids.length) send([{cmd:'LocationChecks',locations:ids}]);
         send([{cmd:'Sync'}]);
         fetchCurrencyFromServer();
@@ -3763,6 +3778,12 @@ window.electron = electron;
     applyPendingCostumes();
   }
 
+  // Does this slot actually have that location? Answers true while the set is
+  // still empty, so nothing is dropped before Connected lands.
+  function slotHasLocation(id){
+    return !slotLocationIds.size || slotLocationIds.has(id);
+  }
+
   function fireCheck(loc){
     // Modern Day accessibility gates everything below, the goal included: a
     // Modern Day check fired before the world is legitimately unlocked is not
@@ -3783,6 +3804,11 @@ window.electron = electron;
     if(isChecked(loc)) return;
     st.checked.push(loc);svSt();
     const id=locIds[loc];
+    // A location the slot does not have is still recorded in st.checked above,
+    // so the client's own bookkeeping stays consistent -- it just never goes to
+    // the server. Buying an ungated shop card is the live case: those cards are
+    // on the shelf but are no longer AP checks.
+    if(id&&conn&&!slotHasLocation(id)) return;
     if(id&&conn) send([{cmd:'LocationChecks',locations:[id]}]);
   }
 

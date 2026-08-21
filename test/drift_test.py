@@ -41,6 +41,10 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # scope, plus applyLocationInfo, which mirrors a switch arm rather
          # than a function and so has nothing to match verbatim.
          "send", "resetShopState", "setLocations", "applyLocationInfo",
+         # store_fn.js harness: stands in for the Connected packet, which is
+         # what fills slotLocationIds in the real client. slotHasLocation
+         # itself IS a copy and is checked.
+         "store_fn.js:setSlotLocations",
          # currency_fn.js harness: reset() rebuilds module scope between cases,
          # svSt counts saves. restoreLostCurrency/observeCurrency themselves
          # ARE real client functions and are checked.
