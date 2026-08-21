@@ -39,42 +39,41 @@ const ID_TO_CN = {
     164:'cantaloupe', 165:'iceweed',
   };
 const CONVEYOR_GROUPS = {
-  'attacker:low': [
-    'applemortar', 'bloominghearts', 'bowlingbulb', 'cabbagepult',
-    'cactus', 'chardguard', 'cranjelly', 'dusklobber', 'endurian',
-    'fumeshroom', 'gloomvine', 'guacodile', 'lightningreed', 'peanut',
-    'peapod', 'peashooter', 'pepperpult', 'primalpeashooter',
-    'puffshroom', 'pvine', 'redstinger', 'repeater', 'sapfling',
-    'snowpea', 'spikeweed', 'splitpea', 'sporeshroom', 'starfruit',
-    'threepeater', 'vamporcini'
-  ],
   'attacker:mid': [
-    'akee', 'bambooshoot', 'bamboozle', 'bonkchoy', 'chomper',
-    'coldsnapdragon', 'dandelion', 'doomshroom', 'dragonbruit',
-    'electriccurrant', 'firegourd', 'firepeashooter', 'homingthistle',
-    'hotdate', 'iceweed', 'jackolantern', 'laser_bean', 'lychee',
-    'melonpult', 'parsnip', 'phatbeet', 'skyshooter', 'snapdragon',
-    'snowdrop', 'strawburst', 'torchwood', 'wintermelon'
+    'akee', 'bambooshoot', 'bamboozle', 'bloomerang', 'bloominghearts',
+    'bonkchoy', 'bowlingbulb', 'cactus', 'chomper', 'coldsnapdragon',
+    'doomshroom', 'dragonbruit', 'dusklobber', 'electriccurrant',
+    'electricpeashooter', 'firegourd', 'firepeashooter', 'hotdate',
+    'iceweed', 'jackolantern', 'laser_bean', 'lychee', 'parsnip',
+    'peanut', 'pepperpult', 'phatbeet', 'primalpeashooter',
+    'redstinger', 'repeater', 'skyshooter', 'snapdragon', 'snowdrop',
+    'snowpea', 'sporeshroom', 'starfruit', 'torchwood'
   ],
   'instant:budget': [
     'blover', 'chilibean', 'empea', 'escaperoot', 'goldbloom',
-    'goldleaf', 'grapeshot', 'gravebuster', 'hotpotato', 'iceburg',
-    'potatomine', 'primalpotatomine', 'shadowshroom', 'shrinkingviolet',
-    'squash', 'stallia', 'stunion', 'sunbean', 'tanglekelp'
+    'goldleaf', 'gravebuster', 'hotpotato', 'iceburg', 'potatomine',
+    'primalpotatomine', 'shadowshroom', 'shrinkingviolet', 'squash',
+    'stallia', 'stunion', 'sunbean', 'tanglekelp'
   ],
   'attacker:high': [
-    'banana', 'cantaloupe', 'citron', 'coconutcannon', 'gatling',
-    'gloomshroom', 'meteorflower', 'missiletoe', 'nightshade',
-    'shootingstarfruit', 'spikerock'
+    'applemortar', 'banana', 'cantaloupe', 'citron', 'coconutcannon',
+    'dandelion', 'gatling', 'gloomshroom', 'homingthistle', 'melonpult',
+    'meteorflower', 'missiletoe', 'shootingstarfruit', 'spikerock',
+    'strawburst', 'threepeater', 'wintermelon'
   ],
-  'attacker:budget': [
-    'bloomerang', 'buttercup', 'celerystalker', 'electricpeashooter',
-    'explodeonut', 'kernelpult', 'magnifyinggrass', 'scaredyshroom',
-    'seashroom'
+  'attacker:low': [
+    'cabbagepult', 'chardguard', 'cranjelly', 'endurian', 'fumeshroom',
+    'gloomvine', 'guacodile', 'kernelpult', 'lightningreed',
+    'nightshade', 'peapod', 'peashooter', 'pvine', 'sapfling',
+    'spikeweed', 'splitpea', 'vamporcini'
   ],
   'instant:low': [
     'ghostpepper', 'grimrose', 'hurrikale', 'hypnoshroom', 'jalapeno',
     'lavaguava', 'solarsage', 'solartomato', 'thymewarp'
+  ],
+  'attacker:budget': [
+    'buttercup', 'celerystalker', 'explodeonut', 'magnifyinggrass',
+    'puffshroom', 'scaredyshroom', 'seashroom'
   ],
   'support:budget': [
     'garlic', 'lilypad', 'moonbean', 'moonflower', 'springbean',
@@ -84,11 +83,11 @@ const CONVEYOR_GROUPS = {
     'intensivecarrot', 'magnetshroom', 'peach', 'plantern',
     'primalsunflower', 'twinsunflower', 'umbrellaleaf'
   ],
+  'instant:mid': [
+    'cherry_bomb', 'grapeshot', 'perfumeshroom', 'powerlily'
+  ],
   'blocker:budget': [
     'imitater', 'turnip', 'wallnut'
-  ],
-  'instant:mid': [
-    'cherry_bomb', 'perfumeshroom', 'powerlily'
   ],
   'blocker:low': [
     'primalwallnut', 'tallnut'
@@ -168,6 +167,18 @@ const CONVEYOR_FAMILIES = {
   ],
 };
 
+const CONVEYOR_DPS = {
+  grapeshot: 0.02, escaperoot: 0.02, electricpeashooter: 2.15,
+  bloomerang: 6.84, kernelpult: 6.84, dusklobber: 10.26, guacodile: 11.11,
+  cabbagepult: 13.68, bloominghearts: 13.68, peashooter: 14.04,
+  repeater: 14.04, pvine: 14.04, threepeater: 14.04, starfruit: 14.04,
+  snowpea: 14.04, puffshroom: 14.04, peapod: 14.04, splitpea: 14.04,
+  cactus: 15.0, redstinger: 15.0, peanut: 15.18, applemortar: 16.0,
+  primalpeashooter: 17.09, pepperpult: 17.09, sporeshroom: 17.09,
+  bowlingbulb: 18.82, akee: 20.51, homingthistle: 21.62, dandelion: 25.0,
+  melonpult: 27.35, wintermelon: 27.35, firepeashooter: 28.07,
+  strawburst: 40.2, coconutcannon: 60.0, nightshade: 100.0,
+};
 // Shadow belt, mirroring the client's declarations verbatim.
 const CONVEYOR_SHADOW = [
   'moonflower', 'dragonbruit', 'dusklobber', 'gloomshroom', 'gloomvine',
@@ -329,7 +340,20 @@ function installConveyorHook(LC) {
           const familyOf = window._AP_conveyorFamily || {};
           const kin = usable.filter(cn => familyOf[cn] === familyOf[entry.PlantType]);
           const preferKin = rnd() < 0.75 && kin.length >= 2;
-          const from = preferKin ? kin : usable;
+          let from = preferKin ? kin : usable;
+          // Step three: among what is left, prefer a plant of similar output.
+          // Only 35 of the 133 have a DPS the tables can derive, and a band
+          // still spans 14 to 60 within a cost tier, so this is what stops
+          // Threepeater becoming Coconut Cannon. Skipped entirely when the
+          // original is unrated -- an unknown is not a zero, and guessing at
+          // one would undo the whole point of leaving it unrated.
+          const dpsOf = window._AP_conveyorDps || {};
+          const mine = dpsOf[entry.PlantType];
+          if (mine) {
+            const near = from.filter(cn => dpsOf[cn] &&
+                                           dpsOf[cn] >= mine / 2 && dpsOf[cn] <= mine * 2);
+            if (near.length >= 2) from = near;
+          }
           let pick = entry.PlantType;
           for (let tries = 0; tries < 20; tries++) {
             const candidate = from[Math.floor(rnd() * from.length)];
@@ -373,6 +397,7 @@ for(const k of Object.keys(CONVEYOR_GROUPS)){
   const role=k.split(':')[0];
   for(const c of CONVEYOR_GROUPS[k]) window._AP_conveyorRole[c]=role;
 }
+window._AP_conveyorDps=CONVEYOR_DPS;
 window._AP_conveyorShadow=CONVEYOR_SHADOW.slice();
 window._AP_conveyorShadowChance=CONVEYOR_SHADOW_CHANCE;
 window._AP_conveyorShadowMinSlots=CONVEYOR_SHADOW_MIN_SLOTS;
@@ -398,6 +423,6 @@ function setLevelWater(haveWater) {
   window._AP_levelController = { component: { haveWater: haveWater } };
 }
 
-module.exports={installConveyorHook, window, CONVEYOR_GROUPS, CONVEYOR_FAMILIES,
+module.exports={installConveyorHook, window, CONVEYOR_GROUPS, CONVEYOR_FAMILIES, CONVEYOR_DPS,
   CONVEYOR_SHADOW, CONVEYOR_SHADOW_CHANCE, setLevelWater,
   CONVEYOR_WATER_ONLY, CONVEYOR_TILE_LOCKED, CONVEYOR_BELT_LOCKED};

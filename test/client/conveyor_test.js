@@ -122,6 +122,10 @@ window._AP_conveyorPool = noPool;
 const { CONVEYOR_GROUPS } = require('./conveyor_fn.js');
 const GROUP_OF = {};
 for (const k of Object.keys(CONVEYOR_GROUPS)) for (const cn of CONVEYOR_GROUPS[k]) GROUP_OF[cn] = k;
+// Sun costs, read from the game's own PlantProperties export used to build the
+// groups. Literal here on purpose: deriving them from CONVEYOR_GROUPS would be
+// checking the table against itself.
+const COST_OF = require('./conveyor_costs.json');
 
 const { CONVEYOR_SHADOW, CONVEYOR_BELT_LOCKED } = require('./conveyor_fn.js');
 const SHADOW = new Set(CONVEYOR_SHADOW);
@@ -208,6 +212,61 @@ for (const l of LEVELS) {
 }
 ok(`${moonSeen} moonflower entries were left exactly where the level put them`);
 
+// ── every band is one scale ──────────────────────────────────────────────────
+// The key must band on sun cost alone. It once banded by derived DPS where a
+// plant had one and by sun cost otherwise, which put Nightshade (75 sun, 100
+// derived dps) in with Banana and Gatling Pea at 500, and Winter Melon (500)
+// in with Bonk Choy (150). Asserted as "no group spans more than a 4x sun
+// spread", which those two both broke.
+const SUN = { budget: [0, 50], low: [75, 125], mid: [150, 225], high: [250, 500] };
+let bandBreaks = [];
+for (const k of Object.keys(CONVEYOR_GROUPS)) {
+  const band = k.split(':')[1];
+  const want = SUN[band];
+  if (!want) continue;
+  for (const cn of CONVEYOR_GROUPS[k]) {
+    const cost = COST_OF[cn];
+    if (cost === undefined) continue;
+    if (cost < want[0] || cost > want[1]) bandBreaks.push(`${cn} (${cost}) in ${k}`);
+  }
+}
+if (bandBreaks.length) fail(`${bandBreaks.length} plant(s) outside their band's sun range: ${bandBreaks.slice(0,4)}`);
+else ok('every group holds one sun-cost band and nothing else');
+
+// ── step three: similar output ───────────────────────────────────────────────
+// A preference like Family, and only for the 35 plants the tables can price.
+// Checked as "a rated plant does not trade for one more than 2x away", which
+// is what the filter promises, and only where the pool had a choice.
+const { CONVEYOR_DPS, CONVEYOR_FAMILIES: FAMS } = require('./conveyor_fn.js');
+const FAM_OF = {};
+for (const f of Object.keys(FAMS)) for (const cn of FAMS[f]) FAM_OF[cn] = f;
+let dpsChecked = 0, dpsFar = [];
+for (const l of LEVELS) {
+  const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
+  if (lastWasShadow()) continue;
+  for (let i = 0; i < before.length; i++) {
+    const a = before[i].PlantType, b = after[i].PlantType;
+    if (a === b || !CONVEYOR_DPS[a] || !CONVEYOR_DPS[b]) continue;
+    const group = CONVEYOR_GROUPS[GROUP_OF[a]] || [];
+    const isNear = cn => CONVEYOR_DPS[cn] && CONVEYOR_DPS[cn] >= CONVEYOR_DPS[a] / 2 &&
+                                             CONVEYOR_DPS[cn] <= CONVEYOR_DPS[a] * 2;
+    // Family outranks output, which is the order the option promises. So a
+    // similar-output choice only has to exist in the pool step two actually
+    // hands over -- and when the preference fires that pool is the Family kin.
+    // Coconut Cannon is the case: the only other expensive Lobbers are Apple
+    // Mortar and Melon-pult, neither within 2x of its 60 dps.
+    const kin = group.filter(cn => FAM_OF[cn] === FAM_OF[a]);
+    if (group.filter(isNear).length < 2) continue;      // no choice at all
+    if (kin.length >= 2 && kin.filter(isNear).length < 2) continue;  // none among kin
+    dpsChecked++;
+    const ratio = CONVEYOR_DPS[b] / CONVEYOR_DPS[a];
+    if (ratio > 2 || ratio < 0.5) dpsFar.push(`${a}(${CONVEYOR_DPS[a]}) -> ${b}(${CONVEYOR_DPS[b]})`);
+  }
+}
+if (!dpsChecked) fail('no rated swap had a similar-output choice, so step three is untested');
+else if (dpsFar.length) fail(`${dpsFar.length}/${dpsChecked} rated swaps ignored similar output: ${dpsFar.slice(0,3)}`);
+else ok(`all ${dpsChecked} rated swaps with a choice landed within 2x of the original's dps`);
+
 // ── the shadow belt ──────────────────────────────────────────────────────────
 // It has to fire sometimes, never without Moonflower, and never on a belt too
 // small to be a deck. "Sometimes" is checked as a range: zero would mean the
@@ -234,8 +293,6 @@ else ok('every plant on a shadow belt is one of the 8 haveDarkMode plants');
 // give. Measured against that uniform baseline, so it cannot pass by accident
 // on a pool that happens to be family-heavy.
 const { CONVEYOR_FAMILIES } = require('./conveyor_fn.js');
-const FAM_OF = {};
-for (const f of Object.keys(CONVEYOR_FAMILIES)) for (const cn of CONVEYOR_FAMILIES[f]) FAM_OF[cn] = f;
 let famSame = 0, famTotal = 0, baseline = 0;
 for (const l of LEVELS) {
   const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
