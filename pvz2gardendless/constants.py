@@ -526,12 +526,14 @@ def shop_location_name(commodity: str) -> str:
 # the Epic Quest tables that group each side path's levels under an
 # epic_<world> codename, and for Rhythm the level's own "#comment": "Iceage 1".
 #
-# Appease spans two worlds -- appease1_* branches from Ancient Egypt and
-# appease2_* from Frostbite Caves -- and is tied to Egypt, the earlier of the
-# two, so the whole side path opens when its first half does.
+# Appease is TWO paths, because the game treats it as two. appease1_* branches
+# off Ancient Egypt 29 and runs on epic_egypt; appease2_* branches off Frostbite
+# Caves 25 and runs on epic_iceage. It used to be one region tied to Egypt, the
+# earlier half, which put seven Frostbite Caves levels in logic from Egypt.
 SIDE_PATH_WORLD = {
     "Aloe Sidepath":            "Lost City",
     "Appease-mint Sidepath":         "Ancient Egypt",
+    "Appease-mint 2 Sidepath":       "Frostbite Caves",
     "Atomic Bombegranate Sidepath":        "Kongfu Temple",
     "Blooming Heart Sidepath":  "Neon Mixtape Tour",
     "Buttercup Sidepath":       "Pirate Seas",
@@ -579,11 +581,11 @@ SIDE_PATH_WORLD = {
 # levels 1..k. A side path is one flat region, so it is gated on the branch
 # level alone and its own internal chain is not expressed.
 #
-# Appease-mint spans two worlds -- appease1_* branches at egypt29 and appease2_*
-# at iceage25 -- and is one region, so it is gated on the earlier half.
+# Appease-mint is two entries because it is two branches on two world maps.
 SIDE_PATH_UNLOCK = {
     "Squash Sidepath":              "egypt6",       # 6-1   -> squash0
     "Appease-mint Sidepath":        "egypt29",      # 29-1  -> appease1_0
+    "Appease-mint 2 Sidepath":      "iceage25",     # 25-1  -> appease2_0
     "Buttercup Sidepath":           "pirate33",     # 33-1  -> buttercup0
     "Sap-fling Sidepath":           "cowboy29",     # 29-1  -> sapfling0
     "Electric Currant Sidepath":    "cowboy34",     # 34-1  -> electriccurrant0
@@ -639,7 +641,8 @@ SIDE_PATH_CHAIN = {
 # off the opening of its world, and Ancient Egypt's opening is ungated, so
 # Squash and Appease-mint were sphere 1 whatever the game says.
 SIDE_PATH_REGIONS = [
-    "Aloe Sidepath", "Appease-mint Sidepath", "Atomic Bombegranate Sidepath", "Bank Sidepath",
+    "Aloe Sidepath", "Appease-mint Sidepath", "Appease-mint 2 Sidepath",
+    "Atomic Bombegranate Sidepath", "Bank Sidepath",
     "Blooming Heart Sidepath", "Buttercup Sidepath", "Conceal-mint Sidepath",
     "Doom-shroom Sidepath", "Electric Currant Sidepath", "Enlighten-mint Sidepath",
     "Epic Beghouled Sidepath", "Floawerpot Sidepath",

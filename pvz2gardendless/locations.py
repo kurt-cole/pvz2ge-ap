@@ -642,10 +642,15 @@ def _make_locs() -> List[PvZ2LocationData]:
     add("Appease-mint 1_0", "Appease-mint Sidepath"); add("Appease-mint 1_1", "Appease-mint Sidepath")
     add("Appease-mint 1_2", "Appease-mint Sidepath"); add("Appease-mint 1_3", "Appease-mint Sidepath")
     add("Appease-mint 1_4", "Appease-mint Sidepath"); add("Appease-mint 1_5", "Appease-mint Sidepath")
-    add("Appease-mint 1_6", "Appease-mint Sidepath"); add("Appease-mint 2_0", "Appease-mint Sidepath")
-    add("Appease-mint 2_1", "Appease-mint Sidepath"); add("Appease-mint 2_2", "Appease-mint Sidepath")
-    add("Appease-mint 2_3", "Appease-mint Sidepath"); add("Appease-mint 2_4", "Appease-mint Sidepath")
-    add("Appease-mint 2_5", "Appease-mint Sidepath"); add("Appease-mint 2_6", "Appease-mint Sidepath")
+    add("Appease-mint 1_6", "Appease-mint Sidepath")
+    # The second half is a Frostbite Caves quest, not an Egypt one: appease2_0
+    # is the branch node 25-1 on the Frostbite Caves map and its chain lives on
+    # epic_iceage. Same names and same ids, different region -- these adds stay
+    # exactly where they are in the file so nothing renumbers.
+    add("Appease-mint 2_0", "Appease-mint 2 Sidepath")
+    add("Appease-mint 2_1", "Appease-mint 2 Sidepath"); add("Appease-mint 2_2", "Appease-mint 2 Sidepath")
+    add("Appease-mint 2_3", "Appease-mint 2 Sidepath"); add("Appease-mint 2_4", "Appease-mint 2 Sidepath")
+    add("Appease-mint 2_5", "Appease-mint 2 Sidepath"); add("Appease-mint 2_6", "Appease-mint 2 Sidepath")
 
     add("Atomic Bombegranate 0", "Atomic Bombegranate Sidepath"); add("Atomic Bombegranate 1", "Atomic Bombegranate Sidepath")
     add("Atomic Bombegranate 2", "Atomic Bombegranate Sidepath"); add("Atomic Bombegranate 3", "Atomic Bombegranate Sidepath")
