@@ -482,39 +482,39 @@ def _make_locs() -> List[PvZ2LocationData]:
     add("kongfu_dangerroom4", "Kongfu Temple")
 
     # ── Neon Mixtape Tour ──
-    add("eighties_dangerroom", "Neon Mixtape Tour", victory=True)
-    add("eighties1", "Neon Mixtape Tour")
-    add("eighties2", "Neon Mixtape Tour")
-    add("eighties3", "Neon Mixtape Tour")
-    add("eighties4", "Neon Mixtape Tour")
-    add("eighties5", "Neon Mixtape Tour")
-    add("eighties6", "Neon Mixtape Tour")
-    add("eighties7", "Neon Mixtape Tour")
-    add("eighties8", "Neon Mixtape Tour")
-    add("eighties9", "Neon Mixtape Tour")
-    add("eighties10", "Neon Mixtape Tour")
-    add("eighties11", "Neon Mixtape Tour")
-    add("eighties12", "Neon Mixtape Tour")
-    add("eighties13", "Neon Mixtape Tour")
-    add("eighties14", "Neon Mixtape Tour")
-    add("eighties15", "Neon Mixtape Tour")
-    add("eighties16", "Neon Mixtape Tour")
-    add("eighties17", "Neon Mixtape Tour")
-    add("eighties18", "Neon Mixtape Tour")
-    add("eighties19", "Neon Mixtape Tour")
-    add("eighties20", "Neon Mixtape Tour")
-    add("eighties21", "Neon Mixtape Tour")
-    add("eighties22", "Neon Mixtape Tour")
-    add("eighties23", "Neon Mixtape Tour")
-    add("eighties24", "Neon Mixtape Tour")
-    add("eighties25", "Neon Mixtape Tour")
-    add("eighties26", "Neon Mixtape Tour")
-    add("eighties27", "Neon Mixtape Tour")
-    add("eighties28", "Neon Mixtape Tour")
-    add("eighties29", "Neon Mixtape Tour")
-    add("eighties30", "Neon Mixtape Tour")
-    add("eighties31", "Neon Mixtape Tour")
-    add("eighties32", "Neon Mixtape Tour")
+    add("neon_dangerroom", "Neon Mixtape Tour", victory=True)
+    add("neon1", "Neon Mixtape Tour")
+    add("neon2", "Neon Mixtape Tour")
+    add("neon3", "Neon Mixtape Tour")
+    add("neon4", "Neon Mixtape Tour")
+    add("neon5", "Neon Mixtape Tour")
+    add("neon6", "Neon Mixtape Tour")
+    add("neon7", "Neon Mixtape Tour")
+    add("neon8", "Neon Mixtape Tour")
+    add("neon9", "Neon Mixtape Tour")
+    add("neon10", "Neon Mixtape Tour")
+    add("neon11", "Neon Mixtape Tour")
+    add("neon12", "Neon Mixtape Tour")
+    add("neon13", "Neon Mixtape Tour")
+    add("neon14", "Neon Mixtape Tour")
+    add("neon15", "Neon Mixtape Tour")
+    add("neon16", "Neon Mixtape Tour")
+    add("neon17", "Neon Mixtape Tour")
+    add("neon18", "Neon Mixtape Tour")
+    add("neon19", "Neon Mixtape Tour")
+    add("neon20", "Neon Mixtape Tour")
+    add("neon21", "Neon Mixtape Tour")
+    add("neon22", "Neon Mixtape Tour")
+    add("neon23", "Neon Mixtape Tour")
+    add("neon24", "Neon Mixtape Tour")
+    add("neon25", "Neon Mixtape Tour")
+    add("neon26", "Neon Mixtape Tour")
+    add("neon27", "Neon Mixtape Tour")
+    add("neon28", "Neon Mixtape Tour")
+    add("neon29", "Neon Mixtape Tour")
+    add("neon30", "Neon Mixtape Tour")
+    add("neon31", "Neon Mixtape Tour")
+    add("neon32", "Neon Mixtape Tour")
 
     # ── Jurassic Marsh ──
     add("dino_dangerroom", "Jurassic Marsh", victory=True)
@@ -819,17 +819,17 @@ def _make_locs() -> List[PvZ2LocationData]:
     # eighties42 is the "2.0" rematch that closes the world. Every world is
     # built that way (egypt25/egypt35, dino32/dino42 ...), which is why
     # WORLD_COMPLETION_LOCS now points at eighties42 rather than the trophy.
-    add("eighties33", "Neon Mixtape Tour")
-    add("eighties34", "Neon Mixtape Tour")
-    add("eighties35", "Neon Mixtape Tour")
-    add("eighties36", "Neon Mixtape Tour")
-    add("eighties37", "Neon Mixtape Tour")
-    add("eighties38", "Neon Mixtape Tour")
-    add("eighties39", "Neon Mixtape Tour")
-    add("eighties40", "Neon Mixtape Tour")
-    add("eighties41", "Neon Mixtape Tour")
-    add("eighties42", "Neon Mixtape Tour")
-    add("eighties_dangerroom2", "Neon Mixtape Tour")
+    add("neon33", "Neon Mixtape Tour")
+    add("neon34", "Neon Mixtape Tour")
+    add("neon35", "Neon Mixtape Tour")
+    add("neon36", "Neon Mixtape Tour")
+    add("neon37", "Neon Mixtape Tour")
+    add("neon38", "Neon Mixtape Tour")
+    add("neon39", "Neon Mixtape Tour")
+    add("neon40", "Neon Mixtape Tour")
+    add("neon41", "Neon Mixtape Tour")
+    add("neon42", "Neon Mixtape Tour")
+    add("neon_dangerroom2", "Neon Mixtape Tour")
 
     # ── Goo Peashooter side path (added 2026-08-17) ──────────────────────────
     # Branches off dark16, which carries the otherNextIslands entry for it, and
@@ -1021,7 +1021,7 @@ WORLD_TROPHY_LOCS = [
     "beach32",    # beach32
     "iceage30",   # iceage30
     "lostcity32", # lostcity32
-    "eighties32", # eighties32
+    "neon32", # eighties32
     "dino32",     # dino32
 ]  # 10 total (Kongfu excluded — no trophy in game data)
 
@@ -1047,7 +1047,7 @@ WORLD_COMPLETION_LOCS = [
     "iceage40",   # Frostbite Caves
     "lostcity42", # Lost City
     "kongfu48",   # Kongfu Temple
-    "eighties42", # Neon Mixtape Tour
+    "neon42", # Neon Mixtape Tour
     "dino42",     # Jurassic Marsh
 ]  # 11 total
 
@@ -1065,7 +1065,7 @@ WORLD_KEY_LOCS = [
     "iceage16",
     "lostcity16",
     "kongfu8",
-    "eighties16",
+    "neon16",
     "dino16",
 ]  # 11 total
 

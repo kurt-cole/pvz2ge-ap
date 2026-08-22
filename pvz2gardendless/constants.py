@@ -432,9 +432,9 @@ SHOP_UNLOCK = {
     "powerlily":          "kongfu22",
     "bamboozle":          "kongfu38",
     "firepeashooter":     "iceage29",
-    "cactus":             "eighties14",
-    "electricblueberry":  "eighties31",
-    "caulipower":         "eighties39",
+    "cactus":             "neon14",
+    "electricblueberry":  "neon31",
+    "caulipower":         "neon39",
     "jackolantern":       "iceage34",
     "grapeshot":          "dino3",
     "escaperoot":         "modern31",
@@ -606,11 +606,11 @@ SIDE_PATH_UNLOCK = {
     "Aloe Sidepath":                "lostcity8",    # 8-1   -> aloe0
     "Enlighten-mint Sidepath":      "lostcity38",   # 38-1  -> enlighten0
     "Atomic Bombegranate Sidepath": "kongfu12",     # 12-1  -> atombomb0
-    "Strawburst Sidepath":          "eighties14",   # 14-1  -> strawburst0
-    "Blooming Heart Sidepath":      "eighties25",   # 25-1  -> bloominghearts0
+    "Strawburst Sidepath":          "neon14",   # 14-1  -> strawburst0
+    "Blooming Heart Sidepath":      "neon25",   # 25-1  -> bloominghearts0
     "Meteor Flower Sidepath":       "dino40",       # 40-1  -> meteorflower0
     "Pepper-mint Sidepath":         "iceage27",     # 27-1  -> pepper0
-    "Mirror-nut Sidepath":          "eighties21",   # 21-1  -> mirrornut0
+    "Mirror-nut Sidepath":          "neon21",   # 21-1  -> mirrornut0
     "Umbrella Leaf Sidepath":       "modern10",     # 10-1  -> umbrellaleaf0
     "Conceal-mint Sidepath":        "modern25",     # 25-1  -> conceal0
     "Gold Bloom Sidepath":          "modern28",     # 28-1  -> goldbloom0
@@ -694,7 +694,7 @@ DANGER_ROOM_LOCATIONS = frozenset({
     "lostcity_dangerroom", "lostcity_dangerroom2",
     "kongfu_dangerroom", "kongfu_dangerroom2", "kongfu_dangerroom3",
     "kongfu_dangerroom4",
-    "eighties_dangerroom", "eighties_dangerroom2",
+    "neon_dangerroom", "neon_dangerroom2",
     "dino_dangerroom", "dino_dangerroom2",
     "sky_dangerroom",
     "modern_dangerroom", "modern_dangerroom2",
@@ -754,8 +754,8 @@ DANGER_ROOM_UNLOCK = {
     "kongfu_dangerroom":                  "kongfu14",          # kongfu14
     "kongfu_dangerroom2":                 "kongfu30",         # kongfu30
     "kongfu_dangerroom3":                 "kongfu47",         # kongfu47
-    "eighties_dangerroom":                "eighties20",        # eighties20
-    "eighties_dangerroom2":               "eighties38",       # eighties38
+    "neon_dangerroom":                "neon20",        # eighties20
+    "neon_dangerroom2":               "neon38",       # eighties38
     "sky_dangerroom":                     "sky20",            # sky20
     "dino_dangerroom":                    "dino20",            # dino20
     "dino_dangerroom2":                   "dino36",           # dino36

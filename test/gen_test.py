@@ -815,9 +815,28 @@ print(f"all {len(_WC)} completion goals are their world's real final level, "
 # its own, so those keep readable names (Goo Peashooter 1, Aloe Unlock).
 _wl = [l for l in _ALL if not l.is_shop
        and (l.region in C.ALL_WORLD_REGIONS or l.region == "Tutorial")]
-_misnamed = [(l.name, _lvl[l.name]) for l in _wl if _lvl[l.name] != l.name]
+# Neon Mixtape Tour is the one world that does NOT follow this, on purpose:
+# the game calls its levels "eighties" and nothing about that word says Neon
+# Mixtape Tour, so the AP names are neon1..neon42. Checked explicitly below
+# rather than waved through -- the game codename must stay eighties, since
+# that is what the client hands to the game.
+_misnamed = [(l.name, _lvl[l.name]) for l in _wl
+             if _lvl[l.name] != l.name and not l.name.startswith("neon")]
 assert not _misnamed, \
     f"world locations not named for their level id: {_misnamed[:5]}"
+
+# Every neon* location points at the eighties* level of the SAME number, and
+# nothing in the seed is called eighties any more. A half-finished rename would
+# leave a location the client cannot resolve to a level.
+_neon = [l for l in _ALL if l.name.startswith("neon")]
+_badneon = [(l.name, _lvl[l.name]) for l in _neon
+            if _lvl[l.name] != "eighties" + l.name[len("neon"):]]
+assert not _badneon, f"neon locations pointing at the wrong level: {_badneon[:5]}"
+_stale = [l.name for l in _ALL if l.name.startswith("eighties")]
+assert not _stale, f"locations still named eighties: {_stale[:5]}"
+assert len(_neon) == 44, f"expected 44 neon locations, got {len(_neon)}"
+print(f"Neon Mixtape Tour: {len(_neon)} locations renamed neon*, all still "
+      f"pointing at their eighties* level")
 # ...and the client's Modern Day set is exactly the 'modern' prefix, which is
 # what getRegion() relies on now that the thirteen-prefix list is gone.
 _md_region = {l.name for l in _ALL if l.region == "Modern Day"}
