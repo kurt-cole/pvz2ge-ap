@@ -458,7 +458,7 @@ for _sp, _want_region in (("Squash Sidepath", "Ancient Egypt Mid1"),
                           ("Appease-mint Sidepath", "Ancient Egypt Mid2")):
     _got = _pmw.get_entrance(f"Enter {_sp}", 1).parent_region.name
     assert _got == _want_region, f"{_sp} hangs off {_got}, want {_want_region}"
-# 17 of the 28 land past their world's opening stretch. The other 11 branch
+# 19 of the 30 land past their world's opening stretch. The other 11 branch
 # early enough that the opening third really is where the game puts them
 # (dark4, beach7, lostcity8, dark9, modern10, kongfu12, iceage12, future13,
 # beach14, eighties14, dark16), so a bigger number here would mean the stretch
@@ -468,7 +468,7 @@ for _sp, _want_region in (("Squash Sidepath", "Ancient Egypt Mid1"),
 _deep = [_sp for _sp in C.SIDE_PATH_UNLOCK
          if _pmw.get_entrance(f"Enter {_sp}", 1).parent_region.name
          not in C.ALL_WORLD_REGIONS]
-assert len(_deep) == 17, f"{len(_deep)} side paths are gated past a world opening, want 17"
+assert len(_deep) == 19, f"{len(_deep)} side paths are gated past a world opening, want 19"
 print(f"all {len(C.SIDE_PATH_UNLOCK)} branch side paths hang off their unlock level's "
       f"region ({len(_deep)} past the world opening), Hot Date chains off Sweet Potato")
 

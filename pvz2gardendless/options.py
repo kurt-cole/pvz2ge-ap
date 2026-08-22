@@ -157,7 +157,7 @@ class IncludeSidePaths(Toggle):
     holding its level rather than on the level itself, so Appease-mint opens
     with the rest of Egypt's Mid2 rather than at 29 exactly.
 
-    On adds 187 locations -- 718 instead of 531 with every world enabled.
+    On adds 205 locations -- 736 instead of 531 with every world enabled.
     Sphere 1 stays at 9 either way. Side paths belonging to a world this seed
     left out are still dropped either way.
 

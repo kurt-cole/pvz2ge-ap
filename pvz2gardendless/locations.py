@@ -877,6 +877,19 @@ def _make_locs() -> List[PvZ2LocationData]:
     for commodity in SHOP_EXTRA_COMMODITIES:
         add(shop_location_name(commodity), SHOP_REGION, shop=True)
 
+    # ── Quests added upstream after the ids above were assigned ─────────────
+    # Neither is in the `Base Game` snapshot; both are live in the build the
+    # installer clones. Appended last so nothing above them renumbers.
+    #
+    # Pepper-mint: node 27-1 on the Frostbite Caves map holds pepper0, and its
+    # rift opens pepper1-11. Twelve stages, confirmed in game.
+    for _pep in range(12):
+        add(f"Pepper-mint {_pep}", "Pepper-mint Sidepath")  # pepper<N>
+    # Mirror-nut: node 21-1 on the Neon Mixtape Tour map, PlantToIntroduce
+    # "mirrornut". Six stages. From the map data only, not yet seen in game.
+    for _mir in range(6):
+        add(f"Mirror-nut {_mir}", "Mirror-nut Sidepath")    # mirrornut<N>
+
     return locs
 
 

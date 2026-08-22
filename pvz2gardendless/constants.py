@@ -549,6 +549,8 @@ SIDE_PATH_WORLD = {
     "Ice Bloom Sidepath":        "Big Wave Beach",
     "Ice-shroom Sidepath":       "Dark Ages",
     "Meteor Flower Sidepath":    "Jurassic Marsh",
+    "Mirror-nut Sidepath":       "Neon Mixtape Tour",
+    "Pepper-mint Sidepath":      "Frostbite Caves",
     "Parsnip Sidepath":         "Big Wave Beach",
     "Plantern Sidepath":        "Dark Ages",
     "Reinforce-mint Sidepath":       "Far Future",
@@ -607,6 +609,8 @@ SIDE_PATH_UNLOCK = {
     "Strawburst Sidepath":          "eighties14",   # 14-1  -> strawburst0
     "Blooming Heart Sidepath":      "eighties25",   # 25-1  -> bloominghearts0
     "Meteor Flower Sidepath":       "dino40",       # 40-1  -> meteorflower0
+    "Pepper-mint Sidepath":         "iceage27",     # 27-1  -> pepper0
+    "Mirror-nut Sidepath":          "eighties21",   # 21-1  -> mirrornut0
     "Umbrella Leaf Sidepath":       "modern10",     # 10-1  -> umbrellaleaf0
     "Conceal-mint Sidepath":        "modern25",     # 25-1  -> conceal0
     "Gold Bloom Sidepath":          "modern28",     # 28-1  -> goldbloom0
@@ -649,7 +653,8 @@ SIDE_PATH_REGIONS = [
     "Ghost Pepper Sidepath", "Gloom-shroom Sidepath", "Gold Bloom Sidepath",
     "Goo Peashooter Sidepath",
     "Hot Date Sidepath", "Ice Bloom Sidepath", "Ice-shroom Sidepath",
-    "Meteor Flower Sidepath", "Mixed Sidepath", "Parsnip Sidepath", "Plantern Sidepath",
+    "Meteor Flower Sidepath", "Mirror-nut Sidepath", "Mixed Sidepath",
+    "Parsnip Sidepath", "Pepper-mint Sidepath", "Plantern Sidepath",
     "Reinforce-mint Sidepath", "Reinforcemint Unused Sidepath", "Rhythm Sidepath",
     "Sandbox Sidepath", "Sap-fling Sidepath", "Seashooter Sidepath",
     "Shootingstarfruit Sidepath", "Solar Tomato Sidepath", "Squash Sidepath",
