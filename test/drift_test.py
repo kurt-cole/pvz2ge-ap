@@ -54,7 +54,14 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # one drives the live HUD component, which this suite has no use for.
          # The currency suite checks the real one. apChatLedger, apChatResync
          # and handleChatCommand themselves ARE copies and are checked.
-         "command_fn.js:reset", "command_fn.js:applyPendingCurrency"}
+         "command_fn.js:reset", "command_fn.js:applyPendingCurrency",
+         # deathlink_fn.js harness: reset() rebuilds module scope between
+         # cases, enterLevel() stands in for the game's UI class, and
+         # setTimeout is captured so the suppression window can be inspected
+         # before it lifts. deathLinkActive, applyDeathLinkPref, sendDeathLink
+         # and applyRemoteDeath themselves ARE copies and are checked.
+         "deathlink_fn.js:reset", "deathlink_fn.js:enterLevel",
+         "deathlink_fn.js:setTimeout"}
 
 _ws = re.compile(r"\s+")
 norm = lambda s: _ws.sub(" ", s).strip()

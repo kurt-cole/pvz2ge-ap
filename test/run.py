@@ -34,6 +34,7 @@ JS_SUITES = [
     ("features", "feature_test.js",  "opening the store from egypt6 progress"),
     ("currency", "currency_test.js", "restoring the balance the game wipes at boot"),
     ("commands", "command_test.js",  "chat commands driven from any AP client"),
+    ("deathlink","deathlink_test.js","the AP panel's DeathLink switch, both directions"),
 ]
 
 

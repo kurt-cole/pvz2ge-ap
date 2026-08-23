@@ -2210,7 +2210,10 @@ window.electron = electron;
     return granted;
   }
 
-  let cfg   = { server:'localhost:38281', slot:'', password:'' };
+  // deathLink is the AP panel's own switch, not the seed's: see
+  // deathLinkActive(). A cfg written before this option has no such key, and
+  // undefined reads as on, which is the behaviour that shipped.
+  let cfg   = { server:'localhost:38281', slot:'', password:'', deathLink:true };
   let st    = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
                 upgradeCounts:{}, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey:'' };
   let sessionActive = false; // set true only after explicit Connect + server ack
@@ -2928,6 +2931,7 @@ window.electron = electron;
         send([{cmd:'Connect',game:GAME_NAME,name:cfg.slot,password:cfg.password||'',
                version:{...AP_VER,class:'Version'},tags:['AP'],items_handling:0b111,
                uuid:'pvz2ge_'+cfg.slot,slot_data:true}]);
+        deathLinkTagSent = false; // this Connect went out with tags:['AP']
         break;
       case 'Connected':
         conn=true;sessionActive=true;setStatus('✓ '+cfg.slot,'#4f4');
@@ -2990,8 +2994,8 @@ window.electron = electron;
           // DeathLink isn't known until slot_data arrives (after the initial
           // Connect), so it's applied via ConnectUpdate rather than being in
           // the Connect packet's tags from the start.
-          deathLinkEnabled = !!pkt.slot_data.death_link;
-          if(deathLinkEnabled) send([{cmd:'ConnectUpdate', tags:['AP','DeathLink']}]);
+          slotDeathLink = !!pkt.slot_data.death_link;
+          applyDeathLinkPref();
         }
         // Locations the server already has for this slot. Merged in before
         // the rebuild so any level we'd forgotten comes back marked cleared.
@@ -3082,7 +3086,7 @@ window.electron = electron;
         break;
       }
       case 'Bounced':
-        if(deathLinkEnabled && pkt.tags && pkt.tags.includes('DeathLink') &&
+        if(deathLinkActive() && pkt.tags && pkt.tags.includes('DeathLink') &&
            pkt.data && pkt.data.source !== cfg.slot) {
           applyRemoteDeath(pkt.data);
         }
@@ -3110,14 +3114,47 @@ window.electron = electron;
   }
 
   // ── DeathLink ─────────────────────────────────────────────────────────────
-  let deathLinkEnabled = false;
+  // Two switches, not one. slotDeathLink is what the seed was generated with
+  // and only slot_data sets it; cfg.deathLink is the player's checkbox in the
+  // AP panel. DeathLink is live only when both agree, so the panel can turn it
+  // off for a seed that has it but never on for a seed that does not -- the
+  // seed's option is what the rest of the room agreed to, and self-tagging
+  // into a room that never expected it would pull in deaths from every other
+  // game while sending some out under a slot nobody is listening for.
+  let slotDeathLink = false;
+  // Whether the server currently holds our DeathLink tag. Connect always goes
+  // out with tags:['AP'], so this is false again on every fresh socket.
+  let deathLinkTagSent = false;
   let suppressDeathLinkSend = false;
   let lastDeathLinkSentAt = 0;
 
+  // The single answer to "is DeathLink live right now", read by the send hook
+  // and the Bounced arm both, so the switch can never take in one direction
+  // only.
+  function deathLinkActive(){ return slotDeathLink && cfg.deathLink !== false; }
+
+  // Tell the server what we want. The tag is what decides whether Bounced
+  // packets reach us at all, so dropping it from tags is what unsubscribes --
+  // turning DeathLink off is not something the client can do on its own side.
+  // Sends only when the tag would really change, so flipping the box back and
+  // forth costs one packet per actual change, and nothing at all while offline
+  // (slot_data calls this again on the next connect).
+  function applyDeathLinkPref(){
+    const want = deathLinkActive();
+    if(!conn || want === deathLinkTagSent) return;
+    deathLinkTagSent = want;
+    send([{cmd:'ConnectUpdate', tags: want ? ['AP','DeathLink'] : ['AP']}]);
+  }
+
   // Called (via window._AP_onGameLose) from the loseDarken hook installed on
   // the game's UI class the moment a level is actually lost.
-  window._AP_onGameLose = function(){
-    if(!deathLinkEnabled || suppressDeathLinkSend) return;
+  window._AP_onGameLose = function(){ sendDeathLink(); };
+
+  // Named rather than written inline above so drift_test can check the test
+  // copy of it: an anonymous function expression is invisible to that scan,
+  // and the outgoing half of the switch is exactly what needs proving.
+  function sendDeathLink(){
+    if(!deathLinkActive() || suppressDeathLinkSend) return;
     const now = Date.now();
     if(now - lastDeathLinkSentAt < 3000) return; // debounce: loseDarken can
     lastDeathLinkSentAt = now;                   // fire more than once per loss
@@ -3128,7 +3165,7 @@ window.electron = electron;
     // not just other players of this game.
     send([{cmd:'Bounce', tags:['DeathLink'],
            data:{time: now/1000, source: cfg.slot, cause: cfg.slot+' lost a level'}}]);
-  };
+  }
 
   function applyRemoteDeath(data){
     const inst = window._AP_UI && window._AP_UI.component;
@@ -3851,6 +3888,9 @@ window.electron = electron;
         border:1px solid #334155;border-radius:5px;padding:4px 8px;font:12px monospace;
         margin-top:3px;outline:none}
       #ap-panel input:focus{border-color:#059669}
+      #ap-panel label.ap-check{display:flex;align-items:center;gap:8px;margin-top:10px;
+        color:#e2e8f0;font-size:12px;text-transform:none;letter-spacing:0;cursor:pointer}
+      #ap-panel label.ap-check input{width:auto;margin-top:0;accent-color:#059669;cursor:pointer}
       #ap-panel button{background:#065f46;color:#6ee7b7;border:1px solid #059669;
         border-radius:5px;padding:5px 14px;margin-top:10px;cursor:pointer;font:12px monospace}
       #ap-panel button:hover{background:#047857}
@@ -3878,6 +3918,7 @@ window.electron = electron;
       <label>Server<br><input id=ap-srv placeholder="localhost:38281"></label>
       <label>Slot Name<br><input id=ap-slt placeholder="Player"></label>
       <label>Password<br><input id=ap-pwd type=password placeholder="(optional)"></label>
+      <label class=ap-check><input id=ap-dl type=checkbox>DeathLink</label>
       <button id=ap-go>Connect</button><button id=ap-disc>Disconnect</button><button id=ap-reset>Reset</button>
       <div id=ap-status style="color:#64748b">Not connected</div>
       <div id=ap-log></div>`;
@@ -3888,6 +3929,17 @@ window.electron = electron;
     document.getElementById('ap-srv').value=cfg.server||'';
     document.getElementById('ap-slt').value=cfg.slot||'';
     document.getElementById('ap-pwd').value=cfg.password||'';
+    const dlEl=document.getElementById('ap-dl');
+    dlEl.checked=cfg.deathLink!==false;
+    dlEl.onchange=()=>{
+      cfg.deathLink=dlEl.checked;svCfg();applyDeathLinkPref();
+      // Says so out loud when the box is ticked but the seed has no DeathLink,
+      // rather than showing a checked box that does nothing.
+      log(deathLinkActive() ? 'DeathLink on'
+          : (dlEl.checked && !slotDeathLink
+             ? 'DeathLink stays off: this seed was generated without it'
+             : 'DeathLink off'));
+    };
 
     document.getElementById('ap-go').onclick=()=>{
       cfg.server=document.getElementById('ap-srv').value.trim()||'localhost:38281';
