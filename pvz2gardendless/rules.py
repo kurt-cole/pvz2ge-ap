@@ -13,6 +13,7 @@ from worlds.generic.Rules import add_rule, forbid_items_for_player, set_rule
 from .constants import (
     CHEAP_ATTACKER_PLANTS, DANGER_ROOM_UNLOCK, EGYPT_STRETCH_PLANTS,
     KEYED_WORLDS, SIDE_PATH_REGIONS, STRETCH_PLANTS, SUN_PRODUCER_PLANTS,
+    WORLD_STRETCHES, progressive_item_name,
     WORLD_ENTRY_PLANTS, is_early_region,
 )
 from .locations import SHOP_LOC_UNLOCK, goal_locations_for
@@ -25,30 +26,26 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     player = world.player
     multiworld = world.multiworld
 
-    # Ancient Egypt checkpoints: each requires holding at least one sun
-    # producer and one cheap attacker, mirroring what's actually needed to
-    # survive further in.
+    # Ancient Egypt's stretches want a sun producer and a cheap attacker on
+    # top of the progressive unlock every world's stretches need. Egypt is the
+    # one world with no key, so without this its later stretches would be
+    # gated on the unlock alone -- and since its opening is the whole of
+    # sphere 1, that would leave nothing in the seed forcing a sun producer to
+    # be findable at the start. Every exit from sphere 1 has to want one: the
+    # other worlds' entrances do (below), and these are the rest.
     def has_sun_and_attacker(state):
         return (state.has_any(SUN_PRODUCER_PLANTS, player) and
                 state.has_any(CHEAP_ATTACKER_PLANTS, player))
 
-    for checkpoint_name in ("Ancient Egypt Mid1", "Ancient Egypt Mid2", "Ancient Egypt Late"):
-        set_rule(multiworld.get_entrance(f"Enter {checkpoint_name}", player),
-                 has_sun_and_attacker)
-        # All three gates asking for exactly the same thing put Egypt's 44
-        # levels in one sphere. The later two also want a plant count, so the
-        # world opens up as the multiworld feeds it rather than all at once.
-        # The first gate is deliberately left alone: Egypt is the only world
-        # playable with no items, and tightening its opening would leave a
-        # seed with nowhere to start.
-        # Mid1 starts at egypt6, so has_sun_and_attacker above is what makes
-        # "you are expected to have a sun producer by Egypt level 6" true in
-        # logic. Together with the universal world rule below it is also one of
-        # the only two exits from sphere 1, and both want a sun producer -- see
-        # generate_early() for why that matters and what it replaced.
-        need = EGYPT_STRETCH_PLANTS.get(checkpoint_name)
+    for suffix, need in EGYPT_STRETCH_PLANTS.items():
+        name = f"Enter Ancient Egypt{suffix}"
+        try:
+            entrance = multiworld.get_entrance(name, player)
+        except KeyError:
+            continue  # Egypt too small to cut, which no real seed produces
+        set_rule(entrance, has_sun_and_attacker)
         if need:
-            add_rule(multiworld.get_entrance(f"Enter {checkpoint_name}", player),
+            add_rule(entrance,
                      lambda state, n=need: state.has_group("Plants", player, n))
 
     # Keyed main worlds — accessible once their key is held. Worlds this seed
@@ -110,7 +107,30 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
                 entrance = multiworld.get_entrance(name, player)
             except KeyError:
                 continue
-            set_rule(entrance, lambda state, n=need: state.has_group("Plants", player, n))
+            # Ancient Egypt's two stretches are ruled above instead: it wants a
+            # sun producer and an attacker rather than a plant count, and
+            # add_rule below would AND this on top of that.
+            if w != "Ancient Egypt":
+                set_rule(entrance,
+                         lambda state, n=need: state.has_group("Plants", player, n))
+
+    # ...and every stretch, in every world, needs that world's progressive
+    # unlock: one copy for the middle stretch, two for the last. This is the
+    # gate the CLIENT enforces as well (see slot_data's world_gates and the
+    # goToLevel hook) -- unlike the plant counts, which are logic only, a
+    # player really cannot start Ancient Egypt 9 without the first of these.
+    #
+    # add_rule, so it stacks with the plant requirements rather than replacing
+    # them: a stretch wants both.
+    for w in sorted(world.enabled_worlds):
+        item_name = progressive_item_name(w)
+        for count, suffix in enumerate(WORLD_STRETCHES[1:], start=1):
+            try:
+                entrance = multiworld.get_entrance(f"Enter {w}{suffix}", player)
+            except KeyError:
+                continue
+            add_rule(entrance,
+                     lambda state, i=item_name, n=count: state.has(i, player, n))
 
     # Danger Rooms — playable only once the level that unlocks the room has
     # been beaten. In the game a room's map node reads its own level progress,

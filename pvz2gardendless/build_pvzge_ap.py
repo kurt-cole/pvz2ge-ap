@@ -260,7 +260,47 @@ window.electron = electron;
     // 'zombies'. The capitalised 'Zombies' export in the same module is the
     // Cocos component and carries none of the type-resolution statics.
     'zombies':   function(v) { window._AP_zombies = v; installZombieHook(v); },
+    // Every way a level can start goes through KeyListener.goToLevel: the map
+    // node, the Danger Room entrance, an epic portal, ForceNextLevel chaining,
+    // the next-level and restart buttons, and getForceLevel() on resume. One
+    // hook there is the whole of the progressive world gate.
+    'KeyListener': function(v) { window._AP_KeyListener = v; installLevelGateHook(v); },
   };
+
+  // Progressive world unlocks. The decision lives in the client IIFE, which
+  // owns slot_data and the item counts; this side only asks and refuses.
+  //
+  // goToLevel is a static on KeyListener and is assigned as the module runs,
+  // so it can still be missing when the export is captured. The client's poll
+  // calls this again every tick, and the flag makes that free.
+  function installLevelGateHook(KL) {
+    if (!KL || KL._ap_hooked_levelgate || typeof KL.goToLevel !== 'function') return;
+    const orig = KL.goToLevel;
+    KL.goToLevel = function (levels) {
+      const ask = window._AP_levelBlockedBy;
+      if (ask) {
+        const list = Array.isArray(levels) ? levels : (levels ? [levels] : []);
+        for (const lvl of list) {
+          const why = ask(lvl);
+          if (why) {
+            if (window._AP_reportLevelBlocked) window._AP_reportLevelBlocked(why);
+            // Go to the world map rather than just resolving. Callers await
+            // this AFTER running darken(), and several of them (the
+            // next-level button, resume-into-forceLevel) have already torn the
+            // current scene down -- resolving without loading anything leaves
+            // a black screen with no way out. The world map is the one
+            // destination that is always valid, and it is what the same
+            // callers fall back to when there is no level to go to.
+            return (typeof KL.GoToWorldmap === 'function')
+              ? KL.GoToWorldmap() : Promise.resolve();
+          }
+        }
+      }
+      return orig.apply(this, arguments);
+    };
+    KL._ap_hooked_levelgate = true;
+  }
+  window._AP_installLevelGateHook = installLevelGateHook;
 
   // Shopsanity: unlockCommodity() is the single point every completed store
   // purchase passes through, and it still holds the commodity being bought,
@@ -796,7 +836,7 @@ window.electron = electron;
   const _origRegister = System.register.bind(System);
   System.register = function(name, deps, declare) {
     if (typeof name === 'string' &&
-        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity|levelController|Zombies)\.ts/.test(name)) {
+        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity|levelController|Zombies|KeyListener)\.ts/.test(name)) {
       const _origDeclare = declare;
       declare = function(_export, _context) {
         return _origDeclare(function(exportName, value) {
@@ -2215,7 +2255,7 @@ window.electron = electron;
   // undefined reads as on, which is the behaviour that shipped.
   let cfg   = { server:'localhost:38281', slot:'', password:'', deathLink:true };
   let st    = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
-                upgradeCounts:{}, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey:'' };
+                upgradeCounts:{}, worldUnlocks:{}, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey:'' };
   let sessionActive = false; // set true only after explicit Connect + server ack
   // Whether this session has told the server the goal is met. Session state,
   // not persisted: it is reset on every disconnect so a reconnect re-sends,
@@ -2947,7 +2987,7 @@ window.electron = electron;
           // so it has to be cleared here explicitly -- carrying it into a new
           // seed would grant upgrades that seed never sent.
           st = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
-                 upgradeCounts:{}, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey };
+                 upgradeCounts:{}, worldUnlocks:{}, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey };
           window._AP_grantedPlantIds = new Set();
           window._AP_grantedUpgrades = new Set();
           // st was replaced wholesale, so the in-memory shop label maps are
@@ -3003,6 +3043,10 @@ window.electron = electron;
           // good. Persisted on st like the rest of the goal config, because
           // rebuildAPSave runs on the poll timer before the socket is back.
           st.modernKeyed = !!pkt.slot_data.modern_day_keyed;
+          // Persisted on st like the rest of the gating config, so a reload
+          // before the socket is back still refuses the right levels.
+          st.worldGates = pkt.slot_data.world_gates || {};
+          rebuildLevelGates();
           slotDeathLink = !!pkt.slot_data.death_link;
           applyDeathLinkPref();
         }
@@ -3195,6 +3239,17 @@ window.electron = electron;
       if(!st.receivedKeys.includes(name)) st.receivedKeys.push(name);
       svSt();
       toast('🔑 '+name,'#fa0');
+      return;
+    }
+    // Progressive world unlocks. Counted the way the upgrades are, and safe
+    // against the post-connect replay for the same reason: applyItem() is only
+    // reached for items at or past st.lastIdx.
+    const unlockedWorld = unlockWorldOf[name];
+    if(unlockedWorld){
+      if(!st.worldUnlocks) st.worldUnlocks = {};
+      st.worldUnlocks[name] = (st.worldUnlocks[name]||0) + 1;
+      svSt();
+      toast('🔓 '+unlockedWorld+' '+st.worldUnlocks[name]+'/2','#4f4');
       return;
     }
     if(ITEM_PLANT[name]!==undefined){ toast('🌱 '+name,'#4f4'); return; }
@@ -3831,6 +3886,57 @@ window.electron = electron;
     return completed >= worldsReq;
   }
 
+  // ── Progressive world unlocks ─────────────────────────────────────────────
+  // A world opens at its World Key level; each copy of its progressive unlock
+  // carries it one stretch further (to its Zomboss, then to its final level).
+  // slot_data.world_gates carries only the LOCKED stretches, as location
+  // names, which LOC_LEVELS turns into the game level ids goToLevel is called
+  // with.
+  //
+  // Absent on seeds generated before 2026-08-23: no gates, nothing locked,
+  // which is exactly how those seeds were played.
+  let levelGates = {};
+  // item name -> world, so a received unlock can be recognised without a
+  // second hardcoded table of item names to drift from constants.py.
+  let unlockWorldOf = {};
+
+  function rebuildLevelGates(){
+    const gates = st.worldGates || {};
+    const out = {}, items = {};
+    for(const world of Object.keys(gates)){
+      const g = gates[world] || {};
+      const stretches = g.stretches || [];
+      for(let i = 0; i < stretches.length; i++){
+        for(const locName of (stretches[i] || [])){
+          const level = LOC_LEVELS[locName];
+          // A name with no level is a location that is not a level at all (a
+          // shop card), or one this client is too old to know. Skipping it
+          // leaves that level playable rather than locking something the
+          // client cannot name.
+          if(!level) continue;
+          out[level] = { world: world, item: g.item, need: i + 1 };
+        }
+      }
+      if(g.item) items[g.item] = world;
+    }
+    levelGates = out;
+    unlockWorldOf = items;
+    return out;
+  }
+
+  function unlocksHeld(item){
+    return (st.worldUnlocks && st.worldUnlocks[item]) || 0;
+  }
+
+  // null when the level may be played, otherwise what is missing.
+  function levelBlockedBy(level){
+    const gate = levelGates[level];
+    if(!gate) return null;
+    const have = unlocksHeld(gate.item);
+    if(have >= gate.need) return null;
+    return { world: gate.world, item: gate.item, need: gate.need, have: have };
+  }
+
   // How many of this seed's worlds are complete, and whether that is the win.
   // One goal location per world; which level it is comes from the goal_type
   // option, and generation has already dropped the worlds this seed left out.
@@ -3858,6 +3964,13 @@ window.electron = electron;
     return true;
   }
 
+  window._AP_levelBlockedBy = levelBlockedBy;
+  window._AP_reportLevelBlocked = function(why){
+    toast('🔒 ' + why.world + ' — ' + why.have + '/' + why.need + ' unlocks', '#fa0');
+    log('Blocked: ' + why.world + ' needs ' + why.need + ' x ' + why.item +
+        ', you have ' + why.have);
+  };
+
   function pollChecks(){
     // Detect newly-finished levels BEFORE rebuildAPSave() runs: isFinished()
     // for tutorial levels reads cp.forceLevel, which rebuildAPSave() step 5
@@ -3878,6 +3991,11 @@ window.electron = electron;
       maybeSendGoal();
     }
     rebuildAPSave();
+    // The level-start hook, retried until it takes: KeyListener.goToLevel is
+    // assigned while the module runs, so the export can be captured before it
+    // exists. Free once installed.
+    if(window._AP_installLevelGateHook)
+      window._AP_installLevelGateHook(window._AP_KeyListener);
     // Fires once a level is actually running, for traps banked while the
     // player was on the world map or reconnecting.
     applyPendingTraps();
@@ -4001,7 +4119,7 @@ window.electron = electron;
     };
     document.getElementById('ap-reset').onclick=()=>{
       if(!confirm('Reset all AP progress for this slot? This clears checked locations, received items, and run state.')) return;
-      st={checked:[],lastIdx:0,receivedKeys:[],receivedItems:[],upgradeCounts:{},costumes:{},wornCostume:{},pendingCostumes:0,runKey:''};
+      st={checked:[],lastIdx:0,receivedKeys:[],receivedItems:[],upgradeCounts:{},worldUnlocks:{},costumes:{},wornCostume:{},pendingCostumes:0,runKey:''};
       // The victory location is no longer checked, so clearing goalSent lets
       // re-earning it send the goal again.
       goalSent=false;
@@ -4076,6 +4194,10 @@ window.electron = electron;
 
   function init(){
     lsCfg();lsSt();
+    // The gates come off persisted st, so they are live before the socket is:
+    // a player who opens the game offline still cannot walk into a stretch
+    // they have not unlocked.
+    rebuildLevelGates();
     // Re-sync granted set (catches any items received while game was closed)
     syncGrantedPlants();
     buildUI();

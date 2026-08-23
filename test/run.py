@@ -36,6 +36,7 @@ JS_SUITES = [
     ("commands", "command_test.js",  "chat commands driven from any AP client"),
     ("deathlink","deathlink_test.js","the AP panel's DeathLink switch, both directions"),
     ("goal",     "goal_test.js",     "the win condition and what opens Modern Day"),
+    ("worldgate","worldgate_test.js","progressive world unlocks, enforced in game"),
 ]
 
 

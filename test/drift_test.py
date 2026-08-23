@@ -66,7 +66,14 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # check() records a check the way fireCheck does. isChecked,
          # victoryLoc, canAccessModernDay, goalMet and maybeSendGoal ARE
          # copies and are checked.
-         "goal_fn.js:reset", "goal_fn.js:check"}
+         "goal_fn.js:reset", "goal_fn.js:check",
+         # worldgate_fn.js harness: reset() rebuilds module scope between
+         # cases, makeKeyListener() stands in for the game class the hook is
+         # installed on, and gates() is a slot_data fixture. rebuildLevelGates,
+         # unlocksHeld, levelBlockedBy and installLevelGateHook themselves ARE
+         # copies and are checked.
+         "worldgate_fn.js:reset", "worldgate_fn.js:makeKeyListener",
+         "worldgate_fn.js:gates"}
 
 _ws = re.compile(r"\s+")
 norm = lambda s: _ws.sub(" ", s).strip()

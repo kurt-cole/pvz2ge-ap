@@ -233,7 +233,8 @@ _SLOT_DATA_BEFORE_ZOMBIES = {
 assert _SLOT_DATA_BEFORE_ZOMBIES <= set(_z_on), \
     f"slot_data lost keys: {sorted(_SLOT_DATA_BEFORE_ZOMBIES - set(_z_on))}"
 assert set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES == \
-    {"shuffle_zombies", "zombie_tiers", "zombie_seed", "modern_day_keyed"}, \
+    {"shuffle_zombies", "zombie_tiers", "zombie_seed", "modern_day_keyed",
+     "world_gates"}, \
     f"unexpected new slot_data keys: {sorted(set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES)}"
 
 # modern_day_keyed is additive for the same reason, and modern_day_victory
@@ -340,13 +341,16 @@ from pvz2gardendless.constants import UPGRADE_GROUPS, UPGRADE_ITEM_COUNT
 from pvz2gardendless.items import (PLANT_ITEMS, KEY_ITEMS, FILLER_ITEMS,
                                    TRAP_ITEMS, COSTUME_TRAP_ITEMS,
                                    CURRENCY_TRAP_ITEMS, TRAP_POOL,
-                                   COIN_TRAP, GEM_TRAP)
+                                   COIN_TRAP, GEM_TRAP,
+                                   PROGRESSIVE_WORLD_ITEMS,
+                                   PROGRESSIVE_PER_WORLD)
 BLOCKS = [
     ("plants+keys+filler+traps", PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS + TRAP_ITEMS),
     ("upgrades", UPGRADE_ITEMS),
     ("costume filler", COSTUME_ITEMS),
     ("costume trap", COSTUME_TRAP_ITEMS),
     ("currency traps", CURRENCY_TRAP_ITEMS),
+    ("progressive world unlocks", PROGRESSIVE_WORLD_ITEMS),
 ]
 for bi in range(1, len(BLOCKS)):
     name, block = BLOCKS[bi]
@@ -468,24 +472,35 @@ for _sp in C.SIDE_PATH_REGIONS:
 assert not _bad, f"side paths on the wrong region: {_bad}"
 # ...and the fix is load-bearing. Two pins, both literal and both sourced from
 # the world-map scenes rather than from this code: Egypt's map labels the Squash
-# branch "6-1" and the Appease-mint branch "29-1", and locations.py puts egypt6
-# in Mid1 and egypt29 in Mid2. Those two are the whole reason for the change --
-# Egypt's opening is ungated, so a path left on it is in sphere 1.
-for _sp, _want_region in (("Squash Sidepath", "Ancient Egypt Mid1"),
-                          ("Appease-mint Sidepath", "Ancient Egypt Mid2")):
+# branch "6-1" and the Appease-mint branch "29-1".
+#
+# Since 2026-08-23 Egypt's opening runs to egypt8, its World Key level, so
+# egypt6 really is in the opening and the Squash quest really is available from
+# the start -- that is what the game does, and Egypt's opening is what sphere 1
+# is made of. Appease-mint at egypt29 lands in the last stretch, two
+# progressive unlocks deep, which is the case that matters: a path left on the
+# opening would put anything fill hid there in sphere 1.
+for _sp, _want_region in (("Squash Sidepath", "Ancient Egypt"),
+                          ("Appease-mint Sidepath", "Ancient Egypt Late")):
     _got = _pmw.get_entrance(f"Enter {_sp}", 1).parent_region.name
     assert _got == _want_region, f"{_sp} hangs off {_got}, want {_want_region}"
-# 19 of the 30 land past their world's opening stretch. The other 11 branch
-# early enough that the opening third really is where the game puts them
-# (dark4, beach7, lostcity8, dark9, modern10, kongfu12, iceage12, future13,
-# beach14, eighties14, dark16), so a bigger number here would mean the stretch
-# cut had moved, not that the gating got better. Appease-mint 2 is one of the
-# 17: iceage25 is deep in Frostbite Caves, which is the whole reason it was
-# split off the Egypt half.
+# 21 of the 30 land past their world's opening stretch. The other 9 branch
+# early enough that the opening really is where the game puts them: egypt6,
+# beach7, lostcity8, dark4, dark9, modern10, iceage12, neon14, beach14 -- all
+# at or before their world's World Key level, which is where every world's
+# opening now ends. A different number here means the stretch cut moved, not
+# that the gating got better or worse.
+#
+# It was 19 until 2026-08-23, when the cuts became each world's own milestones
+# rather than even thirds. Two paths moved deeper (kongfu12 and future13 are
+# past those worlds' key levels) and Squash moved the other way: egypt6 is
+# inside Egypt's opening, which is what the game does.
+# Appease-mint 2 is one of the 21: iceage25 is deep in Frostbite Caves, which
+# is the whole reason it was split off the Egypt half.
 _deep = [_sp for _sp in C.SIDE_PATH_UNLOCK
          if _pmw.get_entrance(f"Enter {_sp}", 1).parent_region.name
          not in C.ALL_WORLD_REGIONS]
-assert len(_deep) == 19, f"{len(_deep)} side paths are gated past a world opening, want 19"
+assert len(_deep) == 21, f"{len(_deep)} side paths are gated past a world opening, want 21"
 print(f"all {len(C.SIDE_PATH_UNLOCK)} branch side paths hang off their unlock level's "
       f"region ({len(_deep)} past the world opening), Hot Date chains off Sweet Potato")
 
@@ -781,6 +796,78 @@ for _gt in (0, 1, 2):
         assert _g in _gnames, f"goal {_g} was removed with the Danger Rooms"
 print(f"include_danger_rooms removes exactly the {len(_buildable_rooms)} rooms "
       "and no goal location")
+
+# ── the gate the player meets is the gate fill reasoned about ───────────────
+# slot_data.world_gates is what the CLIENT enforces: it refuses to start a
+# level whose stretch the player has not unlocked. regions.py puts that same
+# level in a region behind the same unlock. If the two ever disagree, a seed is
+# either unwinnable (a location fill filled, that the player cannot reach) or
+# trivially open (a level the client lets you play that logic thought was
+# gated) -- and nothing else in the suite would notice.
+#
+# Both sides call world_stretches, so this pins that they are called with the
+# same input as well: same worlds, same active locations, same order.
+_gw, _gsd = run("world gates", include_side_paths=1, include_danger_rooms=1)
+_gates = _gsd["world_gates"]
+_STRETCH_OF_SUFFIX = {"": 0, " Mid": 1, " Late": 2}
+
+_gate_need = {}
+for _w, _g in _gates.items():
+    for _i, _part in enumerate(_g["stretches"]):
+        for _n in _part:
+            _gate_need[_n] = _i + 1
+
+_mismatch, _unmapped = [], []
+for _r in _gw.multiworld.regions:
+    _suffix = None
+    for _world in C.WORLD_REGIONS:
+        if _r.name == _world:
+            _suffix = ""
+        elif _r.name.startswith(_world) and _r.name[len(_world):] in (" Mid", " Late"):
+            _suffix = _r.name[len(_world):]
+        if _suffix is not None:
+            break
+    if _suffix is None:
+        continue  # not a world stretch: Tutorial, Shop, a side path
+    _want = _STRETCH_OF_SUFFIX[_suffix]
+    for _loc in _r.locations:
+        _have = _gate_need.get(_loc.name, 0)
+        if _have != _want:
+            _mismatch.append((_loc.name, _r.name, f"logic {_want}", f"client {_have}"))
+
+assert not _mismatch, (
+    f"{len(_mismatch)} location(s) where the client's gate and the region it "
+    f"was built into disagree: {_mismatch[:4]}")
+
+# Every gated name has to resolve to a game level, or the client skips it and
+# the level is silently playable. _lvl is LOC_LEVELS, read out of the client.
+_unmapped = sorted(n for n in _gate_need if n not in _lvl)
+assert not _unmapped, (
+    f"{len(_unmapped)} gated location(s) have no LOC_LEVELS entry, so the "
+    f"client cannot enforce them: {_unmapped[:5]}")
+
+# ...and the gates have to actually gate something, or all of the above passes
+# on an empty table.
+assert len(_gate_need) > 400, f"only {len(_gate_need)} gated locations, expected most of the seed"
+assert len(_gates) == 13, f"{len(_gates)} worlds have gates, expected 13"
+for _w, _g in _gates.items():
+    assert _g["item"] == f"Progressive {_w}", f"{_w} gates on {_g['item']}"
+    assert len(_g["stretches"]) == 2, f"{_w} has {len(_g['stretches'])} locked stretches"
+    assert all(_g["stretches"]), f"{_w} has an empty stretch"
+print(f"world_gates agrees with the region graph on all "
+      f"{sum(len(l.locations) for l in _gw.multiworld.regions)} placed locations "
+      f"({len(_gate_need)} gated across {len(_gates)} worlds)")
+
+# Ancient Egypt's cut is the one stated in the option text and the docs, so it
+# is pinned as literals rather than re-derived from the thing under test.
+_egypt = _gates["Ancient Egypt"]
+assert "egypt9" in _egypt["stretches"][0] and "egypt25" in _egypt["stretches"][0], \
+    "Ancient Egypt's middle stretch should run egypt9-25"
+assert "egypt26" in _egypt["stretches"][1] and "egypt35" in _egypt["stretches"][1], \
+    "Ancient Egypt's last stretch should run egypt26-35"
+assert "egypt8" not in _gate_need and "egypt1" not in _gate_need, \
+    "Ancient Egypt's opening runs to egypt8 and is ungated"
+print("Ancient Egypt is 1-8 / 9-25 / 26-35, its World Key level and its Zomboss")
 
 # ── each world's completion goal is really its last level ───────────────────
 # Every world is built the same way: a Zomboss at the mid-world trophy

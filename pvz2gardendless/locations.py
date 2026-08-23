@@ -3,12 +3,14 @@ PvZ2 Gardendless — location definitions and goal/victory location lookups.
 """
 
 import dataclasses
-from typing import Dict, List, Optional, Set
+import re
+from typing import Dict, Iterable, List, Optional, Set
 
 from BaseClasses import Location
 
 from .constants import (
-    ALL_WORLD_REGIONS, BASE_ID, DANGER_ROOM_LOCATIONS, GAME_NAME,
+    ALL_WORLD_REGIONS, BASE_ID, DANGER_ROOM_LOCATIONS, DANGER_ROOM_UNLOCK,
+    GAME_NAME,
     SHOP_CHECK_COMMODITIES, SHOP_COMMODITIES, SHOP_EXTRA_COMMODITIES,
     SHOP_LEGACY_COMMODITIES, SHOP_REGION, SHOP_UNLOCK, SIDE_PATH_REGIONS,
     SIDE_PATH_WORLD, UNREACHABLE_LOCATIONS, WORLD_REGIONS,
@@ -52,7 +54,10 @@ def _make_locs() -> List[PvZ2LocationData]:
     # Ungated: egypt1-5 are the levels a seed is guaranteed to be able to play
     # with nothing but the free starting plant, so they are what sphere 1 is
     # made of. Everything from egypt6 on sits behind the sun producer gate --
-    # see rules.py and EGYPT_STRETCH_PLANTS.
+    # see rules.py and EGYPT_STRETCH_PLANTS. Ancient Egypt used to declare a
+    # bespoke four-region split here; since 2026-08-23 every world including
+    # this one is cut into three stretches by regions.py, off the boundaries
+    # in world_stretches().
     add("random_zomboss_egypt", "Ancient Egypt", victory=True)
     add("egypt1", "Ancient Egypt")
     add("egypt2", "Ancient Egypt")
@@ -66,44 +71,44 @@ def _make_locs() -> List[PvZ2LocationData]:
     # here uses SelectionMethod "chooser", so the player brings their own
     # plants and the client's plant guard blocks anything Archipelago has not
     # sent -- there is no seed bank handing out a Sunflower to fall back on.
-    add("egypt6", "Ancient Egypt Mid1")
-    add("egypt7", "Ancient Egypt Mid1")
-    add("egypt8", "Ancient Egypt Mid1")
-    add("egypt9", "Ancient Egypt Mid1")
-    add("egypt10", "Ancient Egypt Mid1")
-    add("egypt11", "Ancient Egypt Mid1")
-    add("egypt12", "Ancient Egypt Mid1")
-    add("egypt13", "Ancient Egypt Mid1")
-    add("egypt14", "Ancient Egypt Mid1")
-    add("egypt15", "Ancient Egypt Mid1")
-    add("egypt16", "Ancient Egypt Mid1")
-    add("egypt17", "Ancient Egypt Mid1")
-    add("egypt18", "Ancient Egypt Mid1")
-    add("egypt19", "Ancient Egypt Mid1")
-    add("egypt20", "Ancient Egypt Mid2")
-    add("egypt20_1", "Ancient Egypt Mid2")
-    add("egypt21", "Ancient Egypt Mid2")
-    add("egypt21_1", "Ancient Egypt Mid2")
-    add("egypt22", "Ancient Egypt Mid2")
-    add("egypt22_1", "Ancient Egypt Mid2")
-    add("egypt23", "Ancient Egypt Mid2")
-    add("egypt24", "Ancient Egypt Mid2")
-    add("egypt24_1", "Ancient Egypt Mid2")
-    add("egypt25", "Ancient Egypt Mid2")
-    add("egypt26", "Ancient Egypt Mid2")
-    add("egypt27", "Ancient Egypt Mid2")
-    add("egypt28", "Ancient Egypt Mid2")
-    add("egypt29", "Ancient Egypt Mid2")
-    add("egypt30", "Ancient Egypt Late")
-    add("egypt31", "Ancient Egypt Late")
-    add("egypt32", "Ancient Egypt Late")
-    add("egypt33", "Ancient Egypt Late")
-    add("egypt34", "Ancient Egypt Late")
-    add("egypt35", "Ancient Egypt Late")
-    add("egypt_dangerroom", "Ancient Egypt Late")
-    add("egypt_dangerroom2", "Ancient Egypt Late")
-    add("egypt_dangerroom_minigame", "Ancient Egypt Late")
-    add("random_egypt", "Ancient Egypt Late")
+    add("egypt6", "Ancient Egypt")
+    add("egypt7", "Ancient Egypt")
+    add("egypt8", "Ancient Egypt")
+    add("egypt9", "Ancient Egypt")
+    add("egypt10", "Ancient Egypt")
+    add("egypt11", "Ancient Egypt")
+    add("egypt12", "Ancient Egypt")
+    add("egypt13", "Ancient Egypt")
+    add("egypt14", "Ancient Egypt")
+    add("egypt15", "Ancient Egypt")
+    add("egypt16", "Ancient Egypt")
+    add("egypt17", "Ancient Egypt")
+    add("egypt18", "Ancient Egypt")
+    add("egypt19", "Ancient Egypt")
+    add("egypt20", "Ancient Egypt")
+    add("egypt20_1", "Ancient Egypt")
+    add("egypt21", "Ancient Egypt")
+    add("egypt21_1", "Ancient Egypt")
+    add("egypt22", "Ancient Egypt")
+    add("egypt22_1", "Ancient Egypt")
+    add("egypt23", "Ancient Egypt")
+    add("egypt24", "Ancient Egypt")
+    add("egypt24_1", "Ancient Egypt")
+    add("egypt25", "Ancient Egypt")
+    add("egypt26", "Ancient Egypt")
+    add("egypt27", "Ancient Egypt")
+    add("egypt28", "Ancient Egypt")
+    add("egypt29", "Ancient Egypt")
+    add("egypt30", "Ancient Egypt")
+    add("egypt31", "Ancient Egypt")
+    add("egypt32", "Ancient Egypt")
+    add("egypt33", "Ancient Egypt")
+    add("egypt34", "Ancient Egypt")
+    add("egypt35", "Ancient Egypt")
+    add("egypt_dangerroom", "Ancient Egypt")
+    add("egypt_dangerroom2", "Ancient Egypt")
+    add("egypt_dangerroom_minigame", "Ancient Egypt")
+    add("random_egypt", "Ancient Egypt")
 
     # ── Pirate Seas ──
     add("random_zomboss_pirate", "Pirate Seas", victory=True)
@@ -1082,6 +1087,97 @@ WORLD_KEY_LOCS = [
     "dino16",
     "modern16",   # Modern Day
 ]  # 12 total
+
+
+# ── World stretches ──────────────────────────────────────────────────────────
+# Every world is cut into three sequential stretches, and the cuts are the
+# world's own milestones rather than a count of levels: stretch 0 runs to its
+# World Key level, stretch 1 to its Zomboss, and stretch 2 is the rest. For
+# Ancient Egypt that is 1-8, 9-25 and 26-35.
+#
+# Those are the same three locations the goal is measured on, which is the
+# point: "complete this world" and "open the next part of it" are the same
+# milestones, so a player working toward the goal is always working toward
+# their next unlock too.
+#
+# Two worlds do not have all three markers, and each falls back one step:
+#   Kongfu Temple has no Zomboss level, so its second cut is the midpoint of
+#     what is left after its World Key level.
+#   Aerial Fortress has neither, so it is cut into equal thirds -- which is
+#     what every world used to get.
+# Both fallbacks are computed from the NUMBERED levels alone, so turning the
+# Danger Rooms on or off cannot move a cut.
+
+# Where a level sits in its world's play order.
+#
+# Modern Day is why this is not just "the number in the name": it runs
+# modern1..modern31, then the ten Zomboss rematches, then modern35..modern44,
+# so the rematch block has to sort between 31 and 35 rather than at the end
+# where its codenames put it. An optional level like egypt20_1 sorts just after
+# egypt20, which is the node that reveals it.
+_PLAY_ORDER_NUM = re.compile(r"^([a-z]+?)(\d+)(?:_(\d+))?$")
+_PLAY_ORDER_MZ = re.compile(r"^modern_zomboss_(\d+)_")
+
+
+def _play_order(name: str) -> Optional[float]:
+    m = _PLAY_ORDER_MZ.match(name)
+    if m:
+        return 31 + int(m.group(1)) / 100.0
+    m = _PLAY_ORDER_NUM.match(name)
+    if m:
+        return int(m.group(2)) + (int(m.group(3)) / 100.0 if m.group(3) else 0.0)
+    return None
+
+
+def _stretch_cuts(numbered: List[str]) -> tuple:
+    """The two order values a world's three stretches are split on.
+
+    numbered is that world's ordinary levels, already in play order.
+    """
+    key = next((n for n in numbered if n in WORLD_KEY_LOCS), None)
+    zomboss = next((n for n in numbered if n in WORLD_ZOMBOSS_LOCS), None)
+    if key and zomboss:
+        return _play_order(key), _play_order(zomboss)
+    if key:
+        # Kongfu Temple: split what is left of the world down the middle.
+        rest = [n for n in numbered if _play_order(n) > _play_order(key)]
+        mid = rest[max(0, len(rest) // 2 - 1)] if rest else key
+        return _play_order(key), _play_order(mid)
+    # Aerial Fortress: equal thirds.
+    third = max(1, len(numbered) // 3)
+    return (_play_order(numbered[third - 1]),
+            _play_order(numbered[min(2 * third, len(numbered)) - 1]))
+
+
+def world_stretches(names: Iterable[str]) -> List[List[str]]:
+    """Split one world's location names into its three stretches, in order.
+
+    A Danger Room has no place in the level numbering, so it goes wherever the
+    level that unlocks it went -- ordered just after it, since that level has
+    to be cleared first either way. Rooms nothing can unlock are already out of
+    the seed (UNREACHABLE_LOCATIONS), so an unknown one here would be a real
+    gap and is put in the opening stretch rather than silently dropped.
+    """
+    names = list(names)
+    numbered = sorted((n for n in names if _play_order(n) is not None),
+                      key=_play_order)
+    if not numbered:
+        return [names, [], []]
+    c1, c2 = _stretch_cuts(numbered)
+
+    def order_of(name: str) -> float:
+        o = _play_order(name)
+        if o is not None:
+            return o
+        unlock = DANGER_ROOM_UNLOCK.get(name)
+        u = _play_order(unlock) if unlock else None
+        return u + 0.5 if u is not None else -1.0
+
+    out: List[List[str]] = [[], [], []]
+    for name in sorted(names, key=order_of):
+        o = order_of(name)
+        out[0 if o <= c1 else 1 if o <= c2 else 2].append(name)
+    return out
 
 
 def goal_locations_for(goal_type: int,

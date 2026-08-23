@@ -3,9 +3,9 @@
 An [Archipelago](https://archipelago.gg) multiworld integration for **PvZ2 Gardendless**, a web-based
 reimagining of Plants vs. Zombies 2 ([PVZGE-Electron](https://github.com/Twig6943/PVZGE-Electron) /
 [pvzge_web](https://github.com/Gzh0821/pvzge_web)). Each world (except Ancient Egypt) is unlocked by
-finding its unique Key item, Modern Day included, and victory is completing a configurable number of
-worlds -- each world's Zomboss, its final level, or its World Key level, whichever the goal type
-picks.
+finding its unique Key item, Modern Day included, with two Progressive World items per world opening
+its later stretches. Victory is completing a configurable number of worlds -- each world's Zomboss,
+its final level, or its World Key level, whichever the goal type picks.
 
 ## Installation
 

@@ -9,6 +9,7 @@ from BaseClasses import Item, ItemClassification
 
 from .constants import (
     BASE_ID, GAME_NAME, KEY_NAME_TO_WORLD, KEYED_WORLDS, LOGIC_PLANTS,
+    WORLD_REGIONS, progressive_item_name,
     UPGRADE_GROUPS,
 )
 
@@ -295,9 +296,29 @@ TRAP_POOL: List[PvZ2ItemData] = (TRAP_ITEMS + COSTUME_TRAP_ITEMS
                                  + CURRENCY_TRAP_ITEMS)
 TRAP_CYCLE = [t.name for t in TRAP_POOL]
 
+# Progressive world unlocks — two per world, including Ancient Egypt, which
+# has no key. A world opens at its World Key level; the first of these carries
+# it to its Zomboss and the second to its final level (see
+# locations.world_stretches for the exact cuts). Ancient Egypt is playable from
+# the start, so for that world these are the only gates it has.
+#
+# APPENDED AFTER every other group on purpose: item IDs are positional, so a
+# new group anywhere else renumbers everything after it and breaks seeds
+# already generated.
+PROGRESSIVE_PER_WORLD = 2
+PROGRESSIVE_WORLD_ITEMS: List[PvZ2ItemData] = []
+_progressive_base = _currency_trap_base + len(CURRENCY_TRAP_ITEMS)
+for i, world_name in enumerate(WORLD_REGIONS):
+    PROGRESSIVE_WORLD_ITEMS.append(PvZ2ItemData(
+        progressive_item_name(world_name),
+        ItemClassification.progression, _progressive_base + i))
+
+PROGRESSIVE_ITEM_TO_WORLD = {progressive_item_name(w): w for w in WORLD_REGIONS}
+
 ALL_ITEMS: List[PvZ2ItemData] = (PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS
                                  + TRAP_ITEMS + UPGRADE_ITEMS + COSTUME_ITEMS
-                                 + COSTUME_TRAP_ITEMS + CURRENCY_TRAP_ITEMS)
+                                 + COSTUME_TRAP_ITEMS + CURRENCY_TRAP_ITEMS
+                                 + PROGRESSIVE_WORLD_ITEMS)
 ITEM_NAME_TO_ITEM: Dict[str, PvZ2ItemData] = {item.name: item for item in ALL_ITEMS}
 ITEM_NAME_TO_ID: Dict[str, int]        = {item.name: item.code for item in ALL_ITEMS}
 
@@ -318,6 +339,9 @@ if len(ITEM_NAME_TO_ITEM) != len(ALL_ITEMS):
 ITEM_NAME_GROUPS: Dict[str, set] = {
     "Plants":     {i.name for i in PLANT_ITEMS},
     "World Keys": {i.name for i in KEY_ITEMS},
+    # "!hint World Unlocks" answers where every stretch unlock in the seed is.
+    # Two per world, so hinting one by name only ever finds the first.
+    "World Unlocks": {i.name for i in PROGRESSIVE_WORLD_ITEMS},
     "Traps":      {i.name for i in TRAP_POOL},
     "Upgrades":   {i.name for i in UPGRADE_ITEMS},
     "Costumes":   {i.name for i in COSTUME_ITEMS},
@@ -336,7 +360,7 @@ ITEM_NAME_GROUPS["Currency"] = ITEM_NAME_GROUPS["Coins"] | ITEM_NAME_GROUPS["Gem
 for _plural, _singular in (
     ("Plants", "Plant"), ("World Keys", "World Key"), ("Traps", "Trap"),
     ("Upgrades", "Upgrade"), ("Costumes", "Costume"), ("Coins", "Coin"),
-    ("Gems", "Gem"),
+    ("Gems", "Gem"), ("World Unlocks", "World Unlock"),
 ):
     ITEM_NAME_GROUPS[_singular] = ITEM_NAME_GROUPS[_plural]
 
@@ -382,6 +406,14 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
         if KEY_NAME_TO_WORLD[key_item.name] not in world.enabled_worlds:
             continue
         pool.append(world.create_item(key_item.name))
+
+    # Two progressive unlocks per world in the seed, including Ancient Egypt.
+    # A world this seed left out is skipped for the same reason its key is:
+    # nothing behind it exists. These are what open a world's later stretches,
+    # in game as well as in logic, so they are as non-negotiable as the keys.
+    for w in sorted(world.enabled_worlds):
+        for _ in range(PROGRESSIVE_PER_WORLD):
+            pool.append(world.create_item(progressive_item_name(w)))
 
     # Every progression plant. These are named by access rules, so dropping one
     # can make a gate unsatisfiable -- they are not negotiable.

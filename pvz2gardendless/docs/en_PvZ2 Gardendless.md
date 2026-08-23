@@ -29,6 +29,19 @@ always findable in the handful of levels you can reach at the start.
 Modern Day works exactly the same way: it has a key like every other world, and holding it (plus a sun
 producer) is what opens it.
 
+A key opens the *start* of a world, not all of it. Each world is cut into three stretches, and the
+two later ones need **Progressive &lt;World&gt;** items — two per world, and the game enforces them: a
+level you have not unlocked cannot be started at all.
+
+The cuts are the world's own milestones. Ancient Egypt is 1-8, then 9-25, then 26-35: its World Key
+level, then its Zomboss, then the rest. Every world splits at the same two places, which are the same
+levels the goal is measured on, so working toward the goal is always working toward your next unlock.
+
+Two worlds have no such milestone to use. Kongfu Temple has no Zomboss level, so its second cut is
+the midpoint of what is left; Aerial Fortress has neither, so it is cut into equal thirds.
+
+Ancient Egypt has no key, so its first eight levels are where every run starts.
+
 ## Do I have to play all thirteen worlds?
 
 No. **World Count** sets how many main worlds the seed uses, counting Ancient Egypt but not Modern

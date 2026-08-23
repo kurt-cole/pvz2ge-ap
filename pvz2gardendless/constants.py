@@ -25,8 +25,7 @@ KEYED_WORLDS = [
 # Regions NOT listed here -- Tutorial, the side paths, Shop -- are not part of
 # any world and are always built.
 WORLD_REGIONS: Dict[str, List[str]] = {
-    "Ancient Egypt":     ["Ancient Egypt", "Ancient Egypt Mid1",
-                          "Ancient Egypt Mid2", "Ancient Egypt Late"],
+    "Ancient Egypt":     ["Ancient Egypt"],
     "Pirate Seas":       ["Pirate Seas"],
     "Wild West":         ["Wild West"],
     "Far Future":        ["Far Future"],
@@ -57,26 +56,21 @@ ALL_WORLD_REGIONS = {r for regions in WORLD_REGIONS.values() for r in regions}
 WORLD_STRETCHES = ("", " Mid", " Late")
 STRETCH_PLANTS = {" Mid": 6, " Late": 12}
 
-# Ancient Egypt is not cut up by that code. It carries a bespoke four-region
-# split declared in locations.py, gated on holding a sun producer and a cheap
-# attacker, and it is the one world reachable with no items at all -- so its
-# opening stretch has to stay ungated or a seed has nowhere to begin. What it
-# lacked was any escalation: all three of its gates asked for the same thing,
-# which put its 44 levels in one sphere behind that single rule. These add a
-# plant count to the later two, on top of the sun-and-attacker requirement.
+# Ancient Egypt's own stretches. It is cut by the same code as every other
+# world, but its gates are different: it has no key, so its later stretches ask
+# for a sun producer and a cheap attacker (rules.py) plus a plant count, where
+# other worlds ask for the counts in STRETCH_PLANTS alone.
 #
-# That ungated opening is egypt1-5. Mid1 begins at egypt6, so the
-# sun-and-attacker rule is what says "you are expected to have a sun producer
-# by Egypt level 6". It began at egypt3 briefly (2026-08-12); before that at
-# egypt10, which had logic
-# calling nine levels playable on falling sun alone; a sun producer was nudged
-# into sphere 1 with early_items to paper over it. Mid1 deliberately has no
-# entry here: its gate is the sun producer, with no plant count on top.
-EGYPT_STRETCH_PLANTS = {"Ancient Egypt Mid2": 3, "Ancient Egypt Late": 6}
+# Its opening stretch runs to egypt8, its World Key level, and is deliberately
+# ungated -- Egypt is the only world playable with no items, so that opening is
+# what sphere 1 is made of and a seed would otherwise have nowhere to begin.
+# The counts here are lower than STRETCH_PLANTS for the same reason: this is
+# the world a run starts in.
+EGYPT_STRETCH_PLANTS = {" Mid": 3, " Late": 6}
 
 # Region-name suffixes that mark a stretch past the opening of its world.
-# Covers both the generic cut above (" Mid", " Late") and Ancient Egypt's
-# bespoke four-region split (" Mid1", " Mid2", " Late").
+# Every world uses the same two now; " Mid1" and " Mid2" were Ancient Egypt's
+# bespoke split and are kept so a stale name cannot read as an early region.
 LATE_REGION_SUFFIXES = (" Mid", " Mid1", " Mid2", " Late")
 
 
@@ -118,6 +112,17 @@ OPTIONAL_WORLDS   = [w for w in SELECTABLE_WORLDS if w not in ALWAYS_ENABLED_WOR
 # slicing " Key" off the item names, which would break on a world whose name
 # ever ends in "Key".
 KEY_NAME_TO_WORLD = {f"{world} Key": world for world in KEYED_WORLDS}
+
+
+def progressive_item_name(world: str) -> str:
+    """The progressive unlock item for a world.
+
+    One function rather than an f-string at each site, because the name is
+    shared by items.py (which mints them), rules.py (which asks for them) and
+    slot_data (which tells the client what to count), and a mismatch between
+    any two of those is a silently unsatisfiable gate.
+    """
+    return f"Progressive {world}"
 
 # Sequential sphere-1 gating for Ancient Egypt (see checkpoint split in
 # regions.py): each checkpoint requires at least one of these sun producers

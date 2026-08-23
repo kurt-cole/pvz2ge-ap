@@ -28,6 +28,10 @@ class WorldCount(Range):
     Locations in worlds that are left out are removed from the seed entirely,
     along with their World Key items, so those worlds stay locked for good.
 
+    Every world in the seed also ships two Progressive <World> items, which
+    open its later stretches -- and the game enforces those, so a level you
+    have not unlocked cannot be started.
+
     12 (the default) is every world, which is how this game has always
     generated.
     """

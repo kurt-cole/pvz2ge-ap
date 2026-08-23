@@ -16,7 +16,7 @@ from .constants import (
     WORLD_STRETCHES,
 )
 from .items import PvZ2Item
-from .locations import ALL_REGIONS, PvZ2Location
+from .locations import ALL_REGIONS, PvZ2Location, world_stretches
 
 if TYPE_CHECKING:
     from . import PvZ2GardendlessWorld
@@ -53,15 +53,6 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
     # Ancient Egypt — always accessible from Tutorial, and always built
     tutorial.connect(regions["Ancient Egypt"])
 
-    # Ancient Egypt is split into sequential checkpoints (roughly every 10
-    # levels) so generation logic doesn't treat the whole 35-level world as
-    # flatly reachable with zero items. rules.py gates each entrance on
-    # holding a sun producer and a cheap attacker.
-    prev_egypt_region = regions["Ancient Egypt"]
-    for checkpoint_name in ("Ancient Egypt Mid1", "Ancient Egypt Mid2", "Ancient Egypt Late"):
-        prev_egypt_region.connect(regions[checkpoint_name], f"Enter {checkpoint_name}")
-        prev_egypt_region = regions[checkpoint_name]
-
     # Keyed main worlds — rules.py requires each world's key on its entrance.
     # Only the enabled ones get an entrance, which is what rules.py keys off:
     # it walks the same list and would raise on a missing entrance otherwise.
@@ -87,26 +78,24 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
     # Affordability is still not modelled: currency accrues from play and from
     # Archipelago's own coin/gem items, so a purchase is a matter of grinding
     # rather than a logic gate.
-    regions["Ancient Egypt Mid1"].connect(regions[SHOP_REGION])
+    regions["Ancient Egypt"].connect(regions[SHOP_REGION])
 
     active = world.active_locations()
 
     # Cut each world into sequential stretches, so holding its key opens the
     # start of it rather than all 44-53 levels at once. Locations keep their
     # world as loc_data.region -- that is what active_locations() and the hint
-    # groups read -- and are routed into a stretch here by their position in
-    # the world's own level order.
+    # groups read -- and are routed into a stretch here.
     #
-    # Ancient Egypt is skipped: it already declares a four-region split in
-    # locations.py and re-cutting it would fight that. rules.py escalates its
-    # existing gates instead.
+    # The cuts are the world's own milestones (World Key level, then Zomboss),
+    # not a count: see locations.world_stretches. Ancient Egypt goes through
+    # the same loop as of 2026-08-23; it used to declare a bespoke four-region
+    # split of its own, cut in different places.
     stretch_of: Dict[str, Region] = {}
     for w in sorted(world.enabled_worlds):
-        if w == "Ancient Egypt":
-            continue
         w_locs = [l for l in active if l.region in WORLD_REGIONS[w]]
-        # Too small to be worth cutting; Aerial Fortress at 16 is the smallest
-        # world that still is. Below two per stretch the split says nothing.
+        # Too small to be worth cutting. Below two per stretch the split says
+        # nothing, and nothing in the game is that small today.
         if len(w_locs) < len(WORLD_STRETCHES) * 2:
             continue
         prev = regions[w]
@@ -115,12 +104,9 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
             regions[name] = Region(name, player, multiworld)
             prev.connect(regions[name], f"Enter {name}")
             prev = regions[name]
-        # Ceiling division, so the remainder lands in the earlier stretches and
-        # the last one is never the biggest.
-        size = -(-len(w_locs) // len(WORLD_STRETCHES))
-        for i, l in enumerate(w_locs):
-            idx = min(i // size, len(WORLD_STRETCHES) - 1)
-            stretch_of[l.name] = regions[w + WORLD_STRETCHES[idx]]
+        for idx, part in enumerate(world_stretches(l.name for l in w_locs)):
+            for loc_name in part:
+                stretch_of[loc_name] = regions[w + WORLD_STRETCHES[idx]]
 
     # Side paths hang off the stretch holding the level that reveals them, not
     # off Tutorial and not off their world's opening. A side path is entered

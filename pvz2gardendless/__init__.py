@@ -17,7 +17,7 @@ import settings
 
 from .constants import (
     ALWAYS_ENABLED_WORLDS, GAME_NAME, OPTIONAL_WORLDS, SELECTABLE_WORLDS,
-    STARTER_PLANTS, WORLD_REGIONS,
+    STARTER_PLANTS, WORLD_REGIONS, WORLD_STRETCHES, progressive_item_name,
 )
 from .options import PvZ2Options
 from .items import (
@@ -27,6 +27,7 @@ from .items import (
 from .locations import (
     LOC_NAME_GROUPS, LOC_NAME_TO_ID, MODERN_DAY_VICTORY_LOCS, PvZ2LocationData,
     VICTORY_LOC_NAMES, active_locations as compute_active_locations, goal_locations_for,
+    world_stretches,
 )
 from .regions import create_regions as build_regions
 from .rules import set_rules as apply_rules
@@ -290,6 +291,36 @@ class PvZ2GardendlessWorld(World):
     def set_rules(self) -> None:
         apply_rules(self)
 
+    def world_gates(self) -> Dict[str, Any]:
+        """The stretch each world's levels are behind, for the client.
+
+        The client enforces these: a level in stretch 1 cannot be STARTED
+        until one copy of that world's progressive unlock has arrived, and
+        stretch 2 until two have. Only the locked stretches are sent -- a
+        world's opening needs nothing, so listing it would be 200 location
+        names saying "allowed".
+
+        Location names rather than game level ids, because the client already
+        holds that map (LOC_LEVELS) and duplicating it here is exactly the kind
+        of second copy that drifts. regions.py cuts the same worlds with the
+        same call, so the gate a player meets and the gate fill reasoned about
+        cannot disagree.
+        """
+        active = self.active_locations()
+        gates: Dict[str, Any] = {}
+        for world_name in sorted(self.enabled_worlds):
+            names = [l.name for l in active
+                     if l.region in WORLD_REGIONS[world_name]]
+            if len(names) < len(WORLD_STRETCHES) * 2:
+                continue  # too small to cut, same test regions.py makes
+            stretches = world_stretches(names)
+            gates[world_name] = {
+                "item": progressive_item_name(world_name),
+                # index 0 is the opening and is deliberately dropped
+                "stretches": stretches[1:],
+            }
+        return gates
+
     def fill_slot_data(self) -> Dict[str, Any]:
         goal_locs = goal_locations_for(self.options.goal_type.value,
                                        self.enabled_regions)
@@ -313,6 +344,12 @@ class PvZ2GardendlessWorld(World):
             # what a NEW client reads, and modern_day_victory stays in
             # slot_data so an OLD client still has something to finish on.
             "modern_day_keyed":   True,
+            # Which levels are behind a progressive world unlock, and how many
+            # copies each needs. The client refuses to start one it does not
+            # have the unlocks for; seeds generated before 2026-08-23 send no
+            # such key and the client leaves every level playable, which is how
+            # they always were.
+            "world_gates":        self.world_gates(),
             "modern_day_victory": MODERN_DAY_VICTORY_LOCS[
                 self.options.modern_day_victory.value],
             "skip_tutorial":     bool(self.options.skip_tutorial),
