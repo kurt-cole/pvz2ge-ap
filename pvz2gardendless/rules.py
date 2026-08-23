@@ -55,8 +55,6 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # left out have no entrance to rule on (regions.py skips them) and no key
     # in the pool, so they stay locked with nothing behind them.
     for w in KEYED_WORLDS:
-        if w == "Modern Day":
-            continue  # handled separately, see below
         if w not in world.enabled_worlds:
             continue
         key_name = f"{w} Key"
@@ -231,15 +229,17 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         for shop_loc in shop_gated:
             forbid_items_for_player(shop_loc, key_names, player)
 
-    # Modern Day — unlocked once enough world goals (trophies / completions /
-    # keys, per the goal_type option) are reachable.
+    # The win condition — complete worlds_required worlds, in whichever sense
+    # goal_type picks (that world's Zomboss, its final level, or its World Key
+    # level). Modern Day is one of them now; it used to be the goal world, and
+    # this same count used to be what unlocked it.
     goal_locs = goal_locations_for(world.options.goal_type.value,
                                    world.enabled_regions)
-    # Clamp: the goal list shrinks with the seed. world_trophies has only 10
-    # eligible locations to begin with (Kongfu Temple has no trophy), and
-    # world_count / enabled_worlds cut it down further, so the option's
-    # nominal 1-11 range can ask for more goals than exist -- which would lock
-    # Modern Day for good.
+    # Clamp: the goal list shrinks with the seed. The zomboss goal has only 11
+    # eligible locations to begin with (Kongfu Temple has no Zomboss level),
+    # and world_count / enabled_worlds cut it down further, so the option's
+    # nominal 1-12 range can ask for more goals than exist -- which would make
+    # the seed unwinnable.
     req = min(world.options.worlds_required.value, len(goal_locs))
 
     # Resolve the goal Locations once, here, rather than by name inside the
@@ -249,7 +249,7 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # reachability test. Location.can_reach() is what that resolves to anyway.
     goal_locations = [multiworld.get_location(name, player) for name in goal_locs]
 
-    def modern_day_rule(state, n=req, locs=goal_locations):
+    def goal_rule(state, n=req, locs=goal_locations):
         # Counts reachable goals, but stops as soon as the answer is settled:
         # once n are reachable the rest cannot change it, and once too few are
         # left to ever total n the answer is already no. The old version always
@@ -266,21 +266,12 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
             left -= 1
         return completed >= n
 
-    modern_day_entrance = multiworld.get_entrance("Enter Modern Day", player)
-    set_rule(modern_day_entrance, modern_day_rule)
-
-    # modern_day_rule calls state.can_reach() on locations in OTHER regions
-    # (e.g. Pirate Seas' trophy) from an entrance rooted at Tutorial. AP's
-    # sweep doesn't know "Enter Modern Day" structurally depends on those
-    # regions, so each dependency must be registered via
-    # register_indirect_condition -- otherwise the sweep can evaluate this
-    # rule before a dependency region has been marked reachable in the same
-    # pass (queue order for retried entrances is not guaranteed) and
-    # incorrectly read it as still locked.
-    # parent_region is the region the location was built into, so it is the
-    # same region the old LOC_NAME_TO_DATA lookup produced -- read off the
-    # objects already resolved above instead of going back through the tables.
-    for loc in goal_locations:
-        multiworld.register_indirect_condition(loc.parent_region, modern_day_entrance)
+    # On the Victory event rather than on an entrance, so no region has to be
+    # invented to hold the win. A location rule needs no
+    # register_indirect_condition: the advancement sweep re-runs until it
+    # stops collecting, so a rule that depends on other regions is picked up
+    # on a later pass. An ENTRANCE rule is what needs the hint, which is why
+    # the Modern Day version of this had a register_indirect_condition loop.
+    set_rule(multiworld.get_location("Victory", player), goal_rule)
 
     multiworld.completion_condition[player] = lambda state: state.has("Victory", player)

@@ -2614,13 +2614,16 @@ window.electron = electron;
     };
     (st.receivedKeys||[]).forEach(keyName => {
       const worldIds = WORLD_KEY_MAP[keyName];
-      // Modern Day is never key-driven; it is handled below. Older seeds can
-      // still deliver a Modern Day Key, and honouring it here would open the
-      // world before the goal is met -- fireCheck() would then withhold its
-      // location checks, so any progress made there would silently not count.
+      // Modern Day is skipped here and settled below instead, because what
+      // opens it depends on the seed: its own key on a keyed seed, the goal
+      // count on an older one. Opening it from the key on an older seed would
+      // be wrong twice over -- the goal is not met, and fireCheck() would then
+      // withhold its location checks, so the progress made there would
+      // silently not count.
       if(worldIds) worldIds.forEach(wid => { if(wid !== W.modern) unlockWorld(wid); });
     });
-    // Modern Day unlocks on the world-goal requirement alone.
+    // True when the key is held (keyed seed) or the goal count is met (older
+    // seed) -- one call answers both.
     if(canAccessModernDay()) unlockWorld(W.modern);
 
     // 5. Set forceLevel based on tutorial progress
@@ -2994,6 +2997,12 @@ window.electron = electron;
           // DeathLink isn't known until slot_data arrives (after the initial
           // Connect), so it's applied via ConnectUpdate rather than being in
           // the Connect packet's tags from the start.
+          // Absent on every seed rolled before 2026-08-23, and a missing
+          // key has to read as FALSE: those seeds ship no Modern Day Key at
+          // all, so treating them as keyed would leave Modern Day shut for
+          // good. Persisted on st like the rest of the goal config, because
+          // rebuildAPSave runs on the poll timer before the socket is back.
+          st.modernKeyed = !!pkt.slot_data.modern_day_keyed;
           slotDeathLink = !!pkt.slot_data.death_link;
           applyDeathLinkPref();
         }
@@ -3793,20 +3802,60 @@ window.electron = electron;
   }
 
   // ── Location polling (every 2s) ───────────────────────────────────────────
-  // Modern Day has no key -- it unlocks purely on the world-goal count.
-  // (Older seeds may still hand out a "Modern Day Key" item; it is simply
-  // ignored rather than being required, so those seeds stay completable.)
-  // The location whose check ends the run, chosen by the modern_day_victory
-  // option. Falls back to the Zomboss for seeds generated before that option
-  // existed, which is what used to be hardcoded in fireCheck().
+  // TWO GOAL MODELS, and slot_data's modern_day_keyed says which one this seed
+  // was rolled under:
+  //
+  //   keyed (2026-08-23 on) -- Modern Day is an ordinary world behind its own
+  //     key, and the run is won by completing worlds_required worlds, any
+  //     worlds, counted off st.goalLocs.
+  //   older -- Modern Day has no key and opens on that same count instead, and
+  //     the run ends on one specific Modern Day level (modern_day_victory).
+  //
+  // Both are live at once on purpose: a seed already in progress has to keep
+  // working after the client is rebuilt.
+
+  // The location whose check ends the run on an older seed. Falls back to the
+  // Zomboss for seeds generated before modern_day_victory existed, which is
+  // what used to be hardcoded in fireCheck(). Unused on a keyed seed.
   function victoryLoc(){ return st.victoryLoc || 'modern_zomboss_01_egypt'; }
 
+  const MODERN_DAY_KEY_ITEM = 'Modern Day Key';
+
   function canAccessModernDay(){
+    if(st.modernKeyed)
+      return (st.receivedKeys||[]).indexOf(MODERN_DAY_KEY_ITEM) >= 0;
     const goalLocs  = st.goalLocs || [];
     const worldsReq = st.worldsReq || 7;
     if(!goalLocs.length) return false; // slot_data not in yet; don't open early
     const completed = goalLocs.filter(l=>isChecked(l)).length;
     return completed >= worldsReq;
+  }
+
+  // How many of this seed's worlds are complete, and whether that is the win.
+  // One goal location per world; which level it is comes from the goal_type
+  // option, and generation has already dropped the worlds this seed left out.
+  function goalMet(){
+    const goalLocs  = st.goalLocs || [];
+    const worldsReq = st.worldsReq || 0;
+    // Nothing to compare against until slot_data lands. Claiming the goal off
+    // a default would end someone else's run for them.
+    if(!goalLocs.length || !worldsReq) return false;
+    let done = 0;
+    for(const l of goalLocs) if(isChecked(l)) done++;
+    return done >= worldsReq;
+  }
+
+  // Sends the goal at most once a session. Called from fireCheck when a check
+  // may have crossed the line, and from every poll so a threshold crossed
+  // while the socket was down is still reported once it is back -- st.checked
+  // survives that, the StatusUpdate that should have gone with it does not.
+  function maybeSendGoal(){
+    if(goalSent || !conn || !sessionActive) return false;
+    if(!(st.modernKeyed ? goalMet() : isChecked(victoryLoc()))) return false;
+    send([{cmd:'StatusUpdate',status:30}]);
+    goalSent = true;
+    log('Goal complete: reported to the multiworld');
+    return true;
   }
 
   function pollChecks(){
@@ -3819,14 +3868,14 @@ window.electron = electron;
     // levelProps for whichever tutorial step the player is actually on).
     if(conn && sessionActive){
       for(const[loc,levelId] of Object.entries(LOC_LEVELS)){
-        // Checked locations are skipped, with one exception: the victory
-        // location while the goal is still unsent this session, which is how
-        // fireCheck() gets the chance to retry the StatusUpdate. goalSent is
-        // tested first so the common case stays a boolean, not a string
-        // compare against all 761 entries every tick.
-        if(isChecked(loc) && (goalSent || loc!==victoryLoc())) continue;
+        if(isChecked(loc)) continue;
         if(isFinished(levelId)) fireCheck(loc);
       }
+      // The goal retry. This used to be done by walking the victory location
+      // again on every tick even though it was already checked; one call here
+      // covers both goal models and drops a string compare against every
+      // LOC_LEVELS entry.
+      maybeSendGoal();
     }
     rebuildAPSave();
     // Fires once a level is actually running, for traps banked while the
@@ -3847,20 +3896,18 @@ window.electron = electron;
     // Modern Day check fired before the world is legitimately unlocked is not
     // one the run has earned.
     if(MODERN_DAY_LOCS.has(loc) && !canAccessModernDay()) return;
-    // The goal is settled BEFORE the already-checked bail-out. StatusUpdate is
-    // independent of the location send, and a victory location can reach
-    // st.checked without the server ever hearing the goal -- the reconnect
-    // merge in mergeServerChecks() pushes names straight into st.checked, and
-    // a StatusUpdate can be lost to a socket that drops between the two sends.
-    // With the isChecked() test first, that state was terminal: fireCheck()
-    // returned immediately every time, and pollChecks() skips checked
-    // locations, so nothing ever retried the goal.
-    if(loc===victoryLoc() && !goalSent && conn){
-      send([{cmd:'StatusUpdate',status:30}]);
-      goalSent = true;
-    }
+    // Before the already-checked bail-out, because a location can reach
+    // st.checked without the server ever hearing the goal: the reconnect merge
+    // in mergeServerChecks() pushes names straight in, and a StatusUpdate can
+    // be lost to a socket that drops between the two sends. With the
+    // isChecked() test first, that state was terminal.
+    maybeSendGoal();
     if(isChecked(loc)) return;
     st.checked.push(loc);svSt();
+    // ...and again now this check is recorded, since it may be the one that
+    // completed the last world the goal was waiting on. goalSent makes the
+    // second call free.
+    maybeSendGoal();
     const id=locIds[loc];
     // A location the slot does not have is still recorded in st.checked above,
     // so the client's own bookkeeping stays consistent -- it just never goes to

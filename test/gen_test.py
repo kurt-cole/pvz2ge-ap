@@ -69,7 +69,9 @@ def run(label, **kw):
     # no key for a disabled world
     for k in keys:
         assert C.KEY_NAME_TO_WORLD[k] in w.enabled_worlds, f"stray key {k}"
-    assert "Modern Day Key" not in keys
+    # Modern Day is a keyed world again, so its key ships like any other.
+    # It was filtered out of the pool while reaching Modern Day WAS the goal.
+    assert "Modern Day Key" in keys, "Modern Day must ship a key"
     # goal locations all exist and are reachable-by-name
     for name in sd["goal_locations"]:
         mw.get_location(name, 1)
@@ -126,8 +128,16 @@ def run(label, **kw):
         assert _ns in CHEAP_ATTACKER_PLANTS, f"{_ns} dropped for having no sheet"
     assert sd["worlds_required"] <= len(sd["goal_locations"])
     assert sd["worlds_required"] >= 1, "goal must stay satisfiable"
-    # indirect conditions registered for every goal
-    assert len(mw.indirect) == len(sd["goal_locations"])
+    # The goal count is an access rule on the Victory LOCATION now, and a
+    # location rule needs no indirect conditions -- the advancement sweep
+    # re-runs until it stops collecting. When this was an entrance rule on
+    # "Enter Modern Day" there was one registration per goal, and the sweep
+    # read the entrance as locked without them.
+    assert not mw.indirect, f"unexpected indirect conditions: {mw.indirect}"
+    # Victory hangs off Tutorial, not off any one world: no single world is on
+    # the path to winning any more.
+    _vic = mw.get_location("Victory", 1)
+    assert _vic.parent_region.name == "Tutorial",         f"Victory is in {_vic.parent_region.name}, not Tutorial"
     from pvz2gardendless.items import UPGRADE_ITEMS
     from pvz2gardendless.constants import UPGRADE_GROUPS, UPGRADE_ITEM_COUNT
     upnames = {u.name for u in UPGRADE_ITEMS}
@@ -151,7 +161,7 @@ run("1 world (Egypt only)", world_count=1, worlds_required=11, include_side_path
 run("explicit list only", world_count=1, include_side_paths=1,
     enabled_worlds=["Pirate Seas", "Wild West"], worlds_required=11)
 run("explicit + topup", world_count=5, enabled_worlds=["Big Wave Beach"])
-run("trophies, 3 worlds", world_count=3, goal_type=0, worlds_required=11)
+run("zomboss, 3 worlds", world_count=3, goal_type=0, worlds_required=11)
 run("completions, 2 worlds", world_count=2, goal_type=1, worlds_required=11,
     include_side_paths=1)
 run("3 worlds + shopsanity", world_count=3, shopsanity=1, worlds_required=11)
@@ -223,8 +233,15 @@ _SLOT_DATA_BEFORE_ZOMBIES = {
 assert _SLOT_DATA_BEFORE_ZOMBIES <= set(_z_on), \
     f"slot_data lost keys: {sorted(_SLOT_DATA_BEFORE_ZOMBIES - set(_z_on))}"
 assert set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES == \
-    {"shuffle_zombies", "zombie_tiers", "zombie_seed"}, \
+    {"shuffle_zombies", "zombie_tiers", "zombie_seed", "modern_day_keyed"}, \
     f"unexpected new slot_data keys: {sorted(set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES)}"
+
+# modern_day_keyed is additive for the same reason, and modern_day_victory
+# stays even though generation no longer uses it: a client built before
+# 2026-08-23 gates Modern Day on the goal count and ends the run on that one
+# level, so removing either key would strand every build already out there.
+assert _z_on["modern_day_keyed"] is True
+assert _z_on["modern_day_victory"], "old clients still need a victory location"
 
 # Every tier must be non-empty and every zombie in exactly one tier, or the
 # client's inverted index disagrees with this side about what may swap.
@@ -781,8 +798,14 @@ _WORLD_FINAL_LEVEL = {
     "egypt": 35, "pirate": 35, "cowboy": 35, "future": 35, "dark": 30,
     "beach": 42, "iceage": 40, "lostcity": 42, "kongfu": 48, "eighties": 42,
     "dino": 42,
+    # Modern Day joined the goal tables on 2026-08-23. Its level order is
+    # modern1..modern31, the ten Zomboss rematches, then modern35..modern44 --
+    # so 44 is the last level, and there is no modern32/33/34 to confuse it
+    # with.
+    "modern": 44,
 }
-from pvz2gardendless.locations import WORLD_COMPLETION_LOCS as _WC, WORLD_TROPHY_LOCS as _WT
+from pvz2gardendless.locations import (WORLD_COMPLETION_LOCS as _WC,
+                                      WORLD_ZOMBOSS_LOCS as _WT)
 _seen = set()
 for _n in _WC:
     _lv = _lvl.get(_n)
@@ -800,7 +823,7 @@ assert len(_seen) == len(_WC), "two completion goals in the same world"
 # ...and completion must be a strictly later ask than the trophy, or the two
 # goal types collapse into each other for that world.
 _both = set(_WC) & set(_WT)
-assert not _both, f"location used as BOTH trophy and completion goal: {sorted(_both)}"
+assert not _both, f"location used as BOTH zomboss and completion goal: {sorted(_both)}"
 print(f"all {len(_WC)} completion goals are their world's real final level, "
       "and none doubles as a trophy goal")
 

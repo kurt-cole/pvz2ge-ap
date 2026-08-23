@@ -94,21 +94,22 @@ def is_early_region(name: str) -> bool:
     resolves a side path to what it hangs off before asking this.
 
     Used by the early_world_keys option to keep World Keys from hiding behind
-    each other's endgames. Modern Day is excluded as well: it opens only once
-    the world-goal requirement is already met, so it is the latest place in any
-    seed and a key there would be found after it was needed.
+    each other's endgames. Modern Day is excluded as well. It is behind its own
+    key like any other world now, so it is no longer structurally last -- but
+    it is still 53 locations of endgame content, and a key buried there is a
+    key found late, which is exactly what the option exists to prevent.
     """
     return not name.endswith(LATE_REGION_SUFFIXES) and name != "Modern Day"
 
 # Worlds every seed keeps, whatever the world-selection options say. Ancient
 # Egypt is the only world reachable with no items at all, so it is what
-# sphere 1 is made of; Modern Day holds the victory location. A seed missing
-# either has no opening or no ending.
+# sphere 1 is made of. Modern Day is kept because it has always been kept:
+# it no longer holds the victory location (that hangs off Tutorial now), but
+# dropping it would quietly remove a world from every seed.
 ALWAYS_ENABLED_WORLDS = ["Ancient Egypt", "Modern Day"]
 
 # The worlds enabled_worlds / world_count actually choose between. Modern Day
-# is not offered -- it is the goal world, and it is gated by the world-goal
-# count rather than by being in or out of the pool.
+# is not offered: it is in every seed, so there is nothing to decide.
 SELECTABLE_WORLDS = [w for w in WORLD_REGIONS if w != "Modern Day"]
 OPTIONAL_WORLDS   = [w for w in SELECTABLE_WORLDS if w not in ALWAYS_ENABLED_WORLDS]
 

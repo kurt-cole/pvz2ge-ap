@@ -26,8 +26,8 @@ attacker, and its later stretches want a growing number of plants on top.
 Between those two rules, a sun producer is the only thing that can open up a fresh run — so one is
 always findable in the handful of levels you can reach at the start.
 
-Modern Day is the exception: it has no key. It opens once you have met a configurable number of world
-goals — world trophies, world completions, or world keys, whichever you pick.
+Modern Day works exactly the same way: it has a key like every other world, and holding it (plus a sun
+producer) is what opens it.
 
 ## Do I have to play all thirteen worlds?
 
@@ -36,8 +36,8 @@ Day, and the generator picks the rest at random — set it to `random` and it pi
 **Enabled Worlds** to name worlds you definitely want; any remaining slots are filled at random around
 them, and naming more worlds than the count asks for keeps all of them.
 
-Ancient Egypt is always in, since it is the only world playable with no items. Modern Day is always in,
-since that is where the run ends.
+Ancient Egypt is always in, since it is the only world playable with no items. Modern Day is always in
+too, and counts toward the goal like any other world.
 
 Worlds left out are gone completely: their levels are not locations, their World Key is not in the item
 pool, and they stay locked for the whole run. Everything outside the main worlds — the side paths, the
@@ -86,14 +86,27 @@ different lawns.
 
 ## What is the goal?
 
-Clear one specific Modern Day level, chosen by the **Modern Day Victory** option:
+Complete **Worlds Required** worlds. Which worlds is up to you — any of them count, Modern Day
+included — and the run ends the moment the last one is done.
 
-- **World Key** — clear `modern16`, the World Key level. The shortest goal.
-- **Zomboss** — beat the Modern Day Zomboss at roughly level 33. The default.
-- **Completion** — clear `modern44`, the final Modern Day level. The longest.
+**Goal Type** decides what completing a world means:
 
-This is independent of the goal type, which only decides how much of the rest of the game you need
-before Modern Day opens at all.
+- **World Key** — clear that world's World Key level (`egypt8`, `dark10`, `modern16`). The shortest,
+  and the default. It is not the same stage in every world; hint the `World Key Levels` group to see
+  them all.
+- **Zomboss** — beat that world's Zomboss, the boss fight partway through it (`egypt25`, `dark20`,
+  `dino32`). Kongfu Temple has no Zomboss level in the game data, so it can never count toward this
+  one.
+- **Completion** — clear that world's final level (`egypt35`, `kongfu48`, `modern44`). The longest.
+
+Asking for more worlds than the seed contains is not a mistake — it clamps down to what is actually
+there, so a three-world seed asking for eleven needs three.
+
+Aerial Fortress is playable but never counts: it has neither a World Key level nor a Zomboss.
+
+*Changed in this version.* The run used to end on one specific Modern Day level, with everything above
+deciding how much of the game you needed before Modern Day opened at all. A seed generated before the
+change still plays the old way — the client handles both.
 
 ## What items and locations get shuffled?
 

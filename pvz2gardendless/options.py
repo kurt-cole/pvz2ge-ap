@@ -6,7 +6,7 @@ import dataclasses
 
 from Options import (
     Choice, DefaultOnToggle, OptionSet, Range, Toggle, DeathLink,
-    PerGameCommonOptions,
+    PerGameCommonOptions, Visibility,
 )
 
 from .constants import SELECTABLE_WORLDS
@@ -17,9 +17,9 @@ class WorldCount(Range):
     How many main worlds this seed uses, counting Ancient Egypt.
 
     Ancient Egypt is always one of them -- it is the only world playable with
-    no items, so it is where the seed opens. Modern Day is not counted: it is
-    the goal world and is always present, unlocked by the world-goal
-    requirement rather than by being picked here.
+    no items, so it is where the seed opens. Modern Day is always present too
+    but is not counted here, so this number is the worlds you chose, not the
+    worlds you get.
 
     The remaining slots are filled at random from the worlds not already named
     in enabled_worlds. Set this to `random` to let the generator pick the
@@ -47,7 +47,7 @@ class EnabledWorlds(OptionSet):
     choice always wins over the count.
 
     Ancient Egypt is included whether or not it is listed. Modern Day is not a
-    valid entry -- it is always present as the goal world.
+    valid entry -- it is in every seed already.
     """
     display_name = "Enabled Worlds"
     valid_keys   = SELECTABLE_WORLDS
@@ -56,39 +56,53 @@ class EnabledWorlds(OptionSet):
 
 class GoalType(Choice):
     """
-    Condition that must be met before Modern Day unlocks.
+    What counts as completing a world.
 
-    world_trophies: Earn N world trophies (the mid-world milestone check in each world).
-      Note: Kongfu Temple has no world trophy in the game data and is always excluded,
-      so the effective maximum for this mode is 10.
+    zomboss: beat that world's Zomboss -- the boss fight partway through it
+      (egypt25, dark20, dino32). Kongfu Temple has no Zomboss level in the
+      game data and can never satisfy this one, so a seed containing it has
+      one fewer world available than it looks.
 
-    world_completions: Beat the final regular level of N worlds (e.g. egypt35).
-      All 11 non-Modern-Day worlds are eligible; maximum is 11.
+    completion: clear the world's final level (egypt35, kongfu48, modern44).
+      The longest of the three.
 
-    world_keys: Check the world-key level of N worlds (e.g. egypt8). All 11
-      non-Modern-Day worlds are eligible; maximum is 11. Which level that is
-      differs per world -- hint the "World Key Levels" group to see them.
+    world_key: clear the world's World Key level (egypt8, dark10, modern16).
+      Not the same stage in every world -- hint the "World Key Levels" group
+      to see them. The shortest.
+
+    Applies to every world in the seed, Modern Day included.
+
+    The older names world_trophies, world_completions and world_keys still
+    work and mean the same three things: what this world used to call a
+    world trophy always was the Zomboss fight.
     """
-    display_name = "Modern Day Goal Type"
-    option_world_trophies    = 0
-    option_world_completions = 1
-    option_world_keys        = 2
+    display_name = "Goal Type"
+    option_zomboss    = 0
+    option_completion = 1
+    option_world_key  = 2
+    # Kept so a yaml written for an earlier version still generates. Same
+    # values, so a seed rolled from one of these is identical to before.
+    alias_world_trophies    = 0
+    alias_world_completions = 1
+    alias_world_keys        = 2
     default = 2
 
 
 class WorldsRequired(Range):
     """
-    How many worlds must satisfy the goal condition before Modern Day unlocks.
-    For world_trophies the effective cap is 10 (Kongfu Temple excluded).
-    For world_completions and world_keys the cap is 11.
+    How many worlds must be completed, in the sense the Goal Type picks,
+    before the run is won.
+
+    Every world in the seed counts, Modern Day included, so the ceiling is 12
+    -- or 11 for the zomboss goal, since Kongfu Temple has no Zomboss level.
 
     Worlds left out by world_count / enabled_worlds take their goal location
     with them, so this is clamped down to what the seed can actually offer --
     asking for 4 world keys in a 3-world seed requires 3.
     """
-    display_name = "Worlds Required for Modern Day"
+    display_name = "Worlds Required"
     range_start  = 1
-    range_end    = 11
+    range_end    = 12
     default      = 7
 
 
@@ -112,24 +126,22 @@ class SkipTutorial(Toggle):
 
 class ModernDayVictory(Choice):
     """
-    Which Modern Day level ends the run, once Modern Day has been unlocked.
+    Deprecated and ignored. The run no longer ends on one specific Modern Day
+    level: it ends when Worlds Required worlds have been completed, and Modern
+    Day is an ordinary keyed world that counts like the rest.
 
-    Modern Day runs modern1-modern31, then the ten Zomboss fights, then
-    modern35-modern44, so the Zomboss sits at roughly level 33.
+    Its three choices live on as the Goal Type, where they now decide what
+    completing ANY world means rather than just Modern Day.
 
-    world_key:  clear the World Key level, modern16. Shortest.
-    zomboss:    beat the Modern Day Zomboss, around level 33. Default, and
-                what every earlier version of this world used.
-    completion: clear modern44, the final Modern Day level. Longest.
-
-    Independent of the goal type, which only decides how much of the rest of
-    the game is needed before Modern Day opens at all.
+    Still accepted so a yaml written for an earlier version generates without
+    an error, and hidden from the option templates so nobody sets it fresh.
     """
-    display_name = "Modern Day Victory"
+    display_name = "Modern Day Victory (deprecated)"
     option_world_key  = 0
     option_zomboss    = 1
     option_completion = 2
     default = 1
+    visibility = Visibility.none
 
 
 class IncludeSidePaths(Toggle):

@@ -600,6 +600,55 @@ if _stuck:
 else:
     ok(f'each of the {len(SUN_PRODUCER_PLANTS)} sun producers opens sphere 1 on its own')
 
+# ── the win condition is a COUNT of completed worlds ────────────────────────
+# Victory hangs off Tutorial, which is sphere 1, so nothing but its own access
+# rule keeps it out of reach. "Nothing -> everything" would prove none of that:
+# both ends agree with a rule that ignores the count entirely. So this walks
+# the world keys in one at a time and checks Victory flips exactly where the
+# number of reachable goal locations crosses worlds_required, at every step.
+for _gt, _gtname in ((2, "world_key"), (1, "completion"), (0, "zomboss")):
+    _mwv, _wv = build(goal_type=_gt, worlds_required=4)
+    _sdv = _wv.fill_slot_data()
+    _req = _sdv["worlds_required"]
+    _goals = _sdv["goal_locations"]
+    _base = [i.name for i in _mwv.precollected] + PROG_PLANTS
+    _keys = sorted(i.name for i in _mwv.itempool if i.name.endswith(" Key"))
+    _wrong, _seen_both = [], set()
+    for _i in range(len(_keys) + 1):
+        _reached = {l.name for l in state_with(_mwv, _base + _keys[:_i]).reachable_locations()}
+        _done = sum(1 for _g in _goals if _g in _reached)
+        _vic = "Victory" in _reached
+        _seen_both.add(_vic)
+        if _vic != (_done >= _req):
+            _wrong.append((_i, _done, _vic))
+    if _wrong:
+        fail(f"goal_type={_gtname}: Victory disagrees with the goal count at "
+             f"{len(_wrong)} step(s) (keys, goals reached, victory): {_wrong[:4]}")
+    elif _seen_both != {False, True}:
+        # Both sides of the threshold have to actually occur, or the loop
+        # agreed with the rule without ever testing it.
+        fail(f"goal_type={_gtname}: the ladder never crossed the threshold "
+             f"(victory was always {_seen_both})")
+    else:
+        ok(f"goal_type={_gtname}: Victory opens exactly when {_req} worlds are "
+           f"complete, over {len(_keys) + 1} key states")
+
+# ...and the count has to be the thing that moves it, not the world count. A
+# seed asking for more worlds than it contains clamps to what it has, so the
+# win stays possible -- this is the "3 worlds, want 11" shape.
+_mwc, _wc = build(world_count=3, worlds_required=11)
+_sdc = _wc.fill_slot_data()
+if _sdc["worlds_required"] > len(_sdc["goal_locations"]):
+    fail(f"worlds_required {_sdc['worlds_required']} exceeds the "
+         f"{len(_sdc['goal_locations'])} goals a 3-world seed builds")
+else:
+    _allc = [i.name for i in _mwc.precollected] +             [i.name for i in _mwc.itempool if i.classification == IC.progression]
+    if "Victory" not in {l.name for l in state_with(_mwc, _allc).reachable_locations()}:
+        fail("a 3-world seed asking for 11 worlds cannot be won")
+    else:
+        ok(f"worlds_required clamps to {_sdc['worlds_required']} in a 3-world "
+           "seed and the win stays reachable")
+
 print()
 print(f"progression plants available: {len(PROG_PLANTS)}")
 print("\n" + (f"{failed} FAILURE(S)" if failed else "SPHERE LOGIC OK"))

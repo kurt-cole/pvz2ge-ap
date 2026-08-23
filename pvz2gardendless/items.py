@@ -196,10 +196,11 @@ if _unknown_logic_plants:
     raise ValueError("access rules reference plants that have no item: "
                      f"{sorted(_unknown_logic_plants)}")
 
-# World Key items — one per keyed world.
-# Modern Day no longer uses a key (it unlocks purely on the world-goal
-# requirement), but its entry is kept so every later item ID stays put.
-# It is filtered out of the pool in create_item_pool() instead.
+# World Key items — one per keyed world, Modern Day included: it is an
+# ordinary keyed world again as of 2026-08-23, now that the run ends on
+# completing worlds rather than on reaching it. Between those two versions the
+# entry existed but was filtered out of the pool, which is why the ID has
+# never moved.
 MODERN_DAY_KEY = "Modern Day Key"
 KEY_ITEMS: List[PvZ2ItemData] = []
 _key_base = BASE_ID + len(PLANT_ITEMS)
@@ -373,14 +374,11 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
     every player in the multiworld."""
     pool: List[Item] = []
 
-    # One unique key per keyed world, minus Modern Day -- that world is
-    # gated on the world-goal count alone, so shipping a key nobody needs
-    # would just waste a location. Worlds this seed left out are skipped for
-    # the same reason: their regions hold no locations, so their key would
-    # unlock nothing.
+    # One unique key per keyed world, Modern Day included -- it is gated on
+    # its key like every other world now. Worlds this seed left out are
+    # skipped: their regions hold no locations, so their key would unlock
+    # nothing.
     for key_item in KEY_ITEMS:
-        if key_item.name == MODERN_DAY_KEY:
-            continue
         if KEY_NAME_TO_WORLD[key_item.name] not in world.enabled_worlds:
             continue
         pool.append(world.create_item(key_item.name))

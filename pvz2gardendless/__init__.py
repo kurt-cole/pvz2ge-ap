@@ -1,10 +1,11 @@
 """
 PvZ2 Gardendless — Archipelago World
 
-Each world (except Ancient Egypt) is unlocked by finding its unique Key item.
-Modern Day unlocks once a configurable number of world goals are met:
-world keys, world completions (beat the final level), or world trophies.
-Victory = defeat the Modern Day Zomboss.
+Each world (except Ancient Egypt) is unlocked by finding its unique Key item,
+Modern Day included.
+Victory = complete worlds_required worlds, where completing one means beating
+its Zomboss, clearing its final level, or clearing its World Key level --
+whichever the goal_type option picks.
 """
 
 import logging
@@ -151,28 +152,25 @@ class PvZ2Web(WebWorld):
     # it actually means to pin; everything else falls back to its default.
     options_presets = {
         "Short": {
-            # Four worlds counting Ancient Egypt, so worlds_required's 3 is
-            # exactly the three keyed worlds the seed actually contains.
+            # Four worlds counting Ancient Egypt, plus Modern Day, so
+            # worlds_required's 3 is comfortably inside what the seed offers.
             "world_count":        4,
-            "goal_type":          "world_keys",
+            "goal_type":          "world_key",
             "worlds_required":    3,
-            "modern_day_victory": "world_key",
             "skip_tutorial":      True,
             "shopsanity":         False,
         },
         "Standard": {
             "world_count":        12,
-            "goal_type":          "world_keys",
+            "goal_type":          "world_key",
             "worlds_required":    7,
-            "modern_day_victory": "zomboss",
             "skip_tutorial":      True,
             "shopsanity":         False,
         },
         "Completionist": {
             "world_count":        12,
-            "goal_type":          "world_completions",
-            "worlds_required":    11,
-            "modern_day_victory": "completion",
+            "goal_type":          "completion",
+            "worlds_required":    12,
             "skip_tutorial":      False,
             "shopsanity":         True,
         },
@@ -182,9 +180,9 @@ class PvZ2Web(WebWorld):
 class PvZ2GardendlessWorld(World):
     """
     PvZ2 Gardendless — A web-based reimagining of Plants vs. Zombies 2.
-    Each world requires its unique Key item to access. Modern Day unlocks
-    once a configurable number of world goals are met. Victory = defeat the
-    Modern Day Zomboss.
+    Each world requires its unique Key item to access, Modern Day included.
+    Victory = complete a configurable number of worlds, where completing one
+    means its Zomboss, its final level or its World Key level.
     """
     game         = GAME_NAME
     settings_key = "pvz2gardendless"
@@ -251,9 +249,10 @@ class PvZ2GardendlessWorld(World):
         chosen.update(ALWAYS_ENABLED_WORLDS)
 
         # Ancient Egypt counts toward world_count (it is a world you play);
-        # Modern Day does not (it is the goal, always present, and not
-        # selectable). Top up from OPTIONAL_WORLDS, which is list-ordered, so
-        # the sample depends only on the slot's seeded RNG.
+        # Modern Day does not -- it is always present and not selectable, so
+        # counting it would silently cost the seed one of the worlds the
+        # player asked for. Top up from OPTIONAL_WORLDS, which is
+        # list-ordered, so the sample depends only on the slot's seeded RNG.
         short = self.options.world_count.value - len(chosen - {"Modern Day"})
         if short > 0:
             candidates = [w for w in OPTIONAL_WORLDS if w not in chosen]
@@ -294,19 +293,26 @@ class PvZ2GardendlessWorld(World):
     def fill_slot_data(self) -> Dict[str, Any]:
         goal_locs = goal_locations_for(self.options.goal_type.value,
                                        self.enabled_regions)
-        # Must match the clamp in rules.py's modern_day_rule, or the
-        # client's canAccessModernDay() enforces a stricter (unreachable)
-        # threshold than the generation-time access rule actually requires.
+        # Must match the clamp in rules.py's goal_rule, or the client holds
+        # the run to a stricter (unreachable) threshold than the
+        # generation-time rule actually requires.
         req = min(self.options.worlds_required.value, len(goal_locs))
         return {
             "death_link":      bool(self.options.death_link),
             "game_version":    "0.8.x",
             "goal_type":       self.options.goal_type.current_key,
             "worlds_required": req,
+            # One per world in this seed. Checking worlds_required of them is
+            # the win, and the client sends the StatusUpdate off this list.
             "goal_locations":  goal_locs,
             "victory_locations": VICTORY_LOC_NAMES,
-            # The single location whose check ends the run. The client used to
-            # hardcode the Zomboss; it now reports goal completion off this.
+            # Modern Day is gated on its key again, and the run no longer ends
+            # on one Modern Day level. A client built before 2026-08-23 does
+            # not know that: it would hold Modern Day shut behind the goal
+            # count and wait for the level below to end the run. So the flag is
+            # what a NEW client reads, and modern_day_victory stays in
+            # slot_data so an OLD client still has something to finish on.
+            "modern_day_keyed":   True,
             "modern_day_victory": MODERN_DAY_VICTORY_LOCS[
                 self.options.modern_day_victory.value],
             "skip_tutorial":     bool(self.options.skip_tutorial),

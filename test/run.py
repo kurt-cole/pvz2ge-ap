@@ -35,6 +35,7 @@ JS_SUITES = [
     ("currency", "currency_test.js", "restoring the balance the game wipes at boot"),
     ("commands", "command_test.js",  "chat commands driven from any AP client"),
     ("deathlink","deathlink_test.js","the AP panel's DeathLink switch, both directions"),
+    ("goal",     "goal_test.js",     "the win condition and what opens Modern Day"),
 ]
 
 

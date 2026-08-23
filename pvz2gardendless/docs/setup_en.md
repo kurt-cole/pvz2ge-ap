@@ -34,11 +34,11 @@ the Archipelago Launcher's **Generate Template Options** button.
 
 The options worth knowing about:
 
-- **Modern Day Goal Type** — whether Modern Day unlocks on world trophies, world completions, or
-  world keys. Note that world trophies caps out at 10, because Kongfu Temple has no trophy in the
-  game data.
-- **Worlds Required for Modern Day** — how many worlds must satisfy that condition.
-- **Modern Day Victory** — which Modern Day level ends the run.
+- **Goal Type** — what completing a world means: its **World Key** level, its **Zomboss**, or its
+  final level (**Completion**). Note that the zomboss goal cannot be satisfied by Kongfu Temple,
+  which has no Zomboss level in the game data.
+- **Worlds Required** — how many worlds must be completed to win. Every world in the seed counts,
+  Modern Day included. Asking for more than the seed contains clamps down to what it has.
 - **Skip Tutorial** — start on the world map and send the tutorial checks automatically. Also stops the game making you open the almanac, zen garden and store when each one unlocks.
 - **Shopsanity** — turn the store's one-time purchases into 39 extra checks.
 - **Trap Percentage** — how much of the filler pool becomes Lawn Mower Traps.

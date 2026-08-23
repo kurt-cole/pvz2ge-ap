@@ -65,16 +65,14 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
     # Keyed main worlds — rules.py requires each world's key on its entrance.
     # Only the enabled ones get an entrance, which is what rules.py keys off:
     # it walks the same list and would raise on a missing entrance otherwise.
+    # Modern Day is in here like any other keyed world as of 2026-08-23. It
+    # used to be connected separately and gated on the world-goal count, back
+    # when reaching it WAS the goal; the run now ends on completing worlds, so
+    # it is just a world with a key again.
     for w in KEYED_WORLDS:
-        if w == "Modern Day":
-            continue  # handled separately, see below
         if w not in world.enabled_worlds:
             continue
         tutorial.connect(regions[w], f"Enter {w}")
-
-    # Modern Day — unlocked purely by meeting the world-goal requirement
-    # (see rules.py); there is no Modern Day Key.
-    tutorial.connect(regions["Modern Day"], "Enter Modern Day")
 
     # Shop — the store button does not exist until egypt6 is cleared. That is
     # the game's own rule, in index.js's feature-unlock chain:
@@ -182,12 +180,16 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
         region.locations.append(
             PvZ2Location(player, loc_data.name, loc_data.code, region))
 
-    # Victory event in Modern Day. multiworld.completion_condition is set in
-    # rules.py, alongside the rest of this world's logic.
-    victory_loc = PvZ2Location(player, "Victory", None, regions["Modern Day"])
+    # Victory event. It hangs off Tutorial rather than off any one world,
+    # because winning is now "complete N worlds" and no single world is on
+    # that path -- rules.py puts the count on this location's access rule, and
+    # sets multiworld.completion_condition alongside the rest of the logic.
+    # In Modern Day until 2026-08-23, which only worked while Modern Day was
+    # the goal world.
+    victory_loc = PvZ2Location(player, "Victory", None, tutorial)
     victory_loc.place_locked_item(
         PvZ2Item("Victory", ItemClassification.progression, None, player))
-    regions["Modern Day"].locations.append(victory_loc)
+    tutorial.locations.append(victory_loc)
 
     for r in regions.values():
         multiworld.regions.append(r)

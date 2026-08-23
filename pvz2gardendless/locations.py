@@ -1009,10 +1009,18 @@ def active_locations(shopsanity: bool,
     return [l for l in ALL_LOCATIONS if keep(l)]
 
 
-# World Trophy locations — the mid-world milestone check in each world.
-# Kongfu Temple has no world trophy in the game data and is excluded.
-# Modern Day and Aerial Fortress are excluded (goal world / post-unlock).
-WORLD_TROPHY_LOCS = [
+# World Zomboss locations — the boss fight partway through each world. Every
+# world is built the same way: a Zomboss here and a "2.0" rematch at the final
+# level, which is what WORLD_COMPLETION_LOCS points at.
+#
+# Kongfu Temple has no Zomboss level in the game data and is excluded, so this
+# list is one shorter than the other two and a Kongfu seed cannot satisfy this
+# goal for that world. Aerial Fortress is excluded as well: it has neither a
+# Zomboss nor a World Key level, so it is playable but never counts.
+#
+# Called world trophies until 2026-08-23; the name is kept as an alias below
+# because it is what the option value 0 has always meant.
+WORLD_ZOMBOSS_LOCS = [
     "egypt25",    # egypt25
     "pirate25",   # pirate25
     "cowboy25",   # cowboy25
@@ -1023,10 +1031,14 @@ WORLD_TROPHY_LOCS = [
     "lostcity32", # lostcity32
     "neon32", # eighties32
     "dino32",     # dino32
-]  # 10 total (Kongfu excluded — no trophy in game data)
+    "modern_zomboss_01_egypt",  # Modern Day, the first of its ten rematches
+]  # 11 total (Kongfu excluded — no Zomboss level in the game data)
+
+# The pre-2026-08-23 name. Same list, so anything importing it is unaffected.
+WORLD_TROPHY_LOCS = WORLD_ZOMBOSS_LOCS
 
 # World Completion locations — the final regular level of each world.
-# Modern Day and Aerial Fortress are excluded.
+# Aerial Fortress is excluded: see WORLD_ZOMBOSS_LOCS.
 #
 # Neon Mixtape Tour used to reuse its trophy location here, on the belief that
 # the world "is shorter than the other worlds and its trophy check (eighties32)
@@ -1049,12 +1061,13 @@ WORLD_COMPLETION_LOCS = [
     "kongfu48",   # Kongfu Temple
     "neon42", # Neon Mixtape Tour
     "dino42",     # Jurassic Marsh
-]  # 11 total
+    "modern44",   # Modern Day
+]  # 12 total
 
 # World Key locations — the "World Key - X" check present in every world.
 # Not necessarily on the same stage per world, and not forced to contain
-# that world's own key item (fill is unconstrained). Modern Day and Aerial
-# Fortress are excluded (goal world / post-unlock), same set as WORLD_COMPLETION_LOCS.
+# that world's own key item (fill is unconstrained). Aerial Fortress is
+# excluded: see WORLD_ZOMBOSS_LOCS. Same set as WORLD_COMPLETION_LOCS.
 WORLD_KEY_LOCS = [
     "egypt8",
     "pirate8",
@@ -1067,22 +1080,26 @@ WORLD_KEY_LOCS = [
     "kongfu8",
     "neon16",
     "dino16",
-]  # 11 total
+    "modern16",   # Modern Day
+]  # 12 total
 
 
 def goal_locations_for(goal_type: int,
                        enabled_regions: Optional[Set[str]] = None) -> List[str]:
     """The goal locations for this goal type that this slot actually builds.
 
+    One per world: checking it is what "completing that world" means, and
+    worlds_required of them wins the run.
+
     enabled_regions drops the goals of worlds the seed left out. Their
     locations are never created, so rules.py would raise looking them up --
-    and a goal nobody can reach would lock Modern Day for good. Dropping them
-    is what shrinks worlds_required to fit: the caller clamps against the
-    length of this list.
+    and a goal nobody can reach would put the win out of reach for good.
+    Dropping them is what shrinks worlds_required to fit: the caller clamps
+    against the length of this list.
     """
-    if goal_type == GoalType.option_world_trophies:
-        locs = WORLD_TROPHY_LOCS
-    elif goal_type == GoalType.option_world_keys:
+    if goal_type == GoalType.option_zomboss:
+        locs = WORLD_ZOMBOSS_LOCS
+    elif goal_type == GoalType.option_world_key:
         locs = WORLD_KEY_LOCS
     else:
         locs = WORLD_COMPLETION_LOCS
@@ -1094,6 +1111,10 @@ def goal_locations_for(goal_type: int,
                  or LOC_NAME_TO_DATA[n].region in enabled_regions)]
 
 
+# Deprecated with the modern_day_victory option: the run no longer ends on one
+# specific Modern Day level. Kept because slot_data still carries it, which is
+# what lets a client built before 2026-08-23 play a seed rolled after it.
+#
 # How far into Modern Day the run has to go, keyed by ModernDayVictory.
 # Modern Day's real order is modern1..modern31, then the ten Zomboss fights,
 # then modern35..modern44 -- which is why there is no modern32/33/34 to point
@@ -1122,9 +1143,12 @@ def _group_by_region() -> Dict[str, Set[str]]:
 LOC_NAME_GROUPS: Dict[str, Set[str]] = _group_by_region()
 
 LOC_NAME_GROUPS.update({
-    # The three goal sets, so a player can hint the whole Modern Day
-    # requirement in one command whatever their goal_type is.
-    "World Trophies":    set(WORLD_TROPHY_LOCS),
+    # The three goal sets, so a player can hint the whole win condition in one
+    # command whatever their goal_type is.
+    "World Zomboss Levels": set(WORLD_ZOMBOSS_LOCS),
+    # The name this group had before the goal rework, kept so a hint someone
+    # learned still answers.
+    "World Trophies":    set(WORLD_ZOMBOSS_LOCS),
     "World Completions": set(WORLD_COMPLETION_LOCS),
     # Named "Levels" to stay distinct from the "World Keys" *item* group.
     "World Key Levels":  set(WORLD_KEY_LOCS),

@@ -61,7 +61,12 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # before it lifts. deathLinkActive, applyDeathLinkPref, sendDeathLink
          # and applyRemoteDeath themselves ARE copies and are checked.
          "deathlink_fn.js:reset", "deathlink_fn.js:enterLevel",
-         "deathlink_fn.js:setTimeout"}
+         "deathlink_fn.js:setTimeout",
+         # goal_fn.js harness: reset() rebuilds module scope between cases and
+         # check() records a check the way fireCheck does. isChecked,
+         # victoryLoc, canAccessModernDay, goalMet and maybeSendGoal ARE
+         # copies and are checked.
+         "goal_fn.js:reset", "goal_fn.js:check"}
 
 _ws = re.compile(r"\s+")
 norm = lambda s: _ws.sub(" ", s).strip()
