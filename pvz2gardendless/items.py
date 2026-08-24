@@ -553,8 +553,18 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
     # whose entrance rules.py never builds. Miss this and a small seed can trim
     # away the only plant that opens a world it enabled, which fill reports as
     # unreachable locations rather than as anything pointing back here.
-    _slot_prog = slot_progression_plants(world)
-    prog_plants = [p for p in PLANT_ITEMS if p.name in _slot_prog]
+    # Plants the player already starts with are not shipped again. Before this
+    # the starter was precollected AND left in the pool, so one check in every
+    # seed handed over a plant already owned; at starting_plants 10 that would
+    # be ten of them, which is a quarter of an Egypt-only seed.
+    #
+    # Dropping a progression plant here is safe precisely because the player
+    # HAS it: the rule naming it is already satisfied, so the floor below has
+    # nothing left to protect for that group.
+    _granted = set(getattr(world, "starting_plants", ()))
+    _slot_prog = slot_progression_plants(world) - _granted
+    prog_plants = [p for p in PLANT_ITEMS
+                   if p.name in _slot_prog and p.name not in _granted]
     room = pool_size - len(pool)
     if room < len(prog_plants):
         # The attacker group is the slot's OWN draw, not all 46: those are the
@@ -595,7 +605,8 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
     # attackers the draw passed over. They are ordinary plants: still worth
     # having, still in the pool when there is room, and the first thing to go
     # when there is not.
-    useful = [p for p in PLANT_ITEMS if p.name not in _slot_prog]
+    useful = [p for p in PLANT_ITEMS
+              if p.name not in _slot_prog and p.name not in _granted]
     room = pool_size - len(pool)
     if room < len(useful):
         # Cannot be negative: the progression-plant trim above already sized

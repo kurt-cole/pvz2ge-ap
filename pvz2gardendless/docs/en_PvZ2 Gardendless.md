@@ -12,6 +12,12 @@ game grants at the very start — are instead scattered across the multiworld, a
 let you use one until Archipelago actually sends it to you. You are guaranteed one cheap attacking
 plant at the start of the run so you always have something to place.
 
+**Starting Plants** raises that from 1 to as many as 10. The first is always the cheap attacker, so
+the guarantee holds whatever you set; the rest are drawn at random from the roster. Sun producers
+are never given away at any setting, because Ancient Egypt expects one from level 6 and a plant you
+are handed at generation time satisfies that before it is ever asked. Plants you start with are
+removed from the item pool rather than shipped twice.
+
 Each world other than Ancient Egypt is locked behind its own **Progressive <World>** unlock, so the
 order you see the game in is decided by the multiworld rather than by the map. For most worlds that
 unlock is the whole requirement: hold one and that world's opening is open.

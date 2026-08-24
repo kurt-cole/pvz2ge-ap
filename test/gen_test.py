@@ -15,6 +15,7 @@ from pvz2gardendless.options import (
     SkipTutorial, Shopsanity, TrapPercentage, ShuffleUpgrades,
     RandomizeConveyorPlants, EarlyWorldKeys, ShuffleZombies, IncludeSidePaths,
     IncludeDangerRooms,
+    StartingPlants,
 )
 from apstub import DeathLink
 
@@ -23,6 +24,8 @@ class Opts:
     def __init__(self, **kw):
         self.world_count = WorldCount(kw.get("world_count", WorldCount.default))
         self.enabled_worlds = EnabledWorlds(frozenset(kw.get("enabled_worlds", ())))
+        self.starting_plants = StartingPlants(
+            kw.get("starting_plants", StartingPlants.default))
         self.goal_type = GoalType(kw.get("goal_type", GoalType.default))
         self.worlds_required = WorldsRequired(kw.get("worlds_required", 7))
         self.modern_day_victory = ModernDayVictory(kw.get("modern_day_victory", 1))
@@ -98,8 +101,14 @@ def run(label, **kw):
     from pvz2gardendless.constants import (STARTER_PLANTS, SINGLE_USE_PLANTS,
                                            NON_DAMAGING_PLANTS,
                                            SUN_PRODUCER_PLANTS)
-    assert len(mw.precollected) == 1, "expected exactly one starting plant"
-    starter = mw.precollected[0].name
+    # As many starting plants as the option asked for, and exactly one of them
+    # is the lane-holding cheap attacker the guarantee is about. The others are
+    # extras and are checked in the starting_plants block further down.
+    assert len(mw.precollected) == w.options.starting_plants.value, \
+        f"{len(mw.precollected)} starting plants, expected {w.options.starting_plants.value}"
+    _starters = [i.name for i in mw.precollected if i.name in set(STARTER_PLANTS)]
+    assert _starters, "no lane-holding starting plant was granted"
+    starter = w.starting_plants[0] if len(mw.precollected) == 1 else _starters[0]
     # The sun producer is guaranteed STRUCTURALLY, not requested. Nothing is
     # nudged into sphere 1 any more: the Egypt gate starts at egypt3, so a sun
     # producer is the only way out of sphere 1 and fill has to place one there
@@ -118,10 +127,19 @@ def run(label, **kw):
     _pool_names = {i.name for i in mw.itempool}
     _suns = set(SUN_PRODUCER_PLANTS) & _pool_names
     assert _suns, "no sun producer in the pool, so the egypt6 gate is a wall"
-    _attackers = set(C.CHEAP_ATTACKER_PLANTS) & _pool_names
-    assert _attackers, "no cheap attacker in the pool, so the egypt6 gate is a wall"
+    # ...or in the player's hand. A granted plant is deliberately not shipped
+    # again, so the gate can legitimately be satisfied by the grant rather than
+    # by anything in the pool.
+    _attackers = (set(C.CHEAP_ATTACKER_PLANTS)
+                  & (_pool_names | {i.name for i in mw.precollected}))
+    assert _attackers, "no cheap attacker in the pool or in hand: the egypt6 gate is a wall"
+    # "Untrimmed" has to allow for the granted plants being held back, or a seed
+    # with starting_plants raised reads as trimmed when it is merely short by
+    # what the player already holds.
+    _held = {i.name for i in mw.precollected}
+    _want_all = len(_PLANTS_ALL) - len(_held & {p.name for p in _PLANTS_ALL})
     _trimmed = len([i for i in mw.itempool
-                    if i.name in {p.name for p in _PLANTS_ALL}]) < len(_PLANTS_ALL)
+                    if i.name in {p.name for p in _PLANTS_ALL}]) < _want_all
     if not _trimmed:
         assert set(SUN_PRODUCER_PLANTS) <= _pool_names, \
             f"sun producers missing from an untrimmed pool: {sorted(set(SUN_PRODUCER_PLANTS) - _pool_names)}"
@@ -1139,8 +1157,12 @@ for _label, _kw in (("1 world", dict(world_count=1)),
 
     # A seed with room keeps every progression plant; only a seed short of
     # room may drop any, and then only after every useful plant has gone.
-    _slot_prog = W.items.slot_progression_plants(_w)
-    _all_plants = {p.name for p in W.items.PLANT_ITEMS}
+    # Minus what the player was handed: a granted plant is deliberately kept
+    # out of the pool rather than shipped twice, so its absence is correct and
+    # not a trim. Its rule is satisfied by the grant itself.
+    _granted = set(_w.starting_plants)
+    _slot_prog = W.items.slot_progression_plants(_w) - _granted
+    _all_plants = {p.name for p in W.items.PLANT_ITEMS} - _granted
     _missing = _slot_prog - _nameset
     _useful_left = sum(1 for n in _names
                        if n in _all_plants and n not in _slot_prog)
@@ -1155,7 +1177,8 @@ for _label, _kw in (("1 world", dict(world_count=1)),
 # location count have drifted and every "every X is in the pool" claim above is
 # quietly weaker than it reads.
 _wfull, _ = run("trim: default seed", )
-assert W.items.slot_progression_plants(_wfull) <= {i.name for i in _wfull.multiworld.itempool}, \
+assert (W.items.slot_progression_plants(_wfull) - set(_wfull.starting_plants)) \
+    <= {i.name for i in _wfull.multiworld.itempool}, \
     "the default seed is trimming progression plants"
 
 print("small seeds trim useful plants, keeping every progression plant and key")
@@ -1311,6 +1334,106 @@ assert not _extra, \
     f"undrawn attackers satisfy the egypt6 gate, so the rule still names all 47: {_extra[:5]}"
 print(f"cheap attackers: 10 of {len(C.CHEAP_ATTACKER_PLANTS)} drawn per slot, "
       f"starter always among them, and only those 10 satisfy the egypt6 gate")
+
+# ── starting_plants ────────────────────────────────────────────────────────
+# 1 (the default) is the old guarantee and nothing more: one cheap attacker
+# that stays on the lawn. Above that the extras are random, EXCEPT that a sun
+# producer is never given away -- a plant handed over at generation time
+# satisfies every rule that asks for it before the rule is checked, and Egypt's
+# egypt6 checkpoint wants a sun producer plus a cheap attacker whose attacker
+# half is already free from the starter. Measured before the option was written:
+# a free sun producer takes sphere 1 from 9 to 12, or 17 with shopsanity.
+#
+# Range pinned as literals, not from the option: an expectation read out of the
+# class under test passes whatever the class says.
+assert StartingPlants.range_start == 1, StartingPlants.range_start
+assert StartingPlants.range_end == 10, StartingPlants.range_end
+assert StartingPlants.default == 1, StartingPlants.default
+
+_SUN = set(C.SUN_PRODUCER_PLANTS)
+for _n in (1, 2, 5, 10):
+    for _label, _kw in (("13 worlds", {}), ("Egypt only", dict(world_count=1))):
+        _wS, _ = run(f"start {_n}: {_label}", starting_plants=_n, **_kw)
+        _pre = [i.name for i in _wS.multiworld.precollected]
+        assert len(_pre) == _n, f"start {_n} {_label}: precollected {len(_pre)}, expected {_n}"
+        assert len(set(_pre)) == _n, f"start {_n} {_label}: duplicates in {_pre}"
+        assert _pre == sorted(_wS.starting_plants), \
+            f"start {_n} {_label}: starting_plants disagrees with precollected"
+
+        # The guarantee: exactly one is a lane-holding cheap attacker, whatever
+        # the count. It is what the whole mechanism exists for -- the client
+        # blocks every AP-managed plant until it arrives, so a run with nothing
+        # placeable is a run that cannot begin.
+        _atk = [p for p in _pre if p in set(C.STARTER_PLANTS)]
+        assert _atk, f"start {_n} {_label}: no lane-holding attacker granted"
+
+        # NEVER a sun producer, at any setting.
+        _sun_given = _SUN & set(_pre)
+        assert not _sun_given, \
+            f"start {_n} {_label}: a sun producer was granted outright: {sorted(_sun_given)}"
+
+        # Granted plants are not shipped again. Before this the starter was
+        # precollected AND left in the pool, wasting a check in every seed.
+        _pool = [i.name for i in _wS.multiworld.itempool]
+        _dupes = sorted(p for p in _pre if p in _pool)
+        assert not _dupes, f"start {_n} {_label}: granted plants also in the pool: {_dupes}"
+        assert len(_pool) == len(_wS.active_locations()), \
+            f"start {_n} {_label}: pool {len(_pool)} does not fill {len(_wS.active_locations())}"
+
+# ...and sphere 1 is untouched at every setting, which is the whole reason sun
+# producers are held back. Checked through the region graph, not by counting.
+from apstub import CollectionState as _CS2
+for _n in (1, 10):
+    _wS, _ = run(f"start {_n}: sphere", starting_plants=_n, shopsanity=1)
+    _st = _CS2(_wS.multiworld, W.items.ITEM_NAME_GROUPS)
+    for _i in _wS.multiworld.precollected: _st.collect(_i.name)
+    _st.sweep()
+    _s1 = len(_st.reachable_locations())
+    assert _s1 == 9, f"starting_plants={_n} makes sphere 1 {_s1}, expected 9"
+
+# ...and the count really is the option, not a constant: 10 must differ from 1.
+_w1, _ = run("start 1: draw", starting_plants=1)
+_w10, _ = run("start 10: draw", starting_plants=10)
+assert len(_w1.starting_plants) == 1 and len(_w10.starting_plants) == 10
+# THE SUN-PRODUCER EXCLUSION NEEDS A SWEEP, NOT A SEED. The extras are drawn at
+# random, so a single seed proves nothing: with 9 extras from ~130 plants a sun
+# producer turns up roughly one run in three, which means a fixed seed passes
+# about two thirds of the time with the exclusion DELETED. That is exactly how
+# this test first went green against a broken draw.
+#
+# 40 seeds at the maximum count puts the odds of missing a leak below 1e-6.
+_leaked_sun, _seeds_with_sun_in_pool = [], 0
+for _seed in range(40):
+    _mwX = MultiWorld(); _mwX.random.seed(_seed)
+    _wX = W.PvZ2GardendlessWorld(_mwX, 1)
+    _wX.options = Opts(starting_plants=10)
+    _wX.random.seed(_seed)
+    _wX.generate_early()
+    _got = set(_wX.starting_plants)
+    assert len(_got) == 10, f"seed {_seed}: {len(_got)} starting plants"
+    _leaked_sun += sorted(_SUN & _got)
+assert not _leaked_sun, \
+    f"a sun producer was granted in {len(_leaked_sun)} of 40 seeds: {_leaked_sun[:5]}"
+
+# ...and the sweep has to be capable of seeing one, or it proves nothing. With
+# the exclusion removed a sun producer appears in roughly a third of seeds, so
+# assert the draw really does range over the rest of the roster: across 40 seeds
+# the extras should cover far more than 10 distinct plants.
+_span = set()
+for _seed in range(40):
+    _mwX = MultiWorld(); _mwX.random.seed(_seed)
+    _wX = W.PvZ2GardendlessWorld(_mwX, 1)
+    _wX.options = Opts(starting_plants=10)
+    _wX.random.seed(_seed)
+    _wX.generate_early()
+    _span |= set(_wX.starting_plants)
+assert len(_span) > 60, \
+    f"the extras only ever draw {len(_span)} distinct plants; the sweep is too narrow to catch a leak"
+assert not (_SUN & _span), f"sun producers reachable by the draw: {sorted(_SUN & _span)}"
+
+print(f"starting_plants: 1..10, always one lane-holding attacker, granted plants "
+      f"dropped from the pool, sphere 1 stays 9, and no sun producer in "
+      f"{len(_span)} plants drawn across 40 seeds")
 
 # CLASSIFICATION IS TESTED THROUGH create_item, NOT THROUGH CollectionState.
 # apstub's collect() takes a bare NAME and ignores classification entirely, so

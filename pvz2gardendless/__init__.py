@@ -18,13 +18,14 @@ import settings
 from .constants import (
     ALWAYS_ENABLED_WORLDS, CHEAP_ATTACKER_PLANTS, EGYPT_SUN_CUT, GAME_NAME,
     LOGIC_ATTACKER_COUNT, OPTIONAL_WORLDS,
-    SELECTABLE_WORLDS, STARTER_PLANTS, WORLD_REGIONS, WORLD_STRETCHES,
+    SELECTABLE_WORLDS, STARTER_PLANTS, SUN_PRODUCER_PLANTS, WORLD_REGIONS,
+    WORLD_STRETCHES,
     progressive_item_name, progressive_need, stretch_suffixes,
 )
 from .options import PvZ2Options
 from .items import (
     FILLER_POOL, ITEM_NAME_GROUPS, ITEM_NAME_TO_ID, ITEM_NAME_TO_ITEM,
-    PLANT_NAMES, UPGRADE_ITEM_TO_CNS, PvZ2Item, create_item_pool,
+    PLANT_ITEMS, PLANT_NAMES, UPGRADE_ITEM_TO_CNS, PvZ2Item, create_item_pool,
     slot_progression_plants,
 )
 from .locations import (
@@ -217,6 +218,11 @@ class PvZ2GardendlessWorld(World):
     # satisfied by anything in the pool.
     logic_attackers: frozenset = frozenset()
 
+    # What generate_early handed the player. Declared here for the same reason:
+    # create_item_pool reads it to keep those plants out of the pool, and an
+    # empty default means "nothing granted" rather than an AttributeError.
+    starting_plants: list = []
+
     def generate_early(self) -> None:
         self.enabled_worlds  = self._choose_worlds()
         self.enabled_regions = {region for world in self.enabled_worlds
@@ -258,7 +264,33 @@ class PvZ2GardendlessWorld(World):
         self.logic_attackers = frozenset(
             [starter] + self.random.sample(_rest, LOGIC_ATTACKER_COUNT - 1))
 
-        self.multiworld.push_precollected(self.create_item(starter))
+        # Extra starting plants, when the option asks for them. The cheap
+        # attacker above is always the first, so the guarantee it exists for
+        # holds at every setting.
+        #
+        # SUN PRODUCERS ARE NEVER DRAWN. Anything handed over at generation time
+        # satisfies every rule that asks for it before the rule is ever checked,
+        # and Egypt's egypt6 checkpoint wants a sun producer and a cheap
+        # attacker -- the attacker half is already free from the starter, so a
+        # free sun producer would make the whole gate decorative. Measured: it
+        # takes sphere 1 from 9 to 12, or to 17 with shopsanity, by opening
+        # egypt6-8 plus the store and the Squash quest. Kurt's call, 2026-08-23.
+        #
+        # Everything else is fair game. A free Lily Pad or Jester answer does
+        # NOT move sphere 1 -- those worlds sit behind an unlock regardless --
+        # it only means that world opens on its unlock alone.
+        extras = []
+        want = self.options.starting_plants.value - 1
+        if want:
+            pool = [p.name for p in PLANT_ITEMS
+                    if p.name != starter and p.name not in set(SUN_PRODUCER_PLANTS)]
+            extras = self.random.sample(pool, min(want, len(pool)))
+
+        # Read by create_item_pool, which drops these from the pool. Sorted so
+        # the pool is built in a fixed order regardless of how the draw fell.
+        self.starting_plants = sorted([starter] + extras)
+        for name in self.starting_plants:
+            self.multiworld.push_precollected(self.create_item(name))
 
         # No sun producer is requested or granted here, and none needs to be.
         # It used to be nudged into sphere 1 with multiworld.early_items, which

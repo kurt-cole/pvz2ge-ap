@@ -48,6 +48,37 @@ class WorldCount(Range):
     default      = len(SELECTABLE_WORLDS)
 
 
+class StartingPlants(Range):
+    """
+    How many plants you begin the run with.
+
+    Every plant is normally taken away from you and scattered across the
+    multiworld, and the client blocks any of them until Archipelago sends it --
+    so without a guaranteed starting plant you would have nothing to place at
+    all. 1 (the default) is that guarantee and nothing more: one cheap attacker
+    that stays on the lawn and can kill a zombie.
+
+    Raise it and the extras are drawn at random from the rest of the roster.
+    The first plant is always the cheap attacker, so the guarantee holds
+    whatever you set this to.
+
+    Sun producers are never given away, and that is deliberate rather than an
+    oversight: Ancient Egypt expects one from level 6, and a plant you are
+    handed at generation time satisfies every rule that asks for it before the
+    rule is ever checked. Starting with one would open Egypt 6-8, the store and
+    the Squash quest immediately and make that requirement decorative. Finding
+    a sun producer stays part of the run at every setting.
+
+    Plants you start with are removed from the item pool rather than shipped
+    twice, so raising this does not fill the seed with checks that hand you
+    something you already own.
+    """
+    display_name = "Starting Plants"
+    range_start  = 1
+    range_end    = 10
+    default      = 1
+
+
 class EnabledWorlds(OptionSet):
     """
     Worlds this seed must include. Any world named here is always in.
@@ -404,6 +435,7 @@ class TrapPercentage(Range):
 class PvZ2Options(PerGameCommonOptions):
     world_count:      WorldCount
     enabled_worlds:   EnabledWorlds
+    starting_plants:  StartingPlants
     goal_type:        GoalType
     worlds_required:  WorldsRequired
     modern_day_victory: ModernDayVictory
