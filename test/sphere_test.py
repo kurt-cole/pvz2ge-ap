@@ -299,23 +299,17 @@ else:
     # Sphere 1 with side paths on is the number that regressed once: it was 27
     # with every world enabled, against 9 without them.
     #
-    # Exactly ONE path may be in sphere 1 now, and only because the game puts
-    # it there: Squash is revealed by egypt6, and since 2026-08-23 Ancient
-    # Egypt's opening runs to egypt8. Every other path hangs off a level behind
-    # a world key or a progressive unlock. Naming it rather than counting means
-    # a second path appearing here still fails.
-    _S1_ALLOWED = {"Squash Sidepath"}
+    # Not one path may be in sphere 1. The closest is Squash, revealed by
+    # egypt6 -- which is inside Egypt's opening stretch but past the egypt6
+    # checkpoint, so it costs a sun producer and an attacker like the levels
+    # around it.
     _s1 = {l.name for l in state_with(_mwS, _preS).reachable_locations()}
     _s1paths = sorted(_sp for _sp, _l in _locsS.items() if _l & _s1)
-    if set(_s1paths) - _S1_ALLOWED:
-        fail(f"side paths in sphere 1: {sorted(set(_s1paths) - _S1_ALLOWED)}")
-    elif _S1_ALLOWED - set(_s1paths):
-        fail(f"expected in sphere 1 but gated: {sorted(_S1_ALLOWED - set(_s1paths))} "
-             "-- if Egypt's opening moved, this is the test to re-derive")
+    if _s1paths:
+        fail(f"side paths in sphere 1: {_s1paths}")
     else:
-        ok(f"sphere 1 is {len(_s1)} locations; of the "
-           f"{sum(len(_l) for _l in _locsS.values())} side path checks only "
-           f"{sorted(_S1_ALLOWED)} is in it, which is where the game puts it")
+        ok(f"sphere 1 is {len(_s1)} locations and none of the "
+           f"{sum(len(_l) for _l in _locsS.values())} side path checks is in it")
 
     _allS = [i.name for i in _mwS.itempool if i.classification == IC.progression] + _preS
     _rallS = {l.name for l in state_with(_mwS, _allS).reachable_locations()}
@@ -514,7 +508,10 @@ _pre = [i.name for i in _mw.precollected]
 # wrong reason.
 _nosun_plants = [p for p in PROG_PLANTS if p not in SUN_PRODUCER_PLANTS]
 _p3, _p6 = _nosun_plants[:3], _nosun_plants[:6]
-_open_egypt = ['egypt1', 'egypt5', 'egypt6', 'egypt7', 'egypt8']
+_open_egypt = ['egypt1', 'egypt2', 'egypt3', 'egypt4', 'egypt5']
+# Behind the egypt6 checkpoint: a sun producer and an attacker, no unlock.
+_sun_egypt = ['egypt6', 'egypt7', 'egypt8']
+# Behind the first progressive unlock as well.
 _gated_egypt = ['egypt9', 'egypt10', 'egypt25']
 
 _no_sun = {l.name for l in state_with(_mw, _pre).reachable_locations()}
@@ -523,9 +520,24 @@ _with_sun = {l.name for l in
 
 _missing = [n for n in _open_egypt if n not in _no_sun]
 if _missing:
-    fail(f"egypt1-8 need more than the starting plant: {_missing}")
+    fail(f"egypt1-5 need more than the starting plant: {_missing}")
 else:
-    ok('egypt1-8 are playable with only the free starting plant')
+    ok('egypt1-5 are playable with only the free starting plant')
+
+# THE sun expectation: "by Egypt level 6 you should have a sun producer". It is
+# what makes a sun producer findable at the start of every run rather than
+# merely likely, so it is checked from both sides.
+_sun_leak = [n for n in _sun_egypt if n in _no_sun]
+_sun_shut = [n for n in _sun_egypt
+             if n not in {l.name for l in
+                          state_with(_mw, _pre + ['Sunflower']).reachable_locations()}]
+if _sun_leak:
+    fail(f"reachable with no sun producer, so the gate does not start at egypt6: {_sun_leak}")
+elif _sun_shut:
+    fail(f"a sun producer alone does not open egypt6-8: {_sun_shut} -- those are "
+         "still the opening and must not want an unlock")
+else:
+    ok(f'all {len(_sun_egypt)} of egypt6-8 need a sun producer, and want nothing else')
 
 _leaked = [n for n in _gated_egypt if n in _no_sun]
 if _leaked:
@@ -544,6 +556,8 @@ if any(n in _only_prog for n in _gated_egypt):
     fail('the unlock alone opened egypt9+, so the sun rule is gone')
 elif any(n in _only_sun for n in _gated_egypt):
     fail('a sun producer alone opened egypt9+, so the unlock is not required')
+elif not all(n in _only_sun for n in _sun_egypt):
+    fail('a sun producer alone should still open egypt6-8, which need no unlock')
 else:
     ok('egypt9+ needs the unlock AND a sun producer, not either on its own')
 
@@ -578,41 +592,27 @@ for _p in SUN_PRODUCER_PLANTS:
 else:
     ok(f'all {len(SUN_PRODUCER_PLANTS)} sun producers satisfy the gate')
 
-# ── the shop follows the game's own store unlock ────────────────────────────
-# index.js sets feature_store once egypt6 is cleared (the same chain gives coins
-# at tutorial4 and the zen garden at egypt5). egypt6 is inside Ancient Egypt's
-# opening as of 2026-08-23, so the store button really does exist in sphere 1
-# and regions.py hangs Shop off the opening to say exactly that.
-#
-# What must NOT be in sphere 1 is a card gated on a level that is not: the five
-# cards with no UnlockLevel are on the shelf from the moment the button is, and
-# the other 29 wait for their own level. Between egypt6 and egypt8 no gated card
-# unlocks, so the sphere-1 set is exactly the ungated five.
+# ── the shop opens with egypt6, not at the start ────────────────────────────
+# index.js only sets feature_store once egypt6 is cleared (the same chain gives
+# coins at tutorial4 and the zen garden at egypt5), so the store button does not
+# exist in sphere 1 and its checks cannot be there either. regions.py hangs Shop
+# off "Ancient Egypt Early", the stretch that starts at egypt6, to say exactly
+# that -- and that stretch wants a sun producer, so the cards do too.
 #
 # Built with shopsanity on, since with it off the region holds no locations and
 # the probe would pass vacuously -- the same trap the early_world_keys probe hit.
 _mws, _ws = build(shopsanity=1)
 _pres = [i.name for i in _mws.precollected]
 _shop_locs = [l.name for l in _ws.active_locations() if l.is_shop]
-_ungated = [n for n in _shop_locs
-            if C.SHOP_UNLOCK.get(n.split(': ', 1)[-1]) is None]
 if not _shop_locs:
     fail("shopsanity built no shop locations, so this proves nothing")
-elif not _ungated:
-    fail("no ungated shop cards, so the split below proves nothing")
 else:
     _start = {l.name for l in state_with(_mws, _pres).reachable_locations()}
-    _leak = sorted(set(n for n in _shop_locs if n in _start) - set(_ungated))
-    _absent = sorted(set(_ungated) - _start)
+    _leak = [n for n in _shop_locs if n in _start]
     if _leak:
-        fail(f"{len(_leak)} shop cards are in sphere 1 but are gated on a "
-             f"level that is not: {_leak[:3]}")
-    elif _absent:
-        fail(f"{len(_absent)} ungated shop cards are NOT in sphere 1, but the "
-             f"store button is: {_absent[:3]}")
+        fail(f"{len(_leak)} shop checks are in sphere 1, but the store opens at egypt6: {_leak[:3]}")
     else:
-        ok(f"of {len(_shop_locs)} shop checks exactly the {len(_ungated)} "
-           "ungated ones are in sphere 1, the rest behind their own level")
+        ok(f"all {len(_shop_locs)} shop checks are behind the egypt6 gate")
 
     # A sun producer opens the store BUTTON, which is all the Shop region
     # models. It puts exactly the ten cards with no UnlockLevel on sale; the
@@ -660,29 +660,30 @@ else:
     ok('nothing at all opens without a sun producer, whatever else is held, so '
        'fill must place one in sphere 1')
 
-# ...and no single item opens anything either, which is what makes the above a
-# two-item threshold rather than a wall: check that some pair does open it.
-_singles = sorted(
+# ...and nothing ELSE opens anything on its own, checked by brute force over
+# the whole pool rather than by spot-checking a key, because the claim is about
+# every item there is. A world key opens nothing without a sun producer; a
+# progressive unlock opens nothing without one either.
+_escapes = sorted(
     n for n in {i.name for i in _mw.itempool}
-    if len(state_with(_mw, _pre + [n]).reachable_locations()) > len(_no_sun)
+    if n not in SUN_PRODUCER_PLANTS
+    and len(state_with(_mw, _pre + [n]).reachable_locations()) > len(_no_sun)
 )
-if _singles:
-    fail(f'{len(_singles)} item(s) open locations on their own, so a stretch '
-         f'unlock or a key is not being asked for: {_singles[:6]}')
+if _escapes:
+    fail(f'{len(_escapes)} non-sun item(s) open locations on their own, so a sun '
+         f'producer is not forced into sphere 1: {_escapes[:6]}')
 else:
-    ok('no single item opens anything: leaving sphere 1 takes a sun producer '
-       'plus an unlock')
+    ok('no item other than a sun producer opens anything from sphere 1, so fill '
+       'must place one there')
 
-# ...and each sun producer really does work as that half of the pair, or the
-# gate is a wall for a seed that only offers one of the five.
+# ...and each sun producer on its own really does open it, or that is a wall.
+# On its own, with no unlock: egypt6-8 are still the opening.
 _stuck = [p for p in SUN_PRODUCER_PLANTS
-          if len(state_with(_mw, _pre + [p, _PROG_EGYPT] + _p3).reachable_locations())
-          <= len(_no_sun)]
+          if len(state_with(_mw, _pre + [p]).reachable_locations()) <= len(_no_sun)]
 if _stuck:
-    fail(f'sun producers that open nothing even with the unlock: {_stuck}')
+    fail(f'sun producers that open nothing: {_stuck}')
 else:
-    ok(f'each of the {len(SUN_PRODUCER_PLANTS)} sun producers opens sphere 1 '
-       'when paired with the first Ancient Egypt unlock')
+    ok(f'each of the {len(SUN_PRODUCER_PLANTS)} sun producers opens sphere 1 on its own')
 
 # ── the win condition is a COUNT of completed worlds ────────────────────────
 # Victory hangs off Tutorial, which is sphere 1, so nothing but its own access

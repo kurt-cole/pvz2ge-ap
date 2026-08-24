@@ -12,8 +12,8 @@ from worlds.generic.Rules import add_rule, forbid_items_for_player, set_rule
 
 from .constants import (
     CHEAP_ATTACKER_PLANTS, DANGER_ROOM_UNLOCK, EGYPT_STRETCH_PLANTS,
-    KEYED_WORLDS, SIDE_PATH_REGIONS, STRETCH_PLANTS, SUN_PRODUCER_PLANTS,
-    WORLD_STRETCHES, progressive_item_name,
+    KEYED_WORLDS, PROGRESSIVE_NEED, SIDE_PATH_REGIONS, STRETCH_PLANTS,
+    SUN_PRODUCER_PLANTS, progressive_item_name, stretch_suffixes,
     WORLD_ENTRY_PLANTS, is_early_region,
 )
 from .locations import SHOP_LOC_UNLOCK, goal_locations_for
@@ -26,13 +26,20 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     player = world.player
     multiworld = world.multiworld
 
-    # Ancient Egypt's stretches want a sun producer and a cheap attacker on
-    # top of the progressive unlock every world's stretches need. Egypt is the
-    # one world with no key, so without this its later stretches would be
-    # gated on the unlock alone -- and since its opening is the whole of
-    # sphere 1, that would leave nothing in the seed forcing a sun producer to
-    # be findable at the start. Every exit from sphere 1 has to want one: the
-    # other worlds' entrances do (below), and these are the rest.
+    # "By Egypt level 6 you are expected to have a sun producing plant",
+    # expressed as a rule -- and the reason a sun producer is guaranteed to be
+    # findable at the start of a run rather than merely likely. egypt1-5 are
+    # what sphere 1 is made of; every way out of it wants a sun producer, and
+    # for Egypt itself that way out is egypt6.
+    #
+    # It applies to all three of Egypt's later stretches, not only the first:
+    # a rule that stopped applying deeper in would let a player who lost their
+    # sun producer walk into egypt26.
+    #
+    # Egypt has no key, so without this its stretches would be gated on the
+    # progressive unlock alone. The other worlds' entrances carry the same
+    # requirement (below); between them, nothing in any seed opens without a
+    # sun producer.
     def has_sun_and_attacker(state):
         return (state.has_any(SUN_PRODUCER_PLANTS, player) and
                 state.has_any(CHEAP_ATTACKER_PLANTS, player))
@@ -44,6 +51,9 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         except KeyError:
             continue  # Egypt too small to cut, which no real seed produces
         set_rule(entrance, has_sun_and_attacker)
+        # " Early" (egypt6-8) asks for the sun producer and nothing else: it is
+        # still the opening, and a plant count there would gate the levels a
+        # seed opens with.
         if need:
             add_rule(entrance,
                      lambda state, n=need: state.has_group("Plants", player, n))
@@ -124,7 +134,10 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # them: a stretch wants both.
     for w in sorted(world.enabled_worlds):
         item_name = progressive_item_name(w)
-        for count, suffix in enumerate(WORLD_STRETCHES[1:], start=1):
+        for suffix in stretch_suffixes(w)[1:]:
+            count = PROGRESSIVE_NEED[suffix]
+            if not count:
+                continue  # Ancient Egypt's " Early": a checkpoint, not a stretch
             try:
                 entrance = multiworld.get_entrance(f"Enter {w}{suffix}", player)
             except KeyError:

@@ -30,7 +30,9 @@ class WorldCount(Range):
 
     Every world in the seed also ships two Progressive <World> items, which
     open its later stretches -- and the game enforces those, so a level you
-    have not unlocked cannot be started.
+    have not unlocked cannot be started. Ancient Egypt has no key and gets the
+    same two, plus its own requirement: a sun producer and a cheap attacker
+    from Egypt level 6, which is logic only.
 
     12 (the default) is every world, which is how this game has always
     generated.

@@ -11,9 +11,9 @@ from typing import Dict, TYPE_CHECKING
 from BaseClasses import Region, ItemClassification
 
 from .constants import (
-    ALL_WORLD_REGIONS, KEYED_WORLDS, SHOP_REGION, SIDE_PATH_CHAIN,
-    SIDE_PATH_REGIONS, SIDE_PATH_UNLOCK, SIDE_PATH_WORLD, WORLD_REGIONS,
-    WORLD_STRETCHES,
+    ALL_WORLD_REGIONS, EGYPT_SUN_CUT, KEYED_WORLDS, SHOP_REGION,
+    SIDE_PATH_CHAIN, SIDE_PATH_REGIONS, SIDE_PATH_UNLOCK, SIDE_PATH_WORLD,
+    WORLD_REGIONS, WORLD_STRETCHES, stretch_suffixes,
 )
 from .items import PvZ2Item
 from .locations import ALL_REGIONS, PvZ2Location, world_stretches
@@ -65,21 +65,6 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
             continue
         tutorial.connect(regions[w], f"Enter {w}")
 
-    # Shop — the store button does not exist until egypt6 is cleared. That is
-    # the game's own rule, in index.js's feature-unlock chain:
-    #   feature_coins   <- tutorial4      feature_powerup/zengarden <- egypt5
-    #   feature_store   <- egypt6
-    # egypt6 is the first level of Mid1, so hanging the shop off that region
-    # gives it exactly the game's condition and inherits Mid1's sun-and-attacker
-    # rule for free. It used to hang off Tutorial, which put all 39 shopsanity
-    # checks in sphere 1 and made a shopsanity seed open five times as wide as
-    # the same seed without it.
-    #
-    # Affordability is still not modelled: currency accrues from play and from
-    # Archipelago's own coin/gem items, so a purchase is a matter of grinding
-    # rather than a logic gate.
-    regions["Ancient Egypt"].connect(regions[SHOP_REGION])
-
     active = world.active_locations()
 
     # Cut each world into sequential stretches, so holding its key opens the
@@ -98,15 +83,39 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
         # nothing, and nothing in the game is that small today.
         if len(w_locs) < len(WORLD_STRETCHES) * 2:
             continue
+        suffixes = stretch_suffixes(w)
         prev = regions[w]
-        for suffix in WORLD_STRETCHES[1:]:
+        for suffix in suffixes[1:]:
             name = w + suffix
             regions[name] = Region(name, player, multiworld)
             prev.connect(regions[name], f"Enter {name}")
             prev = regions[name]
-        for idx, part in enumerate(world_stretches(l.name for l in w_locs)):
+        parts = world_stretches((l.name for l in w_locs),
+                                EGYPT_SUN_CUT if w == "Ancient Egypt" else None)
+        for idx, part in enumerate(parts):
             for loc_name in part:
-                stretch_of[loc_name] = regions[w + WORLD_STRETCHES[idx]]
+                stretch_of[loc_name] = regions[w + suffixes[idx]]
+
+    # Shop — the store button does not exist until egypt6 is cleared. That is
+    # the game's own rule, in index.js's feature-unlock chain:
+    #   feature_coins   <- tutorial4      feature_powerup/zengarden <- egypt5
+    #   feature_store   <- egypt6
+    # Hung off the stretch holding egypt6, which is Egypt's " Early" -- so the
+    # store button exists exactly when the game says it does, and inherits that
+    # stretch's sun-and-attacker rule for free. It used to hang off Tutorial,
+    # which put all 39 shopsanity checks in sphere 1 and made a shopsanity seed
+    # open five times as wide as the same seed without it.
+    #
+    # Connected after the stretch cut rather than before it, because that is
+    # what creates the region.
+    #
+    # Affordability is still not modelled: currency accrues from play and from
+    # Archipelago's own coin/gem items, so a purchase is a matter of grinding
+    # rather than a logic gate.
+    # egypt6 is where the game sets feature_store, and egypt6 is in Egypt's
+    # " Early" stretch -- so the store button exists exactly when that stretch
+    # is reachable, sun producer and all.
+    regions["Ancient Egypt Early"].connect(regions[SHOP_REGION])
 
     # Side paths hang off the stretch holding the level that reveals them, not
     # off Tutorial and not off their world's opening. A side path is entered

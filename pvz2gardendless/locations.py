@@ -1149,8 +1149,14 @@ def _stretch_cuts(numbered: List[str]) -> tuple:
             _play_order(numbered[min(2 * third, len(numbered)) - 1]))
 
 
-def world_stretches(names: Iterable[str]) -> List[List[str]]:
-    """Split one world's location names into its three stretches, in order.
+def world_stretches(names: Iterable[str],
+                    early_cut: Optional[str] = None) -> List[List[str]]:
+    """Split one world's location names into its stretches, in order.
+
+    early_cut splits the OPENING in two, which only Ancient Egypt does: it
+    returns four lists instead of three, and the extra one is still part of
+    the opening as far as the progressive unlocks are concerned (see
+    constants.PROGRESSIVE_NEED). Everything else is unchanged.
 
     A Danger Room has no place in the level numbering, so it goes wherever the
     level that unlocks it went -- ordered just after it, since that level has
@@ -1162,8 +1168,9 @@ def world_stretches(names: Iterable[str]) -> List[List[str]]:
     numbered = sorted((n for n in names if _play_order(n) is not None),
                       key=_play_order)
     if not numbered:
-        return [names, [], []]
+        return [names, [], [], []] if early_cut else [names, [], []]
     c1, c2 = _stretch_cuts(numbered)
+    c0 = _play_order(early_cut) if early_cut else None
 
     def order_of(name: str) -> float:
         o = _play_order(name)
@@ -1173,10 +1180,14 @@ def world_stretches(names: Iterable[str]) -> List[List[str]]:
         u = _play_order(unlock) if unlock else None
         return u + 0.5 if u is not None else -1.0
 
-    out: List[List[str]] = [[], [], []]
+    out: List[List[str]] = [[], [], []] if c0 is None else [[], [], [], []]
     for name in sorted(names, key=order_of):
         o = order_of(name)
-        out[0 if o <= c1 else 1 if o <= c2 else 2].append(name)
+        if c0 is None:
+            idx = 0 if o <= c1 else 1 if o <= c2 else 2
+        else:
+            idx = 0 if o <= c0 else 1 if o <= c1 else 2 if o <= c2 else 3
+        out[idx].append(name)
     return out
 
 

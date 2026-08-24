@@ -474,33 +474,33 @@ assert not _bad, f"side paths on the wrong region: {_bad}"
 # the world-map scenes rather than from this code: Egypt's map labels the Squash
 # branch "6-1" and the Appease-mint branch "29-1".
 #
-# Since 2026-08-23 Egypt's opening runs to egypt8, its World Key level, so
-# egypt6 really is in the opening and the Squash quest really is available from
-# the start -- that is what the game does, and Egypt's opening is what sphere 1
-# is made of. Appease-mint at egypt29 lands in the last stretch, two
-# progressive unlocks deep, which is the case that matters: a path left on the
-# opening would put anything fill hid there in sphere 1.
-for _sp, _want_region in (("Squash Sidepath", "Ancient Egypt"),
+# Egypt's opening runs to egypt8, its World Key level, and is cut again at
+# egypt6 -- the level the game expects a sun producer by. So Squash lands in
+# " Early": no unlock needed, but a sun producer and an attacker are, which
+# keeps it out of sphere 1. Appease-mint at egypt29 lands in the last stretch,
+# two progressive unlocks deep.
+for _sp, _want_region in (("Squash Sidepath", "Ancient Egypt Early"),
                           ("Appease-mint Sidepath", "Ancient Egypt Late")):
     _got = _pmw.get_entrance(f"Enter {_sp}", 1).parent_region.name
     assert _got == _want_region, f"{_sp} hangs off {_got}, want {_want_region}"
-# 21 of the 30 land past their world's opening stretch. The other 9 branch
-# early enough that the opening really is where the game puts them: egypt6,
-# beach7, lostcity8, dark4, dark9, modern10, iceage12, neon14, beach14 -- all
-# at or before their world's World Key level, which is where every world's
-# opening now ends. A different number here means the stretch cut moved, not
-# that the gating got better or worse.
+# 22 of the 30 land past their world's opening stretch. The other 8 branch
+# early enough that the opening really is where the game puts them: beach7,
+# lostcity8, dark4, dark9, modern10, iceage12, neon14, beach14 -- all at or
+# before their world's World Key level, which is where every world's opening
+# ends. A different number here means the stretch cut moved, not that the
+# gating got better or worse.
 #
 # It was 19 until 2026-08-23, when the cuts became each world's own milestones
-# rather than even thirds. Two paths moved deeper (kongfu12 and future13 are
-# past those worlds' key levels) and Squash moved the other way: egypt6 is
-# inside Egypt's opening, which is what the game does.
-# Appease-mint 2 is one of the 21: iceage25 is deep in Frostbite Caves, which
-# is the whole reason it was split off the Egypt half.
+# rather than even thirds; two paths moved deeper (kongfu12 and future13 are
+# past those worlds' key levels). Squash is the 22nd and is a different case:
+# egypt6 is inside Egypt's opening, but the opening is cut again there for the
+# sun expectation, so it hangs off "Ancient Egypt Early" rather than the world
+# region. Appease-mint 2 is in there too: iceage25 is deep in Frostbite Caves,
+# which is the whole reason it was split off the Egypt half.
 _deep = [_sp for _sp in C.SIDE_PATH_UNLOCK
          if _pmw.get_entrance(f"Enter {_sp}", 1).parent_region.name
          not in C.ALL_WORLD_REGIONS]
-assert len(_deep) == 21, f"{len(_deep)} side paths are gated past a world opening, want 21"
+assert len(_deep) == 22, f"{len(_deep)} side paths are gated past a world opening, want 22"
 print(f"all {len(C.SIDE_PATH_UNLOCK)} branch side paths hang off their unlock level's "
       f"region ({len(_deep)} past the world opening), Hot Date chains off Sweet Potato")
 
@@ -809,7 +809,11 @@ print(f"include_danger_rooms removes exactly the {len(_buildable_rooms)} rooms "
 # same input as well: same worlds, same active locations, same order.
 _gw, _gsd = run("world gates", include_side_paths=1, include_danger_rooms=1)
 _gates = _gsd["world_gates"]
-_STRETCH_OF_SUFFIX = {"": 0, " Mid": 1, " Late": 2}
+# Ancient Egypt's " Early" (egypt6-8) is a checkpoint inside the opening: it
+# costs a sun producer, which is logic only, and NO progressive unlock -- so
+# the client must leave those levels startable. That is the row worth reading
+# here: logic 0, client 0, for a region that is nonetheless gated.
+_STRETCH_OF_SUFFIX = {"": 0, " Early": 0, " Mid": 1, " Late": 2}
 
 _gate_need = {}
 for _w, _g in _gates.items():
@@ -823,7 +827,7 @@ for _r in _gw.multiworld.regions:
     for _world in C.WORLD_REGIONS:
         if _r.name == _world:
             _suffix = ""
-        elif _r.name.startswith(_world) and _r.name[len(_world):] in (" Mid", " Late"):
+        elif _r.name.startswith(_world) and _r.name[len(_world):] in _STRETCH_OF_SUFFIX:
             _suffix = _r.name[len(_world):]
         if _suffix is not None:
             break
@@ -865,9 +869,9 @@ assert "egypt9" in _egypt["stretches"][0] and "egypt25" in _egypt["stretches"][0
     "Ancient Egypt's middle stretch should run egypt9-25"
 assert "egypt26" in _egypt["stretches"][1] and "egypt35" in _egypt["stretches"][1], \
     "Ancient Egypt's last stretch should run egypt26-35"
-assert "egypt8" not in _gate_need and "egypt1" not in _gate_need, \
-    "Ancient Egypt's opening runs to egypt8 and is ungated"
-print("Ancient Egypt is 1-8 / 9-25 / 26-35, its World Key level and its Zomboss")
+assert not any(_n in _gate_need for _n in ("egypt1", "egypt5", "egypt6", "egypt8")),     "Ancient Egypt's opening runs to egypt8 and needs no unlock"
+print("Ancient Egypt is 1-5 / 6-8 / 9-25 / 26-35: the sun expectation, its "
+      "World Key level and its Zomboss")
 
 # ── each world's completion goal is really its last level ───────────────────
 # Every world is built the same way: a Zomboss at the mid-world trophy

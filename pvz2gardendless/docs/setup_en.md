@@ -43,7 +43,9 @@ The options worth knowing about:
 Worlds also open in three stages: a World Key gets you to that world's World Key level, and the two
 **Progressive &lt;World&gt;** items carry you to its Zomboss and then to its final level. The game
 refuses to start a level you have not unlocked, so these are not just a logic gate. Ancient Egypt has
-no key but has the same two unlocks: 1-8 are free, 9-25 want the first, 26-35 want the second.
+no key but has the same two unlocks: 1-8 need none, 9-25 want the first, 26-35 want the second. Egypt
+also expects a sun producer from level 6, the same place the game unlocks the store — that one is a
+logic requirement, not an unlock, so it never stops you starting a level.
 - **Skip Tutorial** — start on the world map and send the tutorial checks automatically. Also stops the game making you open the almanac, zen garden and store when each one unlocks.
 - **Shopsanity** — turn the store's one-time purchases into 39 extra checks.
 - **Trap Percentage** — how much of the filler pool becomes Lawn Mower Traps.

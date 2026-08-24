@@ -16,8 +16,9 @@ from BaseClasses import Item, ItemClassification, Tutorial
 import settings
 
 from .constants import (
-    ALWAYS_ENABLED_WORLDS, GAME_NAME, OPTIONAL_WORLDS, SELECTABLE_WORLDS,
-    STARTER_PLANTS, WORLD_REGIONS, WORLD_STRETCHES, progressive_item_name,
+    ALWAYS_ENABLED_WORLDS, EGYPT_SUN_CUT, GAME_NAME, OPTIONAL_WORLDS,
+    PROGRESSIVE_NEED, SELECTABLE_WORLDS, STARTER_PLANTS, WORLD_REGIONS,
+    WORLD_STRETCHES, progressive_item_name, stretch_suffixes,
 )
 from .options import PvZ2Options
 from .items import (
@@ -313,11 +314,24 @@ class PvZ2GardendlessWorld(World):
                      if l.region in WORLD_REGIONS[world_name]]
             if len(names) < len(WORLD_STRETCHES) * 2:
                 continue  # too small to cut, same test regions.py makes
-            stretches = world_stretches(names)
+            parts = world_stretches(
+                names, EGYPT_SUN_CUT if world_name == "Ancient Egypt" else None)
+            suffixes = stretch_suffixes(world_name)
+            # Keyed by how many unlocks the stretch needs, so a stretch that
+            # needs none is simply absent. Ancient Egypt's " Early" (egypt6-8)
+            # is the case that matters: it is gated on a sun producer, which is
+            # logic only, and the client must not refuse to start those levels.
+            locked = {}
+            for idx, part in enumerate(parts):
+                need = PROGRESSIVE_NEED[suffixes[idx]]
+                if need:
+                    locked.setdefault(need, []).extend(part)
+            if not locked:
+                continue
             gates[world_name] = {
                 "item": progressive_item_name(world_name),
-                # index 0 is the opening and is deliberately dropped
-                "stretches": stretches[1:],
+                "stretches": [locked.get(n, []) for n in
+                              range(1, max(locked) + 1)],
             }
         return gates
 

@@ -40,7 +40,11 @@ levels the goal is measured on, so working toward the goal is always working tow
 Two worlds have no such milestone to use. Kongfu Temple has no Zomboss level, so its second cut is
 the midpoint of what is left; Aerial Fortress has neither, so it is cut into equal thirds.
 
-Ancient Egypt has no key, so its first eight levels are where every run starts.
+Ancient Egypt has no key, so its opening is where every run starts — and it has one extra gate the
+other worlds do not: **from Egypt level 6 you need a sun producer and a cheap attacker.** That is the
+game's own expectation (it is where the store unlocks too), and it is a logic requirement rather than
+an unlock, so nothing blocks you from starting those levels. Egypt 1-5 need nothing at all, which is
+what every seed opens with.
 
 ## Do I have to play all thirteen worlds?
 
