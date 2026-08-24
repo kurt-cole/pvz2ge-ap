@@ -390,7 +390,9 @@ mw, w = build()
 # needs a sun producer now (rules.py), which is not listed there, so it is
 # carried in the baseline here -- these cases are about the per-world plants.
 for world_name, groups in WORLD_ENTRY_PLANTS.items():
-    key = f"{world_name} Key"
+    # The first of a world's progressive unlocks is what opens it; it replaced
+    # that world's Key item, so this is the same probe with a different name.
+    key = C.progressive_item_name(world_name)
     base = [i.name for i in mw.precollected] + [key, "Sunflower"]
 
     def opens(extra):
@@ -398,9 +400,9 @@ for world_name, groups in WORLD_ENTRY_PLANTS.items():
         return any(r.name == world_name for r in st._reachable)
 
     if opens([]):
-        fail(f"{world_name} opens on its key alone, ignoring its plant requirements")
+        fail(f"{world_name} opens on its unlock alone, ignoring its plant requirements")
     else:
-        ok(f"{world_name}: key + sun is not enough ({len(groups)} more requirement(s))")
+        ok(f"{world_name}: unlock + sun is not enough ({len(groups)} more requirement(s))")
 
     # each requirement must be independently necessary
     for i, g in enumerate(groups):
@@ -423,7 +425,7 @@ for world_name, groups in WORLD_ENTRY_PLANTS.items():
 
 # Dark Ages spelled out, since it is the first world to carry two asks
 mw, w = build()
-base = [i.name for i in mw.precollected] + ["Dark Ages Key"]
+base = [i.name for i in mw.precollected] + ["Progressive Dark Ages"]
 cases = [
     ("key only", []),
     ("key + sun producer", ["Sunflower"]),
@@ -448,7 +450,7 @@ for label, extra in cases:
 # Frostbite Caves wants a standing heat source, not just any fire plant.
 from pvz2gardendless.constants import FIRE_AURA_PLANTS
 mw, w = build()
-fbase = [i.name for i in mw.precollected] + ["Frostbite Caves Key", "Sunflower"]
+fbase = [i.name for i in mw.precollected] + ["Progressive Frostbite Caves", "Sunflower"]
 print()
 for label, extra, want in [
     ("key only", [], False),
@@ -473,7 +475,7 @@ def sphere_shape(**kw):
     mw, w = build(**kw)
     pre = [i.name for i in mw.precollected]
     out = []
-    for extra in ([], ["Sunflower"], [f"{n} Key" for n in
+    for extra in ([], ["Sunflower"], [C.progressive_item_name(n) for n in
                        ("Pirate Seas", "Wild West", "Dark Ages")]):
         st = state_with(mw, pre + extra)
         out.append(sorted(l.name for l in st.reachable_locations()))
@@ -689,23 +691,25 @@ else:
 # Victory hangs off Tutorial, which is sphere 1, so nothing but its own access
 # rule keeps it out of reach. "Nothing -> everything" would prove none of that:
 # both ends agree with a rule that ignores the count entirely. So this walks
-# the world keys in one at a time and checks Victory flips exactly where the
+# the world unlocks in one at a time and checks Victory flips exactly where the
 # number of reachable goal locations crosses worlds_required, at every step.
+#
+# World by world rather than shuffled, because a world's goal location sits at
+# the end of one of its stretches: a completion goal needs all three of that
+# world's unlocks, so a ladder that spread them thin would finish no world at
+# all and pass without ever crossing the threshold.
 for _gt, _gtname in ((2, "world_key"), (1, "completion"), (0, "zomboss")):
     _mwv, _wv = build(goal_type=_gt, worlds_required=4)
     _sdv = _wv.fill_slot_data()
     _req = _sdv["worlds_required"]
     _goals = _sdv["goal_locations"]
     _base = [i.name for i in _mwv.precollected] + PROG_PLANTS
-    _keys = sorted(i.name for i in _mwv.itempool if i.name.endswith(" Key"))
-    # Both stretch unlocks for every world come along from the start: a world's
-    # Zomboss and its final level sit behind them, so a ladder of keys alone
-    # could never reach those two goal types and would pass vacuously.
-    _unlocks = [i.name for i in _mwv.itempool if i.name.startswith("Progressive ")]
+    _unlock_names = {C.progressive_item_name(_w) for _w in C.WORLD_REGIONS}
+    _unlocks = sorted(i.name for i in _mwv.itempool if i.name in _unlock_names)
     _wrong, _seen_both = [], set()
-    for _i in range(len(_keys) + 1):
+    for _i in range(len(_unlocks) + 1):
         _reached = {l.name for l in
-                    state_with(_mwv, _base + _unlocks + _keys[:_i]).reachable_locations()}
+                    state_with(_mwv, _base + _unlocks[:_i]).reachable_locations()}
         _done = sum(1 for _g in _goals if _g in _reached)
         _vic = "Victory" in _reached
         _seen_both.add(_vic)
@@ -713,7 +717,7 @@ for _gt, _gtname in ((2, "world_key"), (1, "completion"), (0, "zomboss")):
             _wrong.append((_i, _done, _vic))
     if _wrong:
         fail(f"goal_type={_gtname}: Victory disagrees with the goal count at "
-             f"{len(_wrong)} step(s) (keys, goals reached, victory): {_wrong[:4]}")
+             f"{len(_wrong)} step(s) (unlocks, goals reached, victory): {_wrong[:4]}")
     elif _seen_both != {False, True}:
         # Both sides of the threshold have to actually occur, or the loop
         # agreed with the rule without ever testing it.
@@ -721,7 +725,7 @@ for _gt, _gtname in ((2, "world_key"), (1, "completion"), (0, "zomboss")):
              f"(victory was always {_seen_both})")
     else:
         ok(f"goal_type={_gtname}: Victory opens exactly when {_req} worlds are "
-           f"complete, over {len(_keys) + 1} key states")
+           f"complete, over {len(_unlocks) + 1} unlock states")
 
 # ...and the count has to be the thing that moves it, not the world count. A
 # seed asking for more worlds than it contains clamps to what it has, so the

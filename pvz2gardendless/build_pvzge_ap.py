@@ -2652,18 +2652,30 @@ window.electron = electron;
       if(!cp.worldProps[wid]) cp.worldProps[wid] = {};
       cp.worldProps[wid].unlocked = true;
     };
+    // Seeds generated before 2026-08-23 hand out World Key items; those still
+    // open their world, so those seeds stay playable.
     (st.receivedKeys||[]).forEach(keyName => {
       const worldIds = WORLD_KEY_MAP[keyName];
       // Modern Day is skipped here and settled below instead, because what
-      // opens it depends on the seed: its own key on a keyed seed, the goal
-      // count on an older one. Opening it from the key on an older seed would
-      // be wrong twice over -- the goal is not met, and fireCheck() would then
-      // withhold its location checks, so the progress made there would
+      // opens it depends on the seed. Opening it from the key on an older seed
+      // would be wrong twice over -- the goal is not met, and fireCheck() would
+      // then withhold its location checks, so the progress made there would
       // silently not count.
       if(worldIds) worldIds.forEach(wid => { if(wid !== W.modern) unlockWorld(wid); });
     });
-    // True when the key is held (keyed seed) or the goal count is met (older
-    // seed) -- one call answers both.
+    // A seed generated after that opens a world with the FIRST of its
+    // progressive unlocks -- the item that replaced its key. WORLD_KEY_MAP is
+    // reused as the world-name -> game-world-id table it has always been; the
+    // key items it is keyed by are simply no longer in any pool.
+    for(const world of Object.keys(st.worldGates || {})){
+      if(world === 'Modern Day') continue;      // settled below, both models
+      const g = st.worldGates[world] || {};
+      if(!g.item || unlocksHeld(g.item) < 1) continue;
+      const worldIds = WORLD_KEY_MAP[world + ' Key'];
+      if(worldIds) worldIds.forEach(wid => unlockWorld(wid));
+    }
+    // True when the world is unlocked (either model) or, on an older seed, the
+    // goal count is met -- one call answers all of them.
     if(canAccessModernDay()) unlockWorld(W.modern);
 
     // 5. Set forceLevel based on tutorial progress
@@ -3877,8 +3889,14 @@ window.electron = electron;
   const MODERN_DAY_KEY_ITEM = 'Modern Day Key';
 
   function canAccessModernDay(){
-    if(st.modernKeyed)
+    if(st.modernKeyed){
+      // The first Progressive Modern Day opens it, and a Modern Day Key still
+      // does on a seed that shipped one -- the key stopped being generated on
+      // 2026-08-23 but a run started before then keeps working.
+      const gate = (st.worldGates || {})['Modern Day'];
+      if(gate && gate.item && unlocksHeld(gate.item) >= 1) return true;
       return (st.receivedKeys||[]).indexOf(MODERN_DAY_KEY_ITEM) >= 0;
+    }
     const goalLocs  = st.goalLocs || [];
     const worldsReq = st.worldsReq || 7;
     if(!goalLocs.length) return false; // slot_data not in yet; don't open early

@@ -17,8 +17,8 @@ import settings
 
 from .constants import (
     ALWAYS_ENABLED_WORLDS, EGYPT_SUN_CUT, GAME_NAME, OPTIONAL_WORLDS,
-    PROGRESSIVE_NEED, SELECTABLE_WORLDS, STARTER_PLANTS, WORLD_REGIONS,
-    WORLD_STRETCHES, progressive_item_name, stretch_suffixes,
+    SELECTABLE_WORLDS, STARTER_PLANTS, WORLD_REGIONS, WORLD_STRETCHES,
+    progressive_item_name, progressive_need, stretch_suffixes,
 )
 from .options import PvZ2Options
 from .items import (
@@ -295,11 +295,16 @@ class PvZ2GardendlessWorld(World):
     def world_gates(self) -> Dict[str, Any]:
         """The stretch each world's levels are behind, for the client.
 
-        The client enforces these: a level in stretch 1 cannot be STARTED
-        until one copy of that world's progressive unlock has arrived, and
-        stretch 2 until two have. Only the locked stretches are sent -- a
-        world's opening needs nothing, so listing it would be 200 location
-        names saying "allowed".
+        The client enforces these: a level cannot be STARTED until enough
+        copies of that world's progressive unlock have arrived. For most
+        worlds that is one for the opening (the unlock that replaced the World
+        Key), two for the middle stretch and three for the last; Ancient Egypt
+        opens with none and so wants one and two.
+
+        Only stretches that need an unlock are sent. Ancient Egypt's opening
+        and its egypt6 checkpoint need none -- that checkpoint is a logic
+        requirement, a sun producer, and the client must not refuse to start
+        those levels over it.
 
         Location names rather than game level ids, because the client already
         holds that map (LOC_LEVELS) and duplicating it here is exactly the kind
@@ -323,7 +328,7 @@ class PvZ2GardendlessWorld(World):
             # logic only, and the client must not refuse to start those levels.
             locked = {}
             for idx, part in enumerate(parts):
-                need = PROGRESSIVE_NEED[suffixes[idx]]
+                need = progressive_need(world_name, suffixes[idx])
                 if need:
                     locked.setdefault(need, []).extend(part)
             if not locked:

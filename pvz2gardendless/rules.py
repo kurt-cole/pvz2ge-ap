@@ -12,9 +12,9 @@ from worlds.generic.Rules import add_rule, forbid_items_for_player, set_rule
 
 from .constants import (
     CHEAP_ATTACKER_PLANTS, DANGER_ROOM_UNLOCK, EGYPT_STRETCH_PLANTS,
-    KEYED_WORLDS, PROGRESSIVE_NEED, SIDE_PATH_REGIONS, STRETCH_PLANTS,
-    SUN_PRODUCER_PLANTS, progressive_item_name, stretch_suffixes,
-    WORLD_ENTRY_PLANTS, is_early_region,
+    KEYED_WORLDS, SIDE_PATH_REGIONS, STRETCH_PLANTS, SUN_PRODUCER_PLANTS,
+    WORLD_ENTRY_PLANTS, WORLD_REGIONS, is_early_region, progressive_item_name,
+    progressive_need, stretch_suffixes,
 )
 from .locations import SHOP_LOC_UNLOCK, goal_locations_for
 
@@ -58,15 +58,20 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
             add_rule(entrance,
                      lambda state, n=need: state.has_group("Plants", player, n))
 
-    # Keyed main worlds — accessible once their key is held. Worlds this seed
-    # left out have no entrance to rule on (regions.py skips them) and no key
-    # in the pool, so they stay locked with nothing behind them.
+    # Keyed main worlds — accessible once the FIRST of that world's progressive
+    # unlocks is held. That item replaced the world's Key on 2026-08-23; the
+    # rule below is the same shape the key rule was, and the second and third
+    # copies open the world's later stretches further down.
+    #
+    # Worlds this seed left out have no entrance to rule on (regions.py skips
+    # them) and no unlocks in the pool, so they stay shut with nothing behind
+    # them.
     for w in KEYED_WORLDS:
         if w not in world.enabled_worlds:
             continue
-        key_name = f"{w} Key"
         set_rule(multiworld.get_entrance(f"Enter {w}", player),
-                 lambda state, k=key_name: state.has(k, player))
+                 lambda state, i=progressive_item_name(w),
+                 n=progressive_need(w, ""): state.has(i, player, n))
 
     # A few worlds need specific plants beyond their key. add_rule ANDs onto
     # the entrance's existing key requirement, which is equivalent to gating
@@ -135,7 +140,7 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     for w in sorted(world.enabled_worlds):
         item_name = progressive_item_name(w)
         for suffix in stretch_suffixes(w)[1:]:
-            count = PROGRESSIVE_NEED[suffix]
+            count = progressive_need(w, suffix)
             if not count:
                 continue  # Ancient Egypt's " Early": a checkpoint, not a stretch
             try:
@@ -223,7 +228,11 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # Modern Day: neither is in the pool, so naming them costs nothing and the
     # set does not have to track which worlds the seed kept.
     if world.options.early_world_keys:
-        key_names = {f"{w} Key" for w in KEYED_WORLDS}
+        # The unlocks are the keys now, and all three copies are held to the
+        # same rule: the second and third are what open a world's later
+        # stretches, so burying one behind another world's endgame is the same
+        # problem the option was written for.
+        key_names = {progressive_item_name(w) for w in WORLD_REGIONS}
 
         # A side path is named neither " Mid" nor " Late", so is_early_region
         # reads every one of them as early. That was true when they all hung

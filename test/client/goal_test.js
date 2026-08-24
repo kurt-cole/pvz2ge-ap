@@ -15,8 +15,13 @@ const ok = m => console.log('  ok    ' + m);
 const statuses = () => G.sent.filter(p => p.cmd === 'StatusUpdate');
 
 const GOALS = ['egypt8', 'pirate8', 'cowboy8', 'dark10', 'modern16'];
+// A keyed seed. worldGates is what a seed generated on or after 2026-08-23
+// sends: Modern Day is opened by the first Progressive Modern Day now, and
+// the receivedKeys path is only there for a run started before that.
+const MD_GATE = { 'Modern Day': { item: 'Progressive Modern Day', stretches: [[]] } };
 const keyed = extra => Object.assign(
-  { modernKeyed: true, goalLocs: GOALS, worldsReq: 3, receivedKeys: [] }, extra);
+  { modernKeyed: true, goalLocs: GOALS, worldsReq: 3, receivedKeys: [],
+    worldGates: MD_GATE }, extra);
 const legacy = extra => Object.assign(
   { goalLocs: GOALS.slice(0, 4), worldsReq: 3,
     victoryLoc: 'modern_zomboss_01_egypt' }, extra);
@@ -26,13 +31,20 @@ G.reset(keyed());
 if (G.canAccessModernDay()) fail('Modern Day opened with no key held');
 else ok('keyed seed: Modern Day stays shut without its key');
 
-G.reset(keyed({ receivedKeys: ['Pirate Seas Key', 'Dark Ages Key'] }));
-if (G.canAccessModernDay()) fail('another world\'s key opened Modern Day');
-else ok('keyed seed: someone else\'s key does not open it');
+G.reset(keyed({ receivedKeys: ['Pirate Seas Key', 'Dark Ages Key'],
+                worldUnlocks: { 'Progressive Pirate Seas': 3 } }));
+if (G.canAccessModernDay()) fail('another world\'s unlock opened Modern Day');
+else ok('keyed seed: another world\'s unlocks do not open it');
 
+G.reset(keyed({ worldUnlocks: { 'Progressive Modern Day': 1 } }));
+if (!G.canAccessModernDay()) fail('the first unlock did not open Modern Day');
+else ok('keyed seed: the first Progressive Modern Day opens it');
+
+// The World Key stopped being generated on 2026-08-23, but a run started
+// before then still has one in flight and has to keep working.
 G.reset(keyed({ receivedKeys: ['Modern Day Key'] }));
-if (!G.canAccessModernDay()) fail('the Modern Day Key did not open Modern Day');
-else ok('keyed seed: the Modern Day Key opens it');
+if (!G.canAccessModernDay()) fail('a Modern Day Key from an older seed no longer works');
+else ok('a Modern Day Key still opens it, for a seed that shipped one');
 
 // The goal count must have nothing to do with access any more, or a player who
 // completed the required worlds walks into Modern Day without its key.

@@ -9,7 +9,7 @@ from BaseClasses import Item, ItemClassification
 
 from .constants import (
     BASE_ID, GAME_NAME, KEY_NAME_TO_WORLD, KEYED_WORLDS, LOGIC_PLANTS,
-    WORLD_REGIONS, progressive_item_name,
+    WORLD_REGIONS, progressive_count, progressive_item_name,
     UPGRADE_GROUPS,
 )
 
@@ -197,11 +197,14 @@ if _unknown_logic_plants:
     raise ValueError("access rules reference plants that have no item: "
                      f"{sorted(_unknown_logic_plants)}")
 
-# World Key items — one per keyed world, Modern Day included: it is an
-# ordinary keyed world again as of 2026-08-23, now that the run ends on
-# completing worlds rather than on reaching it. Between those two versions the
-# entry existed but was filtered out of the pool, which is why the ID has
-# never moved.
+# World Key items — NO LONGER IN THE POOL as of 2026-08-23. A world is opened
+# by the first of its Progressive <World> unlocks instead, so "Wild West Key"
+# plus two Progressive Wild West became three Progressive Wild West: same
+# number of items, one fewer concept.
+#
+# The definitions stay because item IDs are positional and removing them would
+# renumber every item after them, and because the client still honours a key
+# from a seed generated before the change.
 MODERN_DAY_KEY = "Modern Day Key"
 KEY_ITEMS: List[PvZ2ItemData] = []
 _key_base = BASE_ID + len(PLANT_ITEMS)
@@ -305,7 +308,6 @@ TRAP_CYCLE = [t.name for t in TRAP_POOL]
 # APPENDED AFTER every other group on purpose: item IDs are positional, so a
 # new group anywhere else renumbers everything after it and breaks seeds
 # already generated.
-PROGRESSIVE_PER_WORLD = 2
 PROGRESSIVE_WORLD_ITEMS: List[PvZ2ItemData] = []
 _progressive_base = _currency_trap_base + len(CURRENCY_TRAP_ITEMS)
 for i, world_name in enumerate(WORLD_REGIONS):
@@ -338,10 +340,13 @@ if len(ITEM_NAME_TO_ITEM) != len(ALL_ITEMS):
 # except by their exact name.
 ITEM_NAME_GROUPS: Dict[str, set] = {
     "Plants":     {i.name for i in PLANT_ITEMS},
-    "World Keys": {i.name for i in KEY_ITEMS},
-    # "!hint World Unlocks" answers where every stretch unlock in the seed is.
-    # Two per world, so hinting one by name only ever finds the first.
+    # The unlocks ARE the keys now, so both names answer with them -- a player
+    # who learned "!hint World Keys" should not get an empty answer. The Key
+    # items themselves are still defined (item IDs are positional) but no seed
+    # generated after 2026-08-23 contains one.
     "World Unlocks": {i.name for i in PROGRESSIVE_WORLD_ITEMS},
+    "World Keys": {i.name for i in PROGRESSIVE_WORLD_ITEMS}
+                  | {i.name for i in KEY_ITEMS},
     "Traps":      {i.name for i in TRAP_POOL},
     "Upgrades":   {i.name for i in UPGRADE_ITEMS},
     "Costumes":   {i.name for i in COSTUME_ITEMS},
@@ -398,21 +403,16 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
     every player in the multiworld."""
     pool: List[Item] = []
 
-    # One unique key per keyed world, Modern Day included -- it is gated on
-    # its key like every other world now. Worlds this seed left out are
-    # skipped: their regions hold no locations, so their key would unlock
-    # nothing.
-    for key_item in KEY_ITEMS:
-        if KEY_NAME_TO_WORLD[key_item.name] not in world.enabled_worlds:
-            continue
-        pool.append(world.create_item(key_item.name))
-
-    # Two progressive unlocks per world in the seed, including Ancient Egypt.
-    # A world this seed left out is skipped for the same reason its key is:
-    # nothing behind it exists. These are what open a world's later stretches,
-    # in game as well as in logic, so they are as non-negotiable as the keys.
+    # The progressive unlocks: three per world, or two for Ancient Egypt, which
+    # needs none to enter. The first opens the world, the second and third its
+    # middle and last stretches. A world this seed left out is skipped --
+    # nothing behind it exists.
+    #
+    # These replaced the World Key items entirely, and they are enforced in
+    # game as well as in logic, so they are the least negotiable thing in the
+    # pool.
     for w in sorted(world.enabled_worlds):
-        for _ in range(PROGRESSIVE_PER_WORLD):
+        for _ in range(progressive_count(w)):
             pool.append(world.create_item(progressive_item_name(w)))
 
     # Every progression plant. These are named by access rules, so dropping one

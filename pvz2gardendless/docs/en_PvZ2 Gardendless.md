@@ -26,16 +26,17 @@ attacker, and its later stretches want a growing number of plants on top.
 Between those two rules, a sun producer is the only thing that can open up a fresh run — so one is
 always findable in the handful of levels you can reach at the start.
 
-Modern Day works exactly the same way: it has a key like every other world, and holding it (plus a sun
-producer) is what opens it.
+Modern Day works exactly the same way, and so does every other world: what you are looking for is
+three copies of **Progressive &lt;World&gt;**.
 
-A key opens the *start* of a world, not all of it. Each world is cut into three stretches, and the
-two later ones need **Progressive &lt;World&gt;** items — two per world, and the game enforces them: a
-level you have not unlocked cannot be started at all.
+The first opens the world — that is the item the old World Key became. The second and third open its
+later stretches, because a world is cut into three and you get them one at a time. **The game
+enforces this**: a level you have not unlocked cannot be started at all, not just cannot be logically
+required.
 
-The cuts are the world's own milestones. Ancient Egypt is 1-8, then 9-25, then 26-35: its World Key
-level, then its Zomboss, then the rest. Every world splits at the same two places, which are the same
-levels the goal is measured on, so working toward the goal is always working toward your next unlock.
+The cuts are the world's own milestones: its World Key level, then its Zomboss, then the rest. Every
+world splits at the same two places, which are the same levels the goal is measured on, so working
+toward the goal is always working toward your next unlock.
 
 Two worlds have no such milestone to use. Kongfu Temple has no Zomboss level, so its second cut is
 the midpoint of what is left; Aerial Fortress has neither, so it is cut into equal thirds.
@@ -137,7 +138,9 @@ unlocks it is, matching the game.
 - **Plants** — the full roster. A handful are required by logic: Lily Pad for Big Wave Beach,
   Perfume-shroom for Jurassic Marsh, and Hot Potato, Pepper-pult or Fire Peashooter for Frostbite
   Caves.
-- **World Keys** — one per locked world.
+- **Progressive World Unlocks** — three per world (two for Ancient Egypt, which needs none to enter).
+  The first opens the world, the second and third its middle and last stretches. `!hint World
+  Unlocks` answers where all of them are.
 - **Upgrades** — the fourteen permanent ones, with **Shuffle Upgrades** on. Nine of them are normally
   level rewards and five are store purchases; with the option on, clearing that level or making that
   purchase still sends the check, but the upgrade itself goes into the multiworld and only takes

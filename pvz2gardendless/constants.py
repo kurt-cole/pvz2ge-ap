@@ -77,10 +77,29 @@ def stretch_suffixes(world: str):
     return EGYPT_STRETCHES if world == "Ancient Egypt" else WORLD_STRETCHES
 
 
-# How many progressive world unlocks a stretch needs. Ancient Egypt's " Early"
-# is a checkpoint inside the opening, not a stretch you unlock, so it needs
-# none -- which is why this is a table rather than "position in the tuple".
-PROGRESSIVE_NEED = {"": 0, " Early": 0, " Mid": 1, " Late": 2}
+# How many progressive world unlocks a stretch needs.
+#
+# For most worlds the FIRST unlock is what opens the world at all -- it
+# replaced that world's Key item on 2026-08-23, so "Wild West Key" plus two
+# Progressive Wild West became three Progressive Wild West. Ancient Egypt needs
+# no unlock to enter (it is where a run starts) and so has two rather than
+# three, and its " Early" checkpoint at egypt6 is a logic gate rather than an
+# unlock. That is why this is a table per world shape and not "position in the
+# tuple".
+_PROGRESSIVE_NEED_KEYED = {"": 1, " Mid": 2, " Late": 3}
+_PROGRESSIVE_NEED_EGYPT = {"": 0, " Early": 0, " Mid": 1, " Late": 2}
+
+
+def progressive_need(world: str, suffix: str) -> int:
+    """How many of this world's unlocks the given stretch needs."""
+    table = (_PROGRESSIVE_NEED_EGYPT if world == "Ancient Egypt"
+             else _PROGRESSIVE_NEED_KEYED)
+    return table[suffix]
+
+
+def progressive_count(world: str) -> int:
+    """How many copies of this world's unlock the pool ships."""
+    return max(progressive_need(world, s) for s in stretch_suffixes(world))
 
 # Ancient Egypt's own stretches. It is cut by the same code as every other
 # world, but its gates are different: it has no key, so its later stretches ask

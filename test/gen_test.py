@@ -53,12 +53,15 @@ def run(label, **kw):
 
     locs = w.active_locations()
     keys = [i.name for i in mw.itempool if i.name.endswith(" Key")]
+    unlocks = [i.name for i in mw.itempool if i.name.startswith("Progressive ")
+               and i.name[len("Progressive "):] in C.WORLD_REGIONS]
     built = {r.name for r in mw.regions}
     dead = {r for r in C.ALL_WORLD_REGIONS if r not in w.enabled_regions}
 
     print(f"\n=== {label} ===")
     print(f"  worlds({len(w.enabled_worlds)}): {sorted(w.enabled_worlds)}")
-    print(f"  locations={len(locs)}  itempool={len(mw.itempool)}  keys={len(keys)}")
+    print(f"  locations={len(locs)}  itempool={len(mw.itempool)}  "
+          f"keys={len(keys)}  unlocks={len(unlocks)}")
     print(f"  goal_type={sd['goal_type']} worlds_required={sd['worlds_required']}"
           f" goal_locations={len(sd['goal_locations'])}")
     assert len(locs) == len(mw.itempool), "pool must exactly fill locations"
@@ -66,12 +69,26 @@ def run(label, **kw):
     # every location built lands in a region that exists
     for loc in locs:
         assert loc.region in built, f"{loc.name} -> missing region {loc.region}"
-    # no key for a disabled world
-    for k in keys:
-        assert C.KEY_NAME_TO_WORLD[k] in w.enabled_worlds, f"stray key {k}"
-    # Modern Day is a keyed world again, so its key ships like any other.
-    # It was filtered out of the pool while reaching Modern Day WAS the goal.
-    assert "Modern Day Key" in keys, "Modern Day must ship a key"
+    # World Keys are gone from the pool entirely: the first of a world's
+    # progressive unlocks is what opens it now. The item definitions stay so
+    # item IDs do not move, which is why this checks the POOL and not the
+    # tables.
+    assert not keys, f"World Key items are still being placed: {keys}"
+
+    # Three unlocks per world, or two for Ancient Egypt, which needs none to
+    # enter. Counted per world rather than in total, so a world shipping the
+    # wrong number cannot be hidden by another shipping one too many.
+    from collections import Counter
+    _by_world = Counter(u[len("Progressive "):] for u in unlocks)
+    assert set(_by_world) == set(w.enabled_worlds), (
+        f"unlocks for worlds not in the seed: {sorted(set(_by_world) - w.enabled_worlds)}, "
+        f"missing: {sorted(w.enabled_worlds - set(_by_world))}")
+    for _wn, _n in _by_world.items():
+        assert _n == C.progressive_count(_wn), \
+            f"{_wn} ships {_n} unlocks, expected {C.progressive_count(_wn)}"
+    assert _by_world["Ancient Egypt"] == 2, "Ancient Egypt needs no unlock to enter"
+    if "Wild West" in w.enabled_worlds:
+        assert _by_world["Wild West"] == 3, "a keyed world ships three unlocks"
     # goal locations all exist and are reachable-by-name
     for name in sd["goal_locations"]:
         mw.get_location(name, 1)
@@ -342,8 +359,7 @@ from pvz2gardendless.items import (PLANT_ITEMS, KEY_ITEMS, FILLER_ITEMS,
                                    TRAP_ITEMS, COSTUME_TRAP_ITEMS,
                                    CURRENCY_TRAP_ITEMS, TRAP_POOL,
                                    COIN_TRAP, GEM_TRAP,
-                                   PROGRESSIVE_WORLD_ITEMS,
-                                   PROGRESSIVE_PER_WORLD)
+                                   PROGRESSIVE_WORLD_ITEMS)
 BLOCKS = [
     ("plants+keys+filler+traps", PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS + TRAP_ITEMS),
     ("upgrades", UPGRADE_ITEMS),
@@ -556,14 +572,22 @@ assert not (_all_shop & {C.shop_location_name(_c) for _c in
 print(f"shop: {len(C.SHOP_UNLOCK)} of {len(C.SHOP_COMMODITIES)} cards gated on their "
       f"UnlockLevel, {len(_e1shop)} survive an Egypt-only seed")
 
-# Hint buckets. The point is that "!hint World Keys" answers where all of them
-# are in one command, so the group has to hold every key -- and the singular has
-# to resolve to the same set, since AP matches a group name exactly and a player
-# types whichever reads naturally.
-from pvz2gardendless.items import ITEM_NAME_GROUPS, ALL_ITEMS, KEY_ITEMS
+# Hint buckets. The point is that "!hint World Unlocks" answers where all of
+# them are in one command, so the group has to hold every unlock -- and the
+# singular has to resolve to the same set, since AP matches a group name
+# exactly and a player types whichever reads naturally.
+from pvz2gardendless.items import (ITEM_NAME_GROUPS, ALL_ITEMS, KEY_ITEMS,
+                                   PROGRESSIVE_WORLD_ITEMS)
 _keynames = {i.name for i in KEY_ITEMS}
-assert ITEM_NAME_GROUPS["World Keys"] == _keynames,     f"World Keys group is not the key items: {ITEM_NAME_GROUPS['World Keys'] ^ _keynames}"
+_unlocknames = {i.name for i in PROGRESSIVE_WORLD_ITEMS}
+assert ITEM_NAME_GROUPS["World Unlocks"] == _unlocknames,     f"World Unlocks group is not the unlock items: {ITEM_NAME_GROUPS['World Unlocks'] ^ _unlocknames}"
+# "World Keys" still answers, and answers with the unlocks: they ARE the keys
+# now, and a player who learned that hint should not get an empty result. The
+# Key items are in there too because they are still defined and a group may
+# not name a non-item.
+assert ITEM_NAME_GROUPS["World Keys"] == _unlocknames | _keynames,     f"World Keys group is not the unlocks plus the old keys: {ITEM_NAME_GROUPS['World Keys'] ^ (_unlocknames | _keynames)}"
 assert ITEM_NAME_GROUPS["World Key"] == ITEM_NAME_GROUPS["World Keys"],     "the singular alias does not match the plural"
+assert ITEM_NAME_GROUPS["World Unlock"] == ITEM_NAME_GROUPS["World Unlocks"],     "the singular alias does not match the plural"
 for _p, _sg in (("Plants", "Plant"), ("Traps", "Trap"), ("Upgrades", "Upgrade"),
                 ("Costumes", "Costume"), ("Coins", "Coin"), ("Gems", "Gem")):
     assert ITEM_NAME_GROUPS[_sg] == ITEM_NAME_GROUPS[_p], f"{_sg} does not match {_p}"
@@ -581,12 +605,14 @@ for _g, _members in ITEM_NAME_GROUPS.items():
 # "where are my coins" with the places that take them away is worse than
 # answering nothing.
 assert not (ITEM_NAME_GROUPS["Currency"] & ITEM_NAME_GROUPS["Traps"]),     "a currency trap leaked into the Currency group"
-# ...and a real seed's keys are all in the group, not just the static table.
+# ...and a real seed's unlocks are all in the group, not just the static table.
 _hw, _ = run("hint groups", shopsanity=1)
-_pool_keys = {i.name for i in _hw.multiworld.itempool if i.name.endswith(" Key")}
-assert _pool_keys <= ITEM_NAME_GROUPS["World Keys"],     f"keys in the pool but not the group: {sorted(_pool_keys - ITEM_NAME_GROUPS['World Keys'])}"
+_pool_unlocks = {i.name for i in _hw.multiworld.itempool
+                 if i.name in _unlocknames}
+assert _pool_unlocks <= ITEM_NAME_GROUPS["World Unlocks"],     f"unlocks in the pool but not the group: {sorted(_pool_unlocks - ITEM_NAME_GROUPS['World Unlocks'])}"
+assert not {i.name for i in _hw.multiworld.itempool if i.name.endswith(" Key")},     "a World Key reached a real seed's pool"
 print(f"hint groups: {len(ITEM_NAME_GROUPS)} buckets over {len(_allnames)} items, "
-      f"World Keys covers all {len(_pool_keys)} keys in the pool")
+      f"World Unlocks covers all {len(_pool_unlocks)} unlocks in the pool")
 
 # No goal or victory condition may depend on one, in any goal mode.
 for _gt in (0, 1, 2):
@@ -648,8 +674,9 @@ print("\nupgrade item IDs:", min(i.code for i in UPGRADE_ITEMS),
 print("\nALL CHECKS PASSED")
 
 # ── early_world_keys ────────────────────────────────────────────────────────
-# An ITEM rule, not an access rule: it must change where fill may put keys and
-# nothing else. Locations, pool size and logic all have to come out identical.
+# An ITEM rule, not an access rule: it must change where fill may put the world
+# unlocks and nothing else. Locations, pool size and logic all have to come out
+# identical.
 from pvz2gardendless.constants import is_early_region, KEYED_WORLDS
 from apstub import MultiWorld as _MW
 
@@ -659,10 +686,14 @@ def _key_placement(**kw):
     w = W.PvZ2GardendlessWorld(mw, 1)
     w.options = Opts(**kw)
     w.generate_early(); w.create_regions(); w.set_rules(); w.create_items()
-    # A synthetic key rather than one drawn from the pool: a 1-world seed has
-    # no keys in its pool at all, and `all()` over an empty set is vacuously
-    # true, which would silently pass the whole probe.
-    probe_key = w.create_item("Pirate Seas Key")
+    # A synthetic unlock rather than one drawn from the pool: a 1-world seed
+    # has none for that world at all, and `all()` over an empty set is
+    # vacuously true, which would silently pass the whole probe.
+    #
+    # The unlocks are what the option acts on now -- they replaced the World
+    # Key items -- so probing with a Key would test a rule that no longer
+    # applies to anything in the pool.
+    probe_key = w.create_item("Progressive Pirate Seas")
     allowed = denied = 0
     late_open = []
     for r in mw.regions:
@@ -686,19 +717,21 @@ print(f"\nearly_world_keys off: all {_allowed} locations accept keys")
 _mw, _allowed, _denied, _late = _key_placement(early_world_keys=1)
 assert not _late, f"late locations still accept keys: {_late[:5]}"
 assert _denied > 0, "option on forbade nothing"
-_keys_needed = sum(1 for i in _mw.itempool if i.name.endswith(" Key"))
+_unlock_names = {f"Progressive {_w}" for _w in C.WORLD_REGIONS}
+_keys_needed = sum(1 for i in _mw.itempool if i.name in _unlock_names)
 assert _allowed >= _keys_needed, \
-    f"only {_allowed} spots left for {_keys_needed} keys -- fill would fail"
+    f"only {_allowed} spots left for {_keys_needed} unlocks -- fill would fail"
 print(f"early_world_keys on:  {_allowed} legal spots, {_denied} closed off, "
-      f"{_keys_needed} keys to place")
+      f"{_keys_needed} unlocks to place")
 
-# Modern Day is the latest place in any seed, so it must refuse keys too.
+# Modern Day is 53 locations of endgame content, so it must refuse them too.
+_probe_unlocks = [i for i in _mw.itempool if i.name in _unlock_names]
+assert _probe_unlocks, "no unlocks in the pool, so this probe proves nothing"
 for _r in _mw.regions:
     if _r.name == "Modern Day":
         for _loc in _r.locations:
-            assert not all(_loc.item_rule(i) for i in _mw.itempool
-                           if i.name.endswith(" Key")), \
-                f"Modern Day location {_loc.name} accepts a key"
+            assert not all(_loc.item_rule(i) for i in _probe_unlocks), \
+                f"Modern Day location {_loc.name} accepts a world unlock"
 
 # The rule must not touch anything that is not a key.
 _plant = next(i for i in _mw.itempool if i.name == "Peashooter")
@@ -809,11 +842,13 @@ print(f"include_danger_rooms removes exactly the {len(_buildable_rooms)} rooms "
 # same input as well: same worlds, same active locations, same order.
 _gw, _gsd = run("world gates", include_side_paths=1, include_danger_rooms=1)
 _gates = _gsd["world_gates"]
-# Ancient Egypt's " Early" (egypt6-8) is a checkpoint inside the opening: it
-# costs a sun producer, which is logic only, and NO progressive unlock -- so
-# the client must leave those levels startable. That is the row worth reading
-# here: logic 0, client 0, for a region that is nonetheless gated.
-_STRETCH_OF_SUFFIX = {"": 0, " Early": 0, " Mid": 1, " Late": 2}
+# How many unlocks each stretch needs comes from constants, per world: a keyed
+# world's opening wants one (that is the unlock which replaced its World Key),
+# while Ancient Egypt's opening and its egypt6 checkpoint want none. That
+# checkpoint is the row worth reading here -- logic 0, client 0, for a region
+# that is nonetheless gated, because a sun producer is logic only and the
+# client must leave those levels startable.
+_SUFFIXES = ("", " Early", " Mid", " Late")
 
 _gate_need = {}
 for _w, _g in _gates.items():
@@ -823,17 +858,17 @@ for _w, _g in _gates.items():
 
 _mismatch, _unmapped = [], []
 for _r in _gw.multiworld.regions:
-    _suffix = None
+    _suffix = _owner = None
     for _world in C.WORLD_REGIONS:
         if _r.name == _world:
-            _suffix = ""
-        elif _r.name.startswith(_world) and _r.name[len(_world):] in _STRETCH_OF_SUFFIX:
-            _suffix = _r.name[len(_world):]
+            _suffix, _owner = "", _world
+        elif _r.name.startswith(_world) and _r.name[len(_world):] in _SUFFIXES:
+            _suffix, _owner = _r.name[len(_world):], _world
         if _suffix is not None:
             break
     if _suffix is None:
         continue  # not a world stretch: Tutorial, Shop, a side path
-    _want = _STRETCH_OF_SUFFIX[_suffix]
+    _want = C.progressive_need(_owner, _suffix)
     for _loc in _r.locations:
         _have = _gate_need.get(_loc.name, 0)
         if _have != _want:
@@ -852,12 +887,31 @@ assert not _unmapped, (
 
 # ...and the gates have to actually gate something, or all of the above passes
 # on an empty table.
-assert len(_gate_need) > 400, f"only {len(_gate_need)} gated locations, expected most of the seed"
+# Every level of every keyed world, which is most of the seed but not the side
+# paths, the Danger Room entrances' own regions or the tutorial.
+assert len(_gate_need) > 500, f"only {len(_gate_need)} gated locations, expected most of the seed"
 assert len(_gates) == 13, f"{len(_gates)} worlds have gates, expected 13"
 for _w, _g in _gates.items():
     assert _g["item"] == f"Progressive {_w}", f"{_w} gates on {_g['item']}"
-    assert len(_g["stretches"]) == 2, f"{_w} has {len(_g['stretches'])} locked stretches"
+    # A keyed world's whole level list is gated, in three bands; Ancient Egypt
+    # opens with nothing so it has two.
+    _want_bands = C.progressive_count(_w)
+    assert len(_g["stretches"]) == _want_bands, \
+        f"{_w} has {len(_g['stretches'])} locked stretches, expected {_want_bands}"
     assert all(_g["stretches"]), f"{_w} has an empty stretch"
+# Every level of a keyed world is gated -- its opening included, since entering
+# the world is itself an unlock now. What the client may start for free is
+# exactly: Ancient Egypt, the tutorial, and the side paths (which the game
+# gates behind the level that reveals them, so they need no help here).
+_placed = {l.name: r.name for r in _gw.multiworld.regions for l in r.locations}
+_free = sorted(n for n, r in _placed.items()
+               if n in _lvl and n not in _gate_need)
+_free_bad = [n for n in _free
+             if not (_placed[n].startswith("Ancient Egypt")
+                     or _placed[n] == "Tutorial"
+                     or _placed[n] in C.SIDE_PATH_REGIONS)]
+assert not _free_bad, \
+    f"levels in a keyed world are startable with no unlock: {_free_bad[:6]}"
 print(f"world_gates agrees with the region graph on all "
       f"{sum(len(l.locations) for l in _gw.multiworld.regions)} placed locations "
       f"({len(_gate_need)} gated across {len(_gates)} worlds)")

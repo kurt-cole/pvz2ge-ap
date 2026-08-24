@@ -26,13 +26,14 @@ class WorldCount(Range):
     number of worlds too.
 
     Locations in worlds that are left out are removed from the seed entirely,
-    along with their World Key items, so those worlds stay locked for good.
+    along with their unlock items, so those worlds stay locked for good.
 
-    Every world in the seed also ships two Progressive <World> items, which
-    open its later stretches -- and the game enforces those, so a level you
-    have not unlocked cannot be started. Ancient Egypt has no key and gets the
-    same two, plus its own requirement: a sun producer and a cheap attacker
-    from Egypt level 6, which is logic only.
+    Every world in the seed ships three Progressive <World> items: the first
+    opens the world, the second and third its middle and last stretches. The
+    game enforces them, so a level you have not unlocked cannot be started.
+    Ancient Egypt needs none to enter and so gets two, plus its own
+    requirement: a sun producer and a cheap attacker from Egypt level 6, which
+    is logic only.
 
     12 (the default) is every world, which is how this game has always
     generated.
@@ -344,22 +345,25 @@ class ShuffleZombies(Toggle):
 
 class EarlyWorldKeys(Toggle):
     """
-    Keep World Keys out of the later stretches of every world, so all of them
-    can be found in the front half of the run.
+    Keep the world unlocks out of the later stretches of every world, so all of
+    them can be found in the front half of the run.
 
-    Without this a key can be placed deep inside another world -- behind that
-    world's own key AND the plant count its middle stretch wants -- so the
-    chain to the last key runs long. A seed generated this way put the Pirate
-    Seas key inside Jurassic Marsh's middle stretch, which needed the Jurassic
-    Marsh key and a stack of plants first.
+    Without this an unlock can be placed deep inside another world -- behind
+    that world's own unlocks AND the plant count its middle stretch wants -- so
+    the chain to the last one runs long. A seed generated this way put the
+    Pirate Seas key inside Jurassic Marsh's middle stretch, which needed the
+    Jurassic Marsh key and a stack of plants first.
 
-    With it on, keys may only land in a world's opening stretch, the tutorial,
-    the store, or a side path if include_side_paths kept them. Opening a world needs only its
-    key (the plant-count gates are on the middle and late stretches), so keys
-    chain through world openings and stay shallow.
+    With it on, unlocks may only land in a world's opening stretch, the
+    tutorial, the store, or a side path if include_side_paths kept them.
+    Opening a world needs only its first unlock, so they chain through world
+    openings and stay shallow.
+
+    All three copies are held to this, not just the first: the second and third
+    are what open a world's later stretches, so burying one is the same problem.
 
     This does not make the run shorter. Every world still has to be played
-    through; the keys just stop hiding behind each other's endgames.
+    through; the unlocks just stop hiding behind each other's endgames.
 
     Off matches how seeds generated before this option existed behave.
     """

@@ -24,9 +24,19 @@ function victoryLoc(){ return st.victoryLoc || 'modern_zomboss_01_egypt'; }
 
 const MODERN_DAY_KEY_ITEM = 'Modern Day Key';
 
+function unlocksHeld(item){
+  return (st.worldUnlocks && st.worldUnlocks[item]) || 0;
+}
+
 function canAccessModernDay(){
-  if(st.modernKeyed)
+  if(st.modernKeyed){
+    // The first Progressive Modern Day opens it, and a Modern Day Key still
+    // does on a seed that shipped one -- the key stopped being generated on
+    // 2026-08-23 but a run started before then keeps working.
+    const gate = (st.worldGates || {})['Modern Day'];
+    if(gate && gate.item && unlocksHeld(gate.item) >= 1) return true;
     return (st.receivedKeys||[]).indexOf(MODERN_DAY_KEY_ITEM) >= 0;
+  }
   const goalLocs  = st.goalLocs || [];
   const worldsReq = st.worldsReq || 7;
   if(!goalLocs.length) return false; // slot_data not in yet; don't open early
