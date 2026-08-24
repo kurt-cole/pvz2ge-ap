@@ -666,6 +666,42 @@ _pool_unlocks = {i.name for i in _hw.multiworld.itempool
                  if i.name in _unlocknames}
 assert _pool_unlocks <= ITEM_NAME_GROUPS["World Unlocks"],     f"unlocks in the pool but not the group: {sorted(_pool_unlocks - ITEM_NAME_GROUPS['World Unlocks'])}"
 assert not {i.name for i in _hw.multiworld.itempool if i.name.endswith(" Key")},     "a World Key reached a real seed's pool"
+
+# THE SUN PLANTS GROUP. A sun producer is the one plant every seed needs and the
+# one plant never handed over -- starting_plants refuses to grant one, and
+# Ancient Egypt expects one from level 6 -- so it is worth asking about on its
+# own rather than through !hint Plants, which answers with any of 135.
+#
+# Pinned as the five names, sourced from SUN_PRODUCER_PLANTS in constants, so
+# the group cannot silently drift from the list the egypt6 gate actually reads.
+# Solar Tomato was dropped from that list once already.
+assert ITEM_NAME_GROUPS["Sun Plants"] == set(C.SUN_PRODUCER_PLANTS), \
+    f"Sun Plants is {sorted(ITEM_NAME_GROUPS['Sun Plants'])}, not the gate's list"
+assert len(ITEM_NAME_GROUPS["Sun Plants"]) == 5, \
+    f"{len(ITEM_NAME_GROUPS['Sun Plants'])} sun plants, expected 5"
+
+# ...and it is strictly narrower than Plants, or it answers nothing new.
+assert ITEM_NAME_GROUPS["Sun Plants"] < ITEM_NAME_GROUPS["Plants"], \
+    "Sun Plants is not a subset of Plants"
+
+# Every spelling a player is likely to type resolves to the same group. AP
+# matches a group name EXACTLY; a near miss falls through to fuzzy-matching a
+# single item and hints one plant instead of the group, which looks like it
+# worked.
+for _alias in ("Sun Plant", "Sun", "Sun Producers", "Sun Producer", "Sunflowers"):
+    assert ITEM_NAME_GROUPS.get(_alias) == ITEM_NAME_GROUPS["Sun Plants"], \
+        f"!hint {_alias} does not resolve to the Sun Plants group"
+
+# ...and every one of them is in a real seed's pool, or the hint has nothing to
+# point at. The floor keeps at least one in even the smallest seed; a default
+# seed keeps all five.
+_sw, _ = run("hint groups: sun", shopsanity=1)
+_sun_pool = ITEM_NAME_GROUPS["Sun Plants"] & {i.name for i in _sw.multiworld.itempool}
+assert _sun_pool == ITEM_NAME_GROUPS["Sun Plants"], \
+    f"sun plants missing from a default seed's pool: {sorted(ITEM_NAME_GROUPS['Sun Plants'] - _sun_pool)}"
+_sw1, _ = run("hint groups: sun, one world", world_count=1)
+assert ITEM_NAME_GROUPS["Sun Plants"] & {i.name for i in _sw1.multiworld.itempool}, \
+    "an Egypt-only seed has no sun plant to hint"
 print(f"hint groups: {len(ITEM_NAME_GROUPS)} buckets over {len(_allnames)} items, "
       f"World Unlocks covers all {len(_pool_unlocks)} unlocks in the pool")
 

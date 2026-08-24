@@ -423,6 +423,16 @@ if len(ITEM_NAME_TO_ITEM) != len(ALL_ITEMS):
 # except by their exact name.
 ITEM_NAME_GROUPS: Dict[str, set] = {
     "Plants":     {i.name for i in PLANT_ITEMS},
+    # The five sun producers, as their own group. Worth hinting for on its own:
+    # a sun producer is the one plant every seed needs and the one plant that is
+    # never handed over -- starting_plants refuses to grant one, and Ancient
+    # Egypt expects one from level 6 -- so "where is my sun" is a real question
+    # a player will have, and !hint Plants answers it with any of 135.
+    #
+    # The list is SUN_PRODUCER_PLANTS itself rather than a copy, so a plant
+    # added to or dropped from the gate moves here with it. Solar Tomato was
+    # dropped from that list once already.
+    "Sun Plants": set(SUN_PRODUCER_PLANTS),
     # The unlocks ARE the keys now, so both names answer with them -- a player
     # who learned "!hint World Keys" should not get an empty answer. The Key
     # items themselves are still defined (item IDs are positional) but no seed
@@ -452,8 +462,15 @@ for _plural, _singular in (
     ("Plants", "Plant"), ("World Keys", "World Key"), ("Traps", "Trap"),
     ("Upgrades", "Upgrade"), ("Costumes", "Costume"), ("Coins", "Coin"),
     ("Gems", "Gem"), ("World Unlocks", "World Unlock"),
+    ("Sun Plants", "Sun Plant"),
 ):
     ITEM_NAME_GROUPS[_singular] = ITEM_NAME_GROUPS[_plural]
+
+# ...and the names a player is likely to reach for instead. AP resolves a group
+# only on an exact match, so a near miss falls through to fuzzy-matching a
+# single ITEM and hints one plant rather than the group.
+for _alias in ("Sun", "Sun Producers", "Sun Producer", "Sunflowers"):
+    ITEM_NAME_GROUPS[_alias] = ITEM_NAME_GROUPS["Sun Plants"]
 
 # Same rule the location groups follow: a group sharing a name with an item
 # makes !hint ambiguous, and AP cannot tell the player which one it picked.

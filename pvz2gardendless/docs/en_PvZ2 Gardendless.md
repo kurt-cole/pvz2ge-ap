@@ -169,6 +169,11 @@ unlocks it is, matching the game.
   be the ones logic asks for; the rest are ordinary plants. Only the worlds your seed actually
   contains contribute a requirement, so an Ancient Egypt run treats Lily Pad like any other plant.
   This keeps the required-plant list short enough to leave room for everything else.
+
+  `!hint Sun Plants` asks about the five sun producers on their own. That is usually the hint you
+  want: a sun producer is the one plant every seed needs, Ancient Egypt expects one from level 6,
+  and it is the one plant **Starting Plants** will never hand you. `Sun`, `Sun Producers` and
+  `Sun Plant` all work too.
 - **150 Gems** — **with Shopsanity on**, one of them in every seed no matter how small, always on a
   check you can reach before Ancient Egypt 9. Gems are the shop's only currency and the game hands
   out none of them under Archipelago, so this is the guaranteed floor for buying anything. Larger
