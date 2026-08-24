@@ -62,12 +62,15 @@ class StartingPlants(Range):
     The first plant is always the cheap attacker, so the guarantee holds
     whatever you set this to.
 
-    Sun producers are never given away, and that is deliberate rather than an
-    oversight: Ancient Egypt expects one from level 6, and a plant you are
-    handed at generation time satisfies every rule that asks for it before the
-    rule is ever checked. Starting with one would open Egypt 6-8, the store and
-    the Squash quest immediately and make that requirement decorative. Finding
-    a sun producer stays part of the run at every setting.
+    No plant that logic asks for is ever given away, and that is deliberate
+    rather than an oversight: a plant you are handed at generation time
+    satisfies every rule that names it before the rule is ever checked, which
+    would make that requirement decorative. So the extras never include a sun
+    producer (Ancient Egypt expects one from level 6) and never include a
+    world's entry plant -- Lily Pad for Big Wave Beach, Blover for Far Future,
+    Perfume-shroom for Jurassic Marsh, an answer to the Jester for Dark Ages or
+    a warming plant for Frostbite Caves. Finding those stays part of the run at
+    every setting.
 
     Plants you start with are removed from the item pool rather than shipped
     twice, so raising this does not fill the seed with checks that hand you

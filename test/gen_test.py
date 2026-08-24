@@ -1367,10 +1367,12 @@ for _n in (1, 2, 5, 10):
         _atk = [p for p in _pre if p in set(C.STARTER_PLANTS)]
         assert _atk, f"start {_n} {_label}: no lane-holding attacker granted"
 
-        # NEVER a sun producer, at any setting.
-        _sun_given = _SUN & set(_pre)
-        assert not _sun_given, \
-            f"start {_n} {_label}: a sun producer was granted outright: {sorted(_sun_given)}"
+        # NEVER a plant any rule names, at any setting: not a sun producer and
+        # not a world entry plant. Either one would satisfy its gate before the
+        # gate is ever checked.
+        _logic_given = set(C.LOGIC_PLANTS) & set(_pre)
+        assert not _logic_given, \
+            f"start {_n} {_label}: a rule-named plant was granted outright: {sorted(_logic_given)}"
 
         # Granted plants are not shipped again. Before this the starter was
         # precollected AND left in the pool, wasting a check in every seed.
@@ -1395,14 +1397,14 @@ for _n in (1, 10):
 _w1, _ = run("start 1: draw", starting_plants=1)
 _w10, _ = run("start 10: draw", starting_plants=10)
 assert len(_w1.starting_plants) == 1 and len(_w10.starting_plants) == 10
-# THE SUN-PRODUCER EXCLUSION NEEDS A SWEEP, NOT A SEED. The extras are drawn at
-# random, so a single seed proves nothing: with 9 extras from ~130 plants a sun
-# producer turns up roughly one run in three, which means a fixed seed passes
-# about two thirds of the time with the exclusion DELETED. That is exactly how
-# this test first went green against a broken draw.
+# THE EXCLUSION NEEDS A SWEEP, NOT A SEED. The extras are drawn at random, so a
+# single seed proves nothing: with 9 extras from ~130 plants a sun producer
+# turns up roughly one run in three and an entry plant in seven of ten, which
+# means a fixed seed passes most of the time with the exclusion DELETED. That is
+# exactly how the first version of this test went green against a broken draw.
 #
 # 40 seeds at the maximum count puts the odds of missing a leak below 1e-6.
-_leaked_sun, _seeds_with_sun_in_pool = [], 0
+_span, _leaked = set(), []
 for _seed in range(40):
     _mwX = MultiWorld(); _mwX.random.seed(_seed)
     _wX = W.PvZ2GardendlessWorld(_mwX, 1)
@@ -1411,29 +1413,27 @@ for _seed in range(40):
     _wX.generate_early()
     _got = set(_wX.starting_plants)
     assert len(_got) == 10, f"seed {_seed}: {len(_got)} starting plants"
-    _leaked_sun += sorted(_SUN & _got)
-assert not _leaked_sun, \
-    f"a sun producer was granted in {len(_leaked_sun)} of 40 seeds: {_leaked_sun[:5]}"
+    _leaked += sorted(set(C.LOGIC_PLANTS) & _got)
+    _span |= _got
+assert not _leaked, \
+    f"a rule-named plant was granted in {len(_leaked)} of 40 seeds: {_leaked[:5]}"
 
-# ...and the sweep has to be capable of seeing one, or it proves nothing. With
-# the exclusion removed a sun producer appears in roughly a third of seeds, so
-# assert the draw really does range over the rest of the roster: across 40 seeds
-# the extras should cover far more than 10 distinct plants.
-_span = set()
-for _seed in range(40):
-    _mwX = MultiWorld(); _mwX.random.seed(_seed)
-    _wX = W.PvZ2GardendlessWorld(_mwX, 1)
-    _wX.options = Opts(starting_plants=10)
-    _wX.random.seed(_seed)
-    _wX.generate_early()
-    _span |= set(_wX.starting_plants)
+# ...and the sweep has to be capable of seeing a leak, or it proves nothing.
+# The draw should range over everything that is NOT rule-named -- 116 of the 135
+# plants -- so a narrow span means the sweep would miss one.
 assert len(_span) > 60, \
-    f"the extras only ever draw {len(_span)} distinct plants; the sweep is too narrow to catch a leak"
+    f"the extras only ever draw {len(_span)} distinct plants; too narrow to catch a leak"
+_ENTRY = {_n2 for _g in C.WORLD_ENTRY_PLANTS.values() for _grp in _g for _n2 in _grp}
 assert not (_SUN & _span), f"sun producers reachable by the draw: {sorted(_SUN & _span)}"
+assert not (_ENTRY & _span), f"entry plants reachable by the draw: {sorted(_ENTRY & _span)}"
+
+# The two exclusions are separately load-bearing, so neither may be empty --
+# an exclusion over an empty set passes trivially.
+assert _SUN and _ENTRY, "a plant exclusion set is empty, so the assertions above are vacuous"
 
 print(f"starting_plants: 1..10, always one lane-holding attacker, granted plants "
-      f"dropped from the pool, sphere 1 stays 9, and no sun producer in "
-      f"{len(_span)} plants drawn across 40 seeds")
+      f"dropped from the pool, sphere 1 stays 9, and no sun producer or world "
+      f"entry plant in {len(_span)} plants drawn across 40 seeds")
 
 # CLASSIFICATION IS TESTED THROUGH create_item, NOT THROUGH CollectionState.
 # apstub's collect() takes a bare NAME and ignores classification entirely, so

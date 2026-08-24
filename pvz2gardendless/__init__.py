@@ -17,7 +17,7 @@ import settings
 
 from .constants import (
     ALWAYS_ENABLED_WORLDS, CHEAP_ATTACKER_PLANTS, EGYPT_SUN_CUT, GAME_NAME,
-    LOGIC_ATTACKER_COUNT, OPTIONAL_WORLDS,
+    LOGIC_ATTACKER_COUNT, LOGIC_PLANTS, OPTIONAL_WORLDS,
     SELECTABLE_WORLDS, STARTER_PLANTS, SUN_PRODUCER_PLANTS, WORLD_REGIONS,
     WORLD_STRETCHES,
     progressive_item_name, progressive_need, stretch_suffixes,
@@ -268,22 +268,38 @@ class PvZ2GardendlessWorld(World):
         # attacker above is always the first, so the guarantee it exists for
         # holds at every setting.
         #
-        # SUN PRODUCERS ARE NEVER DRAWN. Anything handed over at generation time
-        # satisfies every rule that asks for it before the rule is ever checked,
-        # and Egypt's egypt6 checkpoint wants a sun producer and a cheap
-        # attacker -- the attacker half is already free from the starter, so a
-        # free sun producer would make the whole gate decorative. Measured: it
-        # takes sphere 1 from 9 to 12, or to 17 with shopsanity, by opening
-        # egypt6-8 plus the store and the Squash quest. Kurt's call, 2026-08-23.
+        # NO PLANT ANY RULE NAMES IS EVER DRAWN. Anything handed over at
+        # generation time satisfies every rule that asks for it before the rule
+        # is ever checked, so granting one makes that gate decorative.
         #
-        # Everything else is fair game. A free Lily Pad or Jester answer does
-        # NOT move sphere 1 -- those worlds sit behind an unlock regardless --
-        # it only means that world opens on its unlock alone.
+        # LOGIC_PLANTS is exactly the sun producers plus every world entry
+        # plant, which is the whole static set of rule-named plants -- so this
+        # filter maintains itself if a requirement is ever added.
+        #
+        #   Sun producers: Egypt's egypt6 checkpoint wants one plus a cheap
+        #   attacker, and the attacker half is already free from the starter. A
+        #   free sun producer takes sphere 1 from 9 to 12, or to 17 with
+        #   shopsanity, by opening egypt6-8 plus the store and the Squash quest.
+        #
+        #   Entry plants: a free Lily Pad does not move sphere 1 -- that world
+        #   sits behind an unlock regardless -- but it does mean the world opens
+        #   on its unlock alone. At 10 starting plants that was landing in 70%
+        #   of seeds, so the requirements added the same day were decorative
+        #   more often than not. Kurt asked for them excluded, 2026-08-23.
+        #
+        # Excluded whether or not their world is in this seed. An entry plant
+        # for a world the seed left out gates nothing, but it is also a plant
+        # that cannot be used -- an Egypt-only seed has no water, so a free Lily
+        # Pad is a dead card in the opening hand. Nothing is lost by dropping it
+        # from the draw.
+        #
+        # The slot's own drawn cheap attackers are NOT excluded: the starter
+        # already satisfies that gate, so granting another changes nothing.
         extras = []
         want = self.options.starting_plants.value - 1
         if want:
             pool = [p.name for p in PLANT_ITEMS
-                    if p.name != starter and p.name not in set(SUN_PRODUCER_PLANTS)]
+                    if p.name != starter and p.name not in LOGIC_PLANTS]
             extras = self.random.sample(pool, min(want, len(pool)))
 
         # Read by create_item_pool, which drops these from the pool. Sorted so

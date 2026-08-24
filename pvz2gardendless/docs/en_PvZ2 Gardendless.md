@@ -13,10 +13,13 @@ let you use one until Archipelago actually sends it to you. You are guaranteed o
 plant at the start of the run so you always have something to place.
 
 **Starting Plants** raises that from 1 to as many as 10. The first is always the cheap attacker, so
-the guarantee holds whatever you set; the rest are drawn at random from the roster. Sun producers
-are never given away at any setting, because Ancient Egypt expects one from level 6 and a plant you
-are handed at generation time satisfies that before it is ever asked. Plants you start with are
-removed from the item pool rather than shipped twice.
+the guarantee holds whatever you set; the rest are drawn at random from the roster.
+
+No plant that logic asks for is ever given away, at any setting: not a sun producer, and not a
+world's entry plant (Lily Pad, Blover, Perfume-shroom, a Jester answer or a warming plant). A plant
+you are handed at generation time satisfies the rule naming it before that rule is ever checked, so
+giving one away would just make the requirement decorative. Finding those stays part of the run.
+Plants you start with are removed from the item pool rather than shipped twice.
 
 Each world other than Ancient Egypt is locked behind its own **Progressive <World>** unlock, so the
 order you see the game in is decided by the multiworld rather than by the map. For most worlds that
