@@ -54,6 +54,7 @@ ALL_WORLD_REGIONS = {r for regions in WORLD_REGIONS.values() for r in regions}
 # 12 of 58 for the deepest stretch of any world leaves a wide margin; the point
 # is to layer the fill, not to make late levels a grind.
 WORLD_STRETCHES = ("", " Mid", " Late")
+# Also unread as of 2026-08-23: a stretch wants its unlock and nothing else.
 STRETCH_PLANTS = {" Mid": 6, " Late": 12}
 
 # Ancient Egypt carries one EXTRA checkpoint, inside its opening. Its opening
@@ -368,6 +369,9 @@ FIRE_AURA_PLANTS = [
 # Plants a world needs on top of its key, as a list of requirements: the
 # player needs at least one plant from EACH list, so a world can ask for more
 # than one thing at once. rules.py ANDs them onto that world's entrance.
+# NOT READ BY rules.py as of 2026-08-23: a world opens on its unlock alone.
+# Kept, with its derivation intact, because putting any of it back is a loop
+# over this table rather than a re-derivation from the game data.
 WORLD_ENTRY_PLANTS = {
     "Big Wave Beach":  [["Lily Pad"]],
     # Frostbite Caves freezes plants and blows them away, so it wants a
@@ -392,13 +396,13 @@ WORLD_ENTRY_PLANTS = {
 # hand-maintained version is what left Pepper-pult and Fire Peashooter at
 # "useful" while the Frostbite Caves rule named them, quietly collapsing that
 # rule to "Hot Potato only".
+# Only Ancient Egypt's egypt6 checkpoint names plants now, so only its two
+# groups are here. WORLD_ENTRY_PLANTS is deliberately NOT folded in any more:
+# nothing reads it, and forcing 8 plants to progression for a rule that does
+# not exist would put them in CollectionState for no reason.
 LOGIC_PLANTS = (
     set(SUN_PRODUCER_PLANTS)
     | set(CHEAP_ATTACKER_PLANTS)
-    | {plant
-       for requirements in WORLD_ENTRY_PLANTS.values()
-       for group in requirements
-       for plant in group}
 )
 
 # Shop commodities, taken verbatim from the game's store data. Only the

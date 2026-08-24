@@ -44,19 +44,17 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         return (state.has_any(SUN_PRODUCER_PLANTS, player) and
                 state.has_any(CHEAP_ATTACKER_PLANTS, player))
 
-    for suffix, need in EGYPT_STRETCH_PLANTS.items():
+    for suffix in EGYPT_STRETCH_PLANTS:
         name = f"Enter Ancient Egypt{suffix}"
         try:
             entrance = multiworld.get_entrance(name, player)
         except KeyError:
             continue  # Egypt too small to cut, which no real seed produces
+        # The sun rule and nothing else. Egypt's stretches used to add a plant
+        # count (3, then 6) on top; those went with every other plant
+        # requirement, so all three of its gated stretches now ask the same
+        # thing, and what escalates through the world is the unlocks.
         set_rule(entrance, has_sun_and_attacker)
-        # " Early" (egypt6-8) asks for the sun producer and nothing else: it is
-        # still the opening, and a plant count there would gate the levels a
-        # seed opens with.
-        if need:
-            add_rule(entrance,
-                     lambda state, n=need: state.has_group("Plants", player, n))
 
     # Keyed main worlds — accessible once the FIRST of that world's progressive
     # unlocks is held. That item replaced the world's Key on 2026-08-23; the
@@ -73,61 +71,22 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
                  lambda state, i=progressive_item_name(w),
                  n=progressive_need(w, ""): state.has(i, player, n))
 
-    # A few worlds need specific plants beyond their key. add_rule ANDs onto
-    # the entrance's existing key requirement, which is equivalent to gating
-    # every location inside the region individually but without the
-    # per-location loop. Each world carries a LIST of requirements and needs
-    # one plant from each, so a world can ask for more than one thing --
-    # Dark Ages wants a sun producer (it is permanently night) and an answer
-    # to the Jester, and those are separate asks, not alternatives.
-    # The lists live in constants.WORLD_ENTRY_PLANTS so items.py can force
-    # every one of them to progression -- see LOGIC_PLANTS.
-    # Every world except Ancient Egypt needs a sun producer on top of whatever
-    # else lets you in. No world is playable on falling sun alone -- the same
-    # judgement Egypt's own checkpoints already made -- and holding a key was
-    # letting a player walk into a world with no way to build an economy.
+    # NO PLANT REQUIREMENTS ON WORLDS OR THEIR STRETCHES, as of 2026-08-23.
     #
-    # This is also what makes the sun producer a STRUCTURAL guarantee rather
-    # than a hope. Sphere 1 is egypt1-2, the tutorial, the shop and the
-    # standalone side paths; every exit from it now runs through a sun producer
-    # (Egypt's own gate at egypt3, or any world's entrance), so fill has to
-    # place one in sphere 1 or the seed does not open at all. That is what the
-    # old early_items request was reaching for and could not enforce.
+    # A world used to want a sun producer and, for four of them, a specific
+    # plant (Lily Pad for Big Wave Beach, Perfume-shroom for Jurassic Marsh, a
+    # fire aura for Frostbite Caves, a Jester answer for Dark Ages), and its
+    # later stretches wanted a plant COUNT on top of the unlock. Kurt asked for
+    # this simplified: holding a world's unlock is what says that world is
+    # open, and a tracker showing dino1-16 shut while the player held
+    # Progressive Jurassic Marsh was the complaint that prompted it.
     #
-    # Ancient Egypt is excluded and has no named entrance to rule on anyway:
-    # regions.py connects it to Tutorial unnamed, deliberately, because it is
-    # the one world playable with no items and is what sphere 1 is made of.
-    for world_name in sorted(world.enabled_worlds):
-        if world_name == "Ancient Egypt":
-            continue
-        add_rule(multiworld.get_entrance(f"Enter {world_name}", player),
-                 lambda state: state.has_any(SUN_PRODUCER_PLANTS, player))
-
-    for world_name, requirements in WORLD_ENTRY_PLANTS.items():
-        if world_name not in world.enabled_worlds:
-            continue
-        entrance = multiworld.get_entrance(f"Enter {world_name}", player)
-        for group in requirements:
-            add_rule(entrance, lambda state, p=group: state.has_any(p, player))
-
-    # Sequential stretches inside each world (regions.py cuts them). Gated on
-    # progression plants held, so a world key opens the start of a world and
-    # the rest follows as the multiworld sends plants. Only entrances that
-    # actually exist are ruled: regions.py skips worlds too small to cut and
-    # skips Ancient Egypt, which is handled above.
-    for w in sorted(world.enabled_worlds):
-        for suffix, need in STRETCH_PLANTS.items():
-            name = f"Enter {w}{suffix}"
-            try:
-                entrance = multiworld.get_entrance(name, player)
-            except KeyError:
-                continue
-            # Ancient Egypt's two stretches are ruled above instead: it wants a
-            # sun producer and an attacker rather than a plant count, and
-            # add_rule below would AND this on top of that.
-            if w != "Ancient Egypt":
-                set_rule(entrance,
-                         lambda state, n=need: state.has_group("Plants", player, n))
+    # WORLD_ENTRY_PLANTS and STRETCH_PLANTS are still in constants.py, unused,
+    # so putting any of this back is a loop rather than a re-derivation. What
+    # went with them is the structural guarantee that a sun producer is
+    # findable in sphere 1: a world unlock now leaves sphere 1 on its own, so
+    # fill is no longer forced to place one early. Ancient Egypt's egypt6
+    # checkpoint below is the one plant rule left standing.
 
     # ...and every stretch, in every world, needs that world's progressive
     # unlock: one copy for the middle stretch, two for the last. This is the

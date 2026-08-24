@@ -12,19 +12,16 @@ game grants at the very start — are instead scattered across the multiworld, a
 let you use one until Archipelago actually sends it to you. You are guaranteed one cheap attacking
 plant at the start of the run so you always have something to place.
 
-Each world other than Ancient Egypt is locked behind its own **World Key** item, so the order you see
-the game in is decided by the multiworld rather than by the map. A key on its own is not enough
-though: **every world needs a sun-producing plant** before logic will send you into it, because no
-world is playable on falling sun alone. Some worlds ask for more on top — Big Wave Beach wants a Lily
-Pad, Frostbite Caves a standing heat source, Jurassic Marsh a Perfume-shroom, Dark Ages an answer to
-the Jester.
+Each world other than Ancient Egypt is locked behind its own **Progressive <World>** unlock, so the
+order you see the game in is decided by the multiworld rather than by the map. That unlock is the
+whole requirement: hold one and that world's opening is open. Worlds used to ask for a sun producer
+and, for four of them, a particular plant (a Lily Pad for Big Wave Beach, a Perfume-shroom for
+Jurassic Marsh, a standing heat source for Frostbite Caves, an answer to the Jester for Dark Ages);
+those requirements are off for now and may come back.
 
-Ancient Egypt is the exception and the place every run starts. Its first two levels need nothing but
-the plant you begin with; from **Egypt level 3** onward it also wants a sun producer and a cheap
-attacker, and its later stretches want a growing number of plants on top.
-
-Between those two rules, a sun producer is the only thing that can open up a fresh run — so one is
-always findable in the handful of levels you can reach at the start.
+Ancient Egypt is the exception and the place every run starts. Its first five levels need nothing but
+the plant you begin with; from **Egypt level 6** onward it wants a sun producer and a cheap attacker,
+which is the game's own expectation and the one plant requirement still in force anywhere.
 
 Modern Day works exactly the same way, and so does every other world: what you are looking for is
 three copies of **Progressive &lt;World&gt;**.
