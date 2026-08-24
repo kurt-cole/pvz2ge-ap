@@ -390,7 +390,8 @@ from pvz2gardendless.items import (PLANT_ITEMS, KEY_ITEMS, FILLER_ITEMS,
                                    TRAP_ITEMS, COSTUME_TRAP_ITEMS,
                                    CURRENCY_TRAP_ITEMS, TRAP_POOL,
                                    COIN_TRAP, GEM_TRAP,
-                                   PROGRESSIVE_WORLD_ITEMS)
+                                   PROGRESSIVE_WORLD_ITEMS,
+                                   GEM_GRANT, GEM_GRANT_COUNT, GEM_GRANT_ITEMS)
 BLOCKS = [
     ("plants+keys+filler+traps", PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS + TRAP_ITEMS),
     ("upgrades", UPGRADE_ITEMS),
@@ -398,6 +399,7 @@ BLOCKS = [
     ("costume trap", COSTUME_TRAP_ITEMS),
     ("currency traps", CURRENCY_TRAP_ITEMS),
     ("progressive world unlocks", PROGRESSIVE_WORLD_ITEMS),
+    ("guaranteed gem grants", GEM_GRANT_ITEMS),
 ]
 for bi in range(1, len(BLOCKS)):
     name, block = BLOCKS[bi]
@@ -1096,8 +1098,11 @@ print(f"Neon Mixtape Tour covers eighties1-42 with no gaps")
 # surviving rule is a has_any() over a group, so one plant from each is all
 # logic can ever need. The unlocks and upgrades never give.
 from apstub import ItemClassification as _IC
-_prog_plants = {p.name for p in W.items.PLANT_ITEMS
-                if p.classification == _IC.progression}
+# Which plants are progression is a per-SLOT question since 2026-08-23: the
+# static table carries the sun producers and the world entry plants, and each
+# slot draws LOGIC_ATTACKER_COUNT cheap attackers of its own on top. Reading
+# the static classification here would understate the block by those 10 and
+# call a correctly trimmed pool broken.
 _unlock_names = {f"Progressive {_w}" for _w in C.WORLD_REGIONS}
 
 for _label, _kw in (("1 world", dict(world_count=1)),
@@ -1110,9 +1115,16 @@ for _label, _kw in (("1 world", dict(world_count=1)),
     _nameset = set(_names)
 
     # The floor holds in every seed, however small: each group a rule names
-    # keeps at least one member, or that gate is a wall.
-    for _group, _gname in ((C.SUN_PRODUCER_PLANTS, "sun producers"),
-                           (C.CHEAP_ATTACKER_PLANTS, "cheap attackers")):
+    # keeps at least one member, or that gate is a wall. That is the two Egypt
+    # checkpoint groups, plus one group per requirement of each world the seed
+    # ENABLED that names entry plants -- Lily Pad if Big Wave Beach is in, and
+    # nothing at all for a world left out, whose entrance rule is never built.
+    _floor_groups = [(C.SUN_PRODUCER_PLANTS, "sun producers"),
+                     (C.CHEAP_ATTACKER_PLANTS, "cheap attackers")]
+    for _ew in sorted(_w.enabled_worlds):
+        for _grp in C.WORLD_ENTRY_PLANTS.get(_ew, []):
+            _floor_groups.append((_grp, f"{_ew} entry plants"))
+    for _group, _gname in _floor_groups:
         assert set(_group) & _nameset, f"{_label}: no {_gname} left in the pool"
 
     # Unlocks and upgrades are never trimmed.
@@ -1127,10 +1139,11 @@ for _label, _kw in (("1 world", dict(world_count=1)),
 
     # A seed with room keeps every progression plant; only a seed short of
     # room may drop any, and then only after every useful plant has gone.
-    _missing = _prog_plants - _nameset
-    _useful_left = sum(1 for n in _names if n in
-                       {p.name for p in W.items.PLANT_ITEMS
-                        if p.classification == _IC.useful})
+    _slot_prog = W.items.slot_progression_plants(_w)
+    _all_plants = {p.name for p in W.items.PLANT_ITEMS}
+    _missing = _slot_prog - _nameset
+    _useful_left = sum(1 for n in _names
+                       if n in _all_plants and n not in _slot_prog)
     if _missing:
         assert not _useful_left, \
             f"{_label}: dropped {len(_missing)} progression plants while still " \
@@ -1142,7 +1155,361 @@ for _label, _kw in (("1 world", dict(world_count=1)),
 # location count have drifted and every "every X is in the pool" claim above is
 # quietly weaker than it reads.
 _wfull, _ = run("trim: default seed", )
-assert _prog_plants <= {i.name for i in _wfull.multiworld.itempool}, \
+assert W.items.slot_progression_plants(_wfull) <= {i.name for i in _wfull.multiworld.itempool}, \
     "the default seed is trimming progression plants"
 
 print("small seeds trim useful plants, keeping every progression plant and key")
+
+# ── the floor covers a world's entry plants, not only Egypt's two groups ────
+# This one calls create_item_pool DIRECTLY with a squeezed pool_size instead of
+# going through an option combination, because no option combination reaches it:
+# every world past Egypt adds ~40 locations against only 3 unlocks, so a seed
+# large enough to contain Big Wave Beach is far too large to trim progression
+# plants at all. The floor is defensive, and a defence nothing exercises is a
+# defence that rots -- squeezing pool_size is the smallest honest way to run it.
+#
+# Proved by mutation: delete the WORLD_ENTRY_PLANTS loop from the floor in
+# items.py and this fails, while every option-driven test above still passes.
+_ENTRY_WORLDS = ["Big Wave Beach", "Far Future", "Jurassic Marsh", "Dark Ages"]
+_wE, _ = run("entry-plant floor", world_count=5, enabled_worlds=_ENTRY_WORLDS)
+assert set(_ENTRY_WORLDS) <= _wE.enabled_worlds, _wE.enabled_worlds
+
+# Room for the unlocks, the upgrades and a handful of plants: well under the
+# progression block, so the trim has to run and the floor is what decides what
+# survives. The upgrades have to be counted -- they are added to the pool before
+# the plants and are as non-negotiable as the unlocks, so leaving them out of
+# the sum makes create_item_pool raise before it ever reaches the floor.
+_unlock_room = (sum(C.progressive_count(_x) for _x in _wE.enabled_worlds)
+                + (C.UPGRADE_ITEM_COUNT if _wE.options.shuffle_upgrades else 0)
+                + (GEM_GRANT_COUNT if _wE.options.shopsanity else 0))
+_squeezed = W.items.create_item_pool(_wE, _unlock_room + 12)
+_names_E = {i.name for i in _squeezed}
+assert len(_squeezed) == _unlock_room + 12, len(_squeezed)
+
+for _plant, _world in (("Lily Pad", "Big Wave Beach"),
+                       ("Blover", "Far Future"),
+                       ("Perfume-shroom", "Jurassic Marsh")):
+    assert _plant in _names_E, \
+        f"a squeezed pool dropped {_plant}, so {_world} can never be entered"
+# Dark Ages asks for a GROUP rather than one plant, so any member will do.
+assert set(C.JESTER_COUNTER_PLANTS) & _names_E, \
+    "a squeezed pool dropped every Jester answer, so Dark Ages can never be entered"
+assert set(C.SUN_PRODUCER_PLANTS) & _names_E, "squeezed pool has no sun producer"
+assert set(C.CHEAP_ATTACKER_PLANTS) & _names_E, "squeezed pool has no attacker"
+
+# ...and a world the seed left out contributes nothing to the floor, or an
+# Egypt-only seed would be forced to carry plants no rule can ever ask for --
+# which is the whole reason the floor is built from enabled_worlds and not from
+# WORLD_ENTRY_PLANTS wholesale.
+_wEgypt, _ = run("entry-plant floor: Egypt only", world_count=1)
+assert _wEgypt.enabled_worlds == {"Ancient Egypt"}, _wEgypt.enabled_worlds
+_egypt_room = (C.progressive_count("Ancient Egypt")
+               + (C.UPGRADE_ITEM_COUNT if _wEgypt.options.shuffle_upgrades else 0)
+               + (GEM_GRANT_COUNT if _wEgypt.options.shopsanity else 0))
+# Squeezed to EXACTLY the floor -- one sun producer and one cheap attacker --
+# so the kept plants ARE the floor. With any slack the trim tops it up at
+# random and a plant appearing proves nothing about what was forced. An earlier
+# version left four spare slots and failed the day the pool shrank enough for
+# the random top-up to reach Lily Pad.
+_egypt_pool = {i.name for i in W.items.create_item_pool(_wEgypt, _egypt_room + 2)}
+_egypt_plants = _egypt_pool & {p.name for p in W.items.PLANT_ITEMS}
+assert len(_egypt_plants) == 2, f"floor is {sorted(_egypt_plants)}, expected 2 plants"
+assert set(C.SUN_PRODUCER_PLANTS) & _egypt_plants, "floor has no sun producer"
+assert set(C.CHEAP_ATTACKER_PLANTS) & _egypt_plants, "floor has no cheap attacker"
+_forced = {"Lily Pad", "Blover", "Perfume-shroom"} & _egypt_pool
+assert not _forced, \
+    f"an Egypt-only seed was forced to carry entry plants for absent worlds: {sorted(_forced)}"
+
+print(f"the pool floor keeps an entry plant for each of the "
+      f"{len(C.WORLD_ENTRY_PLANTS)} gated worlds a seed enables, "
+      f"and none for those it does not")
+
+# ── the per-slot cheap-attacker draw ───────────────────────────────────────
+# CHEAP_ATTACKER_PLANTS is the DERIVED list of 47 plants that qualify. A slot
+# names only 10 of them in its Egypt 6 rule, and only those 10 are progression.
+#
+# Naming all 47 forced every one to progression -- items.py promotes anything a
+# rule names -- for a rule that needs exactly ONE of them to be findable. In a
+# small seed the progression block is what squeezes out the useful plants, the
+# filler and the traps, and an Egypt-only seed had room for not one coin or gem.
+#
+# The count is a literal 10, not LOGIC_ATTACKER_COUNT: an expectation read from
+# the constant under test passes whatever that constant says.
+assert C.LOGIC_ATTACKER_COUNT == 10, C.LOGIC_ATTACKER_COUNT
+assert len(C.CHEAP_ATTACKER_PLANTS) == 47, len(C.CHEAP_ATTACKER_PLANTS)
+
+_draws = {}
+for _label, _kw in (("default", {}), ("Egypt only", dict(world_count=1)),
+                    ("13 worlds", dict(world_count=13))):
+    _wD, _ = run(f"attackers: {_label}", **_kw)
+    _drawn = set(_wD.logic_attackers)
+    assert len(_drawn) == 10, f"{_label}: drew {len(_drawn)} attackers, expected 10"
+    assert _drawn <= set(C.CHEAP_ATTACKER_PLANTS), \
+        f"{_label}: drew something that is not a cheap attacker: {sorted(_drawn - set(C.CHEAP_ATTACKER_PLANTS))}"
+
+    # The starter is one of them, and that is what keeps the gate's meaning
+    # unchanged: the starter is precollected, so it already satisfied has_any
+    # over all 46 in every seed. Drawing the 10 independently would leave it
+    # outside them most of the time and quietly turn a dead requirement into a
+    # live one, per seed.
+    _starter = [i.name for i in _wD.multiworld.precollected
+                if i.name in set(C.CHEAP_ATTACKER_PLANTS)]
+    assert len(_starter) == 1, f"{_label}: {len(_starter)} starter attackers precollected"
+    assert _starter[0] in _drawn, \
+        f"{_label}: starter {_starter[0]} is not in the draw, so the gate changed meaning"
+    # ...and it can hold a lane. A blind draw of 10 can be all Cherry Bomb and
+    # Potato Mine, which is why the starter is drawn first and forced in.
+    assert _starter[0] in C.STARTER_PLANTS, f"{_label}: starter is not lane-holding"
+
+    # The other 37 are ordinary useful plants, not progression -- EXCEPT where
+    # one is also a world entry plant, which is a separate rule naming it for a
+    # separate reason. Lava Guava is the only such plant: it is a cheap attacker
+    # AND one of the five with a WarmingRadius, so Frostbite Caves names it and
+    # it stays progression in any seed containing that world whether the draw
+    # picked it or not.
+    _slot_prog = W.items.slot_progression_plants(_wD)
+    _entry_here = {n for _w2 in _wD.enabled_worlds
+                   for _g in C.WORLD_ENTRY_PLANTS.get(_w2, []) for n in _g}
+    _leaked = (set(C.CHEAP_ATTACKER_PLANTS) - _drawn - _entry_here) & _slot_prog
+    assert not _leaked, \
+        f"{_label}: {len(_leaked)} undrawn attackers are still progression: {sorted(_leaked)[:5]}"
+    _draws[_label] = _drawn
+
+# THE RULE NAMES THE DRAW. Without this the classification could be right and
+# the gate still ask for all 47 -- which would work, and silently make the 37
+# useful attackers satisfy a gate AP cannot see them satisfying.
+_wR, _ = run("attackers: rule membership", world_count=1)
+_drawn = set(_wR.logic_attackers)
+_pre = [i.name for i in _wR.multiworld.precollected]
+_entrance = _wR.multiworld.get_entrance("Enter Ancient Egypt Early", _wR.player)
+_sun = C.SUN_PRODUCER_PLANTS[0]
+# Probed WITHOUT the precollected starter, which would satisfy the gate on its
+# own and make every probe pass.
+_bare = [n for n in _pre if n not in set(C.CHEAP_ATTACKER_PLANTS)]
+
+
+from apstub import CollectionState as _CS
+
+
+def _opens(extra):
+    _st = _CS(_wR.multiworld, W.items.ITEM_NAME_GROUPS)
+    for _n in _bare + [_sun] + extra:
+        _st.collect(_n)
+    _st.sweep()
+    return _entrance.access_rule(_st)
+
+
+assert not _opens([]), "egypt6-8 opens on a sun producer with no attacker at all"
+_dead = sorted(n for n in _drawn if not _opens([n]))
+assert not _dead, f"drawn attackers that do not satisfy the egypt6 gate: {_dead[:5]}"
+# The probe seed is Egypt-only, so no world entry plants are in play and every
+# undrawn attacker is genuinely outside the rule. Asserted rather than assumed.
+assert not any(C.WORLD_ENTRY_PLANTS.get(_w2) for _w2 in _wR.enabled_worlds), \
+    "the rule-membership probe picked up a world with entry plants; it must be Egypt-only"
+_extra = sorted(n for n in set(C.CHEAP_ATTACKER_PLANTS) - _drawn if _opens([n]))
+assert not _extra, \
+    f"undrawn attackers satisfy the egypt6 gate, so the rule still names all 47: {_extra[:5]}"
+print(f"cheap attackers: 10 of {len(C.CHEAP_ATTACKER_PLANTS)} drawn per slot, "
+      f"starter always among them, and only those 10 satisfy the egypt6 gate")
+
+# CLASSIFICATION IS TESTED THROUGH create_item, NOT THROUGH CollectionState.
+# apstub's collect() takes a bare NAME and ignores classification entirely, so
+# every state-driven test in this suite and in sphere_test would pass with every
+# plant marked useful -- which is precisely the bug LOGIC_PLANTS exists to
+# prevent (AP tracks only advancement items in prog_items, so has_any is
+# permanently False for a useful item and the rule naming it silently dies).
+# The only honest check is the classification of the Item that create_item
+# actually builds.
+for _label, _kw in (("default", {}), ("Egypt only", dict(world_count=1))):
+    _wC, _ = run(f"classification: {_label}", **_kw)
+    _want = W.items.slot_progression_plants(_wC)
+    _wrong = []
+    for _p in W.items.PLANT_ITEMS:
+        _cls = _wC.create_item(_p.name).classification
+        _expected = _IC.progression if _p.name in _want else _IC.useful
+        if _cls != _expected:
+            _wrong.append((_p.name, _cls, _expected))
+    assert not _wrong, f"{_label}: create_item classified {len(_wrong)} plants wrongly: {_wrong[:4]}"
+    # ...and the two classes are both non-empty, or "all correct" is vacuous.
+    assert _want, f"{_label}: no plant is progression"
+    assert len(_want) < len(W.items.PLANT_ITEMS), f"{_label}: every plant is progression"
+
+# A NON-plant keeps its static classification -- create_item must not sweep the
+# unlocks, upgrades, filler or traps into the per-slot plant logic.
+_wC, _ = run("classification: non-plants", world_count=1)
+for _name in ("Progressive Ancient Egypt", "Sky Shield", "100 Coins",
+              C.SHOP_REGION and "Lawn Mower Trap", GEM_GRANT):
+    assert _wC.create_item(_name).classification == \
+        W.items.ITEM_NAME_TO_ITEM[_name].classification, \
+        f"create_item changed the classification of {_name}"
+
+# ENTRY PLANTS ARE SCOPED TO THE WORLDS THE SEED BUILT. rules.py skips a world
+# that is not enabled, so Lily Pad gates nothing in an Egypt-only run and must
+# not eat a progression slot there. Stated as an exact set: Egypt names only the
+# sun producers and the slot's own draw, so anything else is waste.
+_wE2, _ = run("classification: Egypt-only progression set", world_count=1)
+assert _wE2.enabled_worlds == {"Ancient Egypt"}, _wE2.enabled_worlds
+_egypt_prog = W.items.slot_progression_plants(_wE2)
+_want_egypt = set(C.SUN_PRODUCER_PLANTS) | set(_wE2.logic_attackers)
+assert _egypt_prog == _want_egypt, (
+    f"an Egypt-only seed's progression plants are {sorted(_egypt_prog - _want_egypt)} "
+    f"beyond its sun producers and draw, and missing {sorted(_want_egypt - _egypt_prog)}")
+assert not ({"Lily Pad", "Blover", "Perfume-shroom", "Torchwood"} & _egypt_prog), \
+    "an Egypt-only seed still carries entry plants for worlds it does not have"
+print(f"per-slot classification: {len(_egypt_prog)} progression plants in an "
+      f"Egypt-only seed, {len(W.items.PLANT_ITEMS) - len(_egypt_prog)} useful")
+
+# ── the guaranteed gem grant ───────────────────────────────────────────────
+class _GemProbe:
+    """Stands in for the gem item when probing an item rule. Synthetic on
+    purpose: probing with an item drawn from the pool passes vacuously in a seed
+    that does not contain it, which is how an earlier item-rule test passed with
+    the rule deleted."""
+    name = GEM_GRANT
+    player = 1
+    advancement = True
+
+# Gems are the shop's only currency and a player can earn ZERO of them under
+# Archipelago: the game's whole resource set holds one GIVE_GEM, worth 20, in
+# the PREMIUM_BRING_OUT flow the client deliberately silences. So the pool is
+# the only source, and before these items a small seed had none at all --
+# filler is what is left after the plants, and the plants outnumber the
+# locations until a seed is several worlds wide.
+#
+# It is progression rather than filler for exactly that reason: filler is
+# trimmed first, in the seeds that need it most.
+import re as _re
+
+# SHIPPED ONLY WITH SHOPSANITY. Shop cards are the only AP locations that cost
+# anything -- no access rule reads currency, and nothing else in a seed can be
+# bought -- so with the option off there is no wall to break and the mandatory
+# slot is better spent on a plant. Both sides are checked: a seed that needs it
+# has exactly one, a seed that does not has none.
+_gem_seeds = [("1 world", dict(world_count=1), 0),
+              ("1 world + shopsanity", dict(world_count=1, shopsanity=1), 1),
+              ("2 worlds + shopsanity", dict(world_count=2, shopsanity=1), 1),
+              ("13 worlds + shopsanity", dict(world_count=13, shopsanity=1), 1),
+              ("13 worlds, no shopsanity", dict(world_count=13), 0),
+              ("13 worlds, 100% traps", dict(world_count=13, trap_percentage=100), 0),
+              ("side paths, no shopsanity",
+               dict(world_count=1, include_side_paths=1), 0)]
+for _label, _kw, _want_n in _gem_seeds:
+    _wG, _ = run(f"gems: {_label}", **_kw)
+    _n = [i.name for i in _wG.multiworld.itempool].count(GEM_GRANT)
+    assert _n == _want_n, f"{_label}: {_n} copies of {GEM_GRANT}, expected {_want_n}"
+    # A seed with no shop checks must have no grant, and vice versa: the two are
+    # the same condition and drifting apart is the bug this guards.
+    _shop_n = len([l for l in _wG.active_locations() if l.name.startswith("Shop: ")])
+    assert bool(_n) == bool(_shop_n), \
+        f"{_label}: {_n} grants against {_shop_n} shop checks"
+    if not _want_n:
+        continue
+    # Literal counts above, not GEM_GRANT_COUNT: an expectation read out of the
+    # constant under test passes whatever that constant says, which is how a
+    # first version of this let the count change silently. One item of 150
+    # rather than two of 75 is deliberate (Kurt, 2026-08-23) -- two halves can
+    # both land late, and half a gem budget is no better than none if the other
+    # half is behind the wall it was meant to open.
+    assert GEM_GRANT_COUNT == 1, f"GEM_GRANT_COUNT is {GEM_GRANT_COUNT}, expected 1"
+
+# ...and they are progression, which is the whole mechanism. As filler they
+# would be the first thing the trim drops, in precisely the small seeds that
+# have no other gems. Mutation-proved: flip this to filler and the 1-world
+# cases above fail.
+assert all(i.classification == _IC.progression for i in GEM_GRANT_ITEMS), \
+    f"{GEM_GRANT} is not progression, so a small seed will trim it away"
+
+# ...and nothing in logic may name them. They are progression to survive the
+# trim, not because they gate anything -- affordability is deliberately not
+# modelled, since currency accrues from play as well as from items.
+assert GEM_GRANT not in C.LOGIC_PLANTS, f"{GEM_GRANT} is being treated as a plant"
+
+# THE NAME IS THE INTERFACE. The client reads the amount straight off it with
+# a regex; a rename that regex does not match turns the item into a toast that
+# grants nothing, and no test of the pool would notice. So the regex is read
+# out of the client itself (_JS, already extracted above for LOC_LEVELS)
+# rather than restated here, and the item name is run through the Python
+# equivalent.
+assert r"const currencyMatch = /^(\d+) (Coins|Gems)$/" in _JS, \
+    "the client's currency regex has moved or changed shape; re-pin this test"
+_parsed = _re.match(r"^(\d+) (Coins|Gems)$", GEM_GRANT)
+assert _parsed and _parsed.group(2) == "Gems", \
+    f"the client's currency regex does not match {GEM_GRANT!r}, so it grants nothing"
+assert int(_parsed.group(1)) == 150, f"{GEM_GRANT} is not worth 150"
+# ...and the negative-trap regex must NOT claim it, or a grant would be read as
+# a debit. The two patterns differ by one leading minus.
+assert not _re.match(r"^-(\d+) (Coins|Gems)$", GEM_GRANT), \
+    f"{GEM_GRANT} parses as a currency TRAP"
+
+# IT LANDS BEFORE EGYPT 9. The store opens at egypt6 and its five ungated
+# upgrade cards cost 30 gems apiece, so a grant found in Egypt's endgame arrives
+# after every point it was needed. Enforced as an item rule, so the test is
+# whether every OTHER location refuses it -- checking the one place fill happened
+# to pick would pass on luck.
+#
+# The expectation is LITERAL, not gem_grant_regions(). Deriving it from the
+# function under test is worthless: a first version of this did exactly that and
+# passed with the region set widened to include Egypt Mid and the Shop. It is
+# stated as LEVELS rather than regions, since "before egypt9" is the contract
+# and the region names are just how it is currently implemented.
+#
+# egypt9 is Egypt's " Mid" cut, which is its World Key level -- pinned as a
+# literal in the world_gates block above, sourced from the game's own map data.
+_WANT_GEM_LOCS = ({f"tutorial{_i}" for _i in range(1, 5)}
+                  | {f"egypt{_i}" for _i in range(1, 9)})
+
+# Every case here runs shopsanity, since that is the only way the grant is in
+# the pool at all. The no-shopsanity case is checked separately below.
+for _label, _kw in (("default", dict(shopsanity=1)),
+                    ("Egypt only", dict(world_count=1, shopsanity=1)),
+                    ("3 worlds", dict(world_count=3, shopsanity=1)),
+                    ("everything on", dict(world_count=13, shopsanity=1,
+                                           include_side_paths=1,
+                                           include_danger_rooms=1,
+                                           early_world_keys=1))):
+    _wP, _ = run(f"gem placement: {_label}", **_kw)
+    _open = set()
+    _shut = 0
+    for _r in _wP.multiworld.get_regions(_wP.player):
+        for _loc in _r.locations:
+            if _loc.name == "Victory":
+                continue  # an event carrying a locked item; fill never fills it
+            if _loc.item_rule(_GemProbe()):
+                _open.add(_loc.name)
+            else:
+                _shut += 1
+    assert _open == _WANT_GEM_LOCS, (
+        f"{_label}: {GEM_GRANT} may land on "
+        f"{sorted(_open - _WANT_GEM_LOCS)[:5]} and may NOT land on "
+        f"{sorted(_WANT_GEM_LOCS - _open)[:5]}")
+    assert _shut, f"{_label}: nothing rejects {GEM_GRANT}, so the rule is not applied"
+
+# The store hangs off Ancient Egypt Early and so would qualify by REGION. It is
+# excluded by name above, and called out here because it is the one exclusion
+# that is a judgement rather than a consequence: a grant sitting on a card the
+# player cannot afford is the exact deadlock the item exists to break.
+assert not any(_n.startswith("Shop: ") for _n in _WANT_GEM_LOCS)
+
+# With shopsanity off the rule is not applied at all -- there is no grant to
+# place. Everything must accept it, which is the harmless state: the item does
+# not exist, so nothing can be placed anywhere.
+_wNo, _ = run("gem placement: no shopsanity", world_count=1)
+_refused = [l.name for _r in _wNo.multiworld.get_regions(_wNo.player)
+            for l in _r.locations if not l.item_rule(_GemProbe())]
+assert not _refused, \
+    f"the gem placement rule is still applied with shopsanity off: {_refused[:4]}"
+assert GEM_GRANT not in {i.name for i in _wNo.multiworld.itempool}, \
+    "shopsanity is off but the grant is in the pool"
+
+print(f"{GEM_GRANT} is confined to the {len(_WANT_GEM_LOCS)} checks before "
+      f"egypt9, shop cards excluded")
+
+# What the guarantee is actually worth against the shop, reported rather than
+# asserted: the gem PRICES live in the game's store data, not in this repo, and
+# an upstream reshuffle should not fail the suite. Read the number.
+_wS, _ = run("gems: cost vs grant", world_count=1, shopsanity=1)
+_shop_n = len([l for l in _wS.active_locations() if l.name.startswith("Shop: ")])
+_granted = GEM_GRANT_COUNT * int(_parsed.group(1))
+print(f"guaranteed gems: {GEM_GRANT_COUNT} x {_parsed.group(1)} = {_granted} in "
+      f"every SHOPSANITY seed, against {_shop_n} shop cards in the smallest one; "
+      f"none at all with shopsanity off")

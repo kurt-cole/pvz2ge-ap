@@ -13,11 +13,25 @@ let you use one until Archipelago actually sends it to you. You are guaranteed o
 plant at the start of the run so you always have something to place.
 
 Each world other than Ancient Egypt is locked behind its own **Progressive <World>** unlock, so the
-order you see the game in is decided by the multiworld rather than by the map. That unlock is the
-whole requirement: hold one and that world's opening is open. Worlds used to ask for a sun producer
-and, for four of them, a particular plant (a Lily Pad for Big Wave Beach, a Perfume-shroom for
-Jurassic Marsh, a standing heat source for Frostbite Caves, an answer to the Jester for Dark Ages);
-those requirements are off for now and may come back.
+order you see the game in is decided by the multiworld rather than by the map. For most worlds that
+unlock is the whole requirement: hold one and that world's opening is open.
+
+Five worlds want a plant as well, on top of the unlock, because they are the ones you cannot
+sensibly play without it:
+
+| world | wants |
+| --- | --- |
+| Big Wave Beach | Lily Pad |
+| Far Future | Blover |
+| Jurassic Marsh | Perfume-shroom |
+| Dark Ages | one plant whose shots the Jester cannot turn back on you: Banana Launcher, Electric Peashooter, Magnifying Grass, Missile Toe, Sap-fling or Strawburst |
+| Frostbite Caves | a plant that gives off standing heat: Fire Peashooter, Hot Date, Jack O' Lantern, Lava Guava or Torchwood |
+
+So Big Wave Beach 1 needs Lily Pad **and** one Progressive Big Wave Beach, not either on its own,
+and the requirement covers the whole world rather than only its opening. This is a logic
+requirement, which means the multiworld will not hide anything behind a world you cannot really
+play, but the game itself does not stop you starting those levels. Frostbite Caves asks for no
+plant.
 
 Ancient Egypt is the exception and the place every run starts. Its first five levels need nothing but
 the plant you begin with; from **Egypt level 6** onward it wants a sun producer and a cheap attacker,
@@ -136,9 +150,22 @@ unlocks it is, matching the game.
 
 **Items** are:
 
-- **Plants** — the full roster. A handful are required by logic: Lily Pad for Big Wave Beach,
-  Perfume-shroom for Jurassic Marsh, and Hot Potato, Pepper-pult or Fire Peashooter for Frostbite
-  Caves.
+- **Plants** — the full roster. A handful are required by logic: a sun producer and a cheap attacker
+  for Ancient Egypt from level 6, then Lily Pad for Big Wave Beach, Blover for Far Future,
+  Perfume-shroom for Jurassic Marsh, a Jester answer for Dark Ages and a warming plant for
+  Frostbite Caves (see above). However small the seed, one plant for each of those requirements
+  always stays in the pool.
+
+  Forty-seven plants qualify as a cheap attacker, but each seed picks **ten** of them at random to
+  be the ones logic asks for; the rest are ordinary plants. Only the worlds your seed actually
+  contains contribute a requirement, so an Ancient Egypt run treats Lily Pad like any other plant.
+  This keeps the required-plant list short enough to leave room for everything else.
+- **150 Gems** — **with Shopsanity on**, one of them in every seed no matter how small, always on a
+  check you can reach before Ancient Egypt 9. Gems are the shop's only currency and the game hands
+  out none of them under Archipelago, so this is the guaranteed floor for buying anything. Larger
+  seeds also scatter 10/20/50 Gem filler; a one-world seed has room for none, which is why this one
+  is not filler. With Shopsanity off nothing you need costs gems, so it is not included and the
+  slot goes to a plant instead.
 - **Progressive World Unlocks** — three per world (two for Ancient Egypt, which needs none to enter).
   The first opens the world, the second and third its middle and last stretches. `!hint World
   Unlocks` answers where all of them are.

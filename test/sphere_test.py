@@ -381,60 +381,120 @@ report("2 worlds, completion goal", world_count=2, goal_type=1,
 report("all worlds + side paths", include_side_paths=1)
 report("12 worlds, completion goal", goal_type=1, worlds_required=11, modern_day_victory=2)
 
-# ── a world opens on its unlock, and on nothing else ────────────────────────
-# As of 2026-08-23 that is the whole contract: one Progressive <World> and the
-# world's opening stretch is reachable. No sun producer, no Lily Pad for Big
-# Wave Beach, no Perfume-shroom for Jurassic Marsh. WORLD_ENTRY_PLANTS and
-# STRETCH_PLANTS still exist in constants.py but nothing reads them, and this
-# is the test that says so -- if a plant requirement comes back, it fails here
-# first.
+# ── what opens a world: its unlock, plus a plant for four of them ──────────
+# The contract as of 2026-08-23. A world in WORLD_ENTRY_PLANTS wants one plant
+# from each of its requirement lists ON TOP of its first Progressive <World>;
+# every other world opens on that unlock alone. Nothing opens with no unlock at
+# all, entry plant or not.
+#
+# Split rather than looped over one rule on purpose: asserting only "unlock +
+# plants opens it" would pass with the plant requirement deleted, since the
+# unlock alone would then open it too. The gated worlds are checked BOTH ways.
 print("\n=== world entry ===")
 mw, w = build()
 _pre_only = [i.name for i in mw.precollected]
-_shut, _open_early = [], []
+
+
+def _entry_plants(world_name):
+    """One plant from each of this world's requirement lists, or [] for a world
+    that asks for none. First member rather than a random one: build() is the
+    default seed, so every plant is in the pool and the choice is arbitrary."""
+    return [g[0] for g in C.WORLD_ENTRY_PLANTS.get(world_name, [])]
+
+
+_shut, _open_early, _ungated, _unkeyed = [], [], [], []
 for world_name in sorted(w.enabled_worlds):
     if world_name == "Ancient Egypt":
         continue  # no entrance to rule on: it is where a run starts
     unlock = C.progressive_item_name(world_name)
+    plants = _entry_plants(world_name)
+    # With the unlock and its plants, the world is open.
     if not any(r.name == world_name
-               for r in state_with(mw, _pre_only + [unlock])._reachable):
+               for r in state_with(mw, _pre_only + [unlock] + plants)._reachable):
         _shut.append(world_name)
+    # With nothing at all, it is not.
     if any(r.name == world_name for r in state_with(mw, _pre_only)._reachable):
         _open_early.append(world_name)
+    # ...and a world that names plants must NOT open on the unlock alone, or
+    # its rule is not being applied and every assertion above passes anyway.
+    if plants and any(r.name == world_name
+                      for r in state_with(mw, _pre_only + [unlock])._reachable):
+        _ungated.append(world_name)
+    # ...nor on the plants alone. The requirement is "Lily Pad AND one
+    # Progressive Big Wave Beach", so a rule that REPLACED the unlock
+    # requirement instead of stacking on it would satisfy every check above.
+    if plants and any(r.name == world_name
+                      for r in state_with(mw, _pre_only + plants)._reachable):
+        _unkeyed.append(world_name)
 if _shut:
-    fail(f"{len(_shut)} world(s) do not open on their unlock alone: {_shut[:4]}")
+    fail(f"{len(_shut)} world(s) do not open on their unlock plus entry plants: {_shut[:4]}")
 elif _open_early:
     fail(f"{len(_open_early)} world(s) are open with no unlock at all: {_open_early[:4]}")
+elif _ungated:
+    fail(f"{len(_ungated)} world(s) open on the unlock alone despite naming "
+         f"entry plants: {_ungated[:4]}")
+elif _unkeyed:
+    fail(f"{len(_unkeyed)} world(s) open on their entry plants with no unlock "
+         f"held, so the plant rule replaced the unlock rule: {_unkeyed[:4]}")
 else:
-    ok(f"all {len(w.enabled_worlds) - 1} keyed worlds open on their unlock alone")
+    _gated = sorted(set(C.WORLD_ENTRY_PLANTS) & w.enabled_worlds)
+    ok(f"all {len(w.enabled_worlds) - 1} keyed worlds open on their unlock, "
+       f"{len(_gated)} of them only with an entry plant too")
+
+# The table has to actually gate something, or the split above is vacuous.
+if not set(C.WORLD_ENTRY_PLANTS) & w.enabled_worlds:
+    fail("no enabled world names an entry plant, so the world-entry test is empty")
+else:
+    ok(f"{len(C.WORLD_ENTRY_PLANTS)} worlds name an entry plant")
 
 # ...and the locations inside really are reachable, not just the region. This
-# is the shape of the complaint that prompted the change: the tracker showed
-# dino1-16 shut while the player held Progressive Jurassic Marsh.
+# is the shape of the complaint that prompted the 2026-08-23 simplification:
+# the tracker showed dino1-16 shut while the player held Progressive Jurassic
+# Marsh. Jurassic Marsh wants Perfume-shroom again as of 2026-08-23, so the
+# state to check is the unlock AND the plant -- which is what the tracker will
+# now show, deliberately.
 _dino_open = {l.name for l in
-              state_with(mw, _pre_only + ["Progressive Jurassic Marsh"]).reachable_locations()}
+              state_with(mw, _pre_only + ["Progressive Jurassic Marsh",
+                                          "Perfume-shroom"]).reachable_locations()}
 _dino_want = ["dino1", "dino8", "dino16"]
 _dino_missing = [n for n in _dino_want if n not in _dino_open]
 if _dino_missing:
-    fail(f"one Progressive Jurassic Marsh does not open {_dino_missing}")
+    fail(f"Progressive Jurassic Marsh + Perfume-shroom does not open {_dino_missing}")
 elif "dino17" in _dino_open:
     fail("dino17 opened on one unlock; it is the middle stretch")
 else:
-    ok("one Progressive Jurassic Marsh opens dino1-16 and stops there")
+    ok("one Progressive Jurassic Marsh + Perfume-shroom opens dino1-16 and stops there")
 
-# The four worlds that used to want a plant of their own are the ones worth
-# naming: each is now open on its unlock with nothing else held.
-for _wn, _plant in (("Big Wave Beach", "Lily Pad"),
-                    ("Jurassic Marsh", "Perfume-shroom"),
-                    ("Frostbite Caves", "Torchwood"),
-                    ("Dark Ages", "Sap-fling")):
+# Each gated world named individually, with the plant that opens it pinned as a
+# literal rather than read back out of WORLD_ENTRY_PLANTS -- a test derived from
+# the table under test would pass whatever the table said. Pirate Seas is the
+# control: it is NOT in the table, so it must open on its unlock alone, and it
+# fails the same way a fifth world accidentally picking up a rule would.
+_named = []
+for _wn, _plant, _wants in (("Big Wave Beach",  "Lily Pad",       True),
+                            ("Far Future",      "Blover",         True),
+                            ("Jurassic Marsh",  "Perfume-shroom", True),
+                            ("Dark Ages",       "Sap-fling",      True),
+                            ("Frostbite Caves", "Torchwood",      True),
+                            ("Pirate Seas",     "Peashooter",     False)):
     if _wn not in w.enabled_worlds:
         continue
-    _st = state_with(mw, _pre_only + [C.progressive_item_name(_wn)])
-    if not any(r.name == _wn for r in _st._reachable):
-        fail(f"{_wn} still wants {_plant} or a sun producer")
+    _unlock = C.progressive_item_name(_wn)
+    _bare = any(r.name == _wn
+                for r in state_with(mw, _pre_only + [_unlock])._reachable)
+    _with = any(r.name == _wn
+                for r in state_with(mw, _pre_only + [_unlock, _plant])._reachable)
+    if _wants and _bare:
+        _named.append(f"{_wn} opens without {_plant}")
+    elif _wants and not _with:
+        _named.append(f"{_wn} does not open with {_plant}")
+    elif not _wants and not _bare:
+        _named.append(f"{_wn} wants a plant it should not")
+if _named:
+    fail(f"world entry plants wrong: {_named}")
 else:
-    ok("the four worlds that wanted a specific plant open without it")
+    ok("Lily Pad, Blover, Perfume-shroom, a Jester answer and a warming plant "
+       "each open their world, and Pirate Seas still opens on its unlock alone")
 
 # shuffle_zombies must not move a single location between spheres. It is a
 # client-side swap confined to tiers that keep every threat mechanic in the
@@ -618,13 +678,18 @@ else:
 # every filler and trap, and the second and third copies of an unlock -- opens
 # nothing on its own.
 #
-# THE SUN PRODUCER IS NO LONGER GUARANTEED EARLY, and that is a deliberate
-# trade made on 2026-08-23: world entrances stopped asking for one so that
-# holding a world's unlock is the whole story for that world. Fill can now put
-# every sun producer behind a world unlock, and a player can be handed 16
-# levels of Jurassic Marsh with one starter plant and no sun. Egypt's egypt6
-# checkpoint is the only thing left that asks for one. If the plant
-# requirements come back, this test is where to restate the guarantee.
+# THE SUN PRODUCER IS STILL NOT GUARANTEED EARLY. It stopped being guaranteed
+# on 2026-08-23, when world entrances stopped asking for one; the entry plants
+# that came back on 2026-08-23 do NOT restore it, because none of the four is a
+# sun producer. Fill can still put every sun producer behind a world unlock, and
+# a player can still be handed 16 levels of Jurassic Marsh with one starter
+# plant and no sun. Egypt's egypt6 checkpoint remains the only thing that asks
+# for one. To restore the guarantee, add SUN_PRODUCER_PLANTS as a requirement
+# list to every WORLD_ENTRY_PLANTS entry -- and restate it here.
+#
+# The entry plants themselves open nothing on their own: each needs its world's
+# unlock alongside it, so neither half leaves sphere 1 by itself. That is what
+# keeps the "two kinds of item" claim true after the change.
 _by_kind = {}
 for _n in sorted({i.name for i in _mw.itempool}):
     _opens = len(state_with(_mw, _pre + [_n]).reachable_locations()) > len(_no_sun)
@@ -643,6 +708,20 @@ else:
     _unlocks = sum(1 for k in _by_kind.values() if k == "world unlock")
     ok(f'only sun producers ({_suns}) and world unlocks ({_unlocks}) open anything '
        f'from sphere 1')
+
+# ...and WHICH unlocks open something alone is exactly the worlds that name no
+# entry plant. Without this the count above drops silently if a world stops
+# being gated, or if an entry rule is accidentally applied to a fifth world.
+_alone = {_n for _n, _k in _by_kind.items() if _k == "world unlock"}
+_want_alone = {C.progressive_item_name(_w) for _w in _w.enabled_worlds
+               if _w != "Ancient Egypt" and _w not in C.WORLD_ENTRY_PLANTS}
+if _alone != _want_alone:
+    fail(f'unlocks that open something alone are {sorted(_alone)}, expected '
+         f'{sorted(_want_alone)}')
+else:
+    _gated_unlocks = sorted(C.progressive_item_name(_w) for _w in C.WORLD_ENTRY_PLANTS)
+    ok(f'the {len(_gated_unlocks)} unlocks of worlds with an entry plant open '
+       f'nothing on their own')
 
 # ...and each sun producer really does open egypt6-8 on its own, or that gate
 # is a wall for a seed that offers only one of the five.

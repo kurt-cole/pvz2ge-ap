@@ -16,14 +16,16 @@ from BaseClasses import Item, ItemClassification, Tutorial
 import settings
 
 from .constants import (
-    ALWAYS_ENABLED_WORLDS, EGYPT_SUN_CUT, GAME_NAME, OPTIONAL_WORLDS,
+    ALWAYS_ENABLED_WORLDS, CHEAP_ATTACKER_PLANTS, EGYPT_SUN_CUT, GAME_NAME,
+    LOGIC_ATTACKER_COUNT, OPTIONAL_WORLDS,
     SELECTABLE_WORLDS, STARTER_PLANTS, WORLD_REGIONS, WORLD_STRETCHES,
     progressive_item_name, progressive_need, stretch_suffixes,
 )
 from .options import PvZ2Options
 from .items import (
     FILLER_POOL, ITEM_NAME_GROUPS, ITEM_NAME_TO_ID, ITEM_NAME_TO_ITEM,
-    UPGRADE_ITEM_TO_CNS, PvZ2Item, create_item_pool,
+    PLANT_NAMES, UPGRADE_ITEM_TO_CNS, PvZ2Item, create_item_pool,
+    slot_progression_plants,
 )
 from .locations import (
     LOC_NAME_GROUPS, LOC_NAME_TO_ID, MODERN_DAY_VICTORY_LOCS, PvZ2LocationData,
@@ -208,6 +210,13 @@ class PvZ2GardendlessWorld(World):
     enabled_worlds:  Set[str]
     enabled_regions: Set[str]
 
+    # This slot's cheap-attacker draw, filled in by generate_early. Declared
+    # here so create_item has something to read if it is ever called before
+    # generate_early: an empty set would silently leave every attacker useful,
+    # which reads as a working seed right up until the Egypt 6 gate cannot be
+    # satisfied by anything in the pool.
+    logic_attackers: frozenset = frozenset()
+
     def generate_early(self) -> None:
         self.enabled_worlds  = self._choose_worlds()
         self.enabled_regions = {region for world in self.enabled_worlds
@@ -223,6 +232,32 @@ class PvZ2GardendlessWorld(World):
         # list includes single-use plants (Potato Mine, Chili Bean) and
         # non-damaging support. Those still count for the Egypt logic gate.
         starter = self.random.choice(STARTER_PLANTS)
+
+        # This slot's cheap attackers: the LOGIC_ATTACKER_COUNT of the 46 that
+        # rules.py's Egypt 6 gate will name, and therefore the only ones
+        # promoted to progression. The other 36 are ordinary useful plants.
+        #
+        # Naming all 46 cost 36 progression slots for nothing. In a small seed
+        # the progression block is what squeezes out every useful plant, every
+        # filler and every trap -- an Egypt-only seed had room for not one coin
+        # or gem -- and the rule only ever needed ONE of them to be findable.
+        #
+        # THE STARTER IS DRAWN FIRST AND FORCED INTO THE SET. Two reasons, and
+        # both matter:
+        #   - it keeps the gate's meaning EXACTLY as it was. The starter is
+        #     precollected, so it already satisfied has_any over all 46 in every
+        #     seed; drawing the 10 independently would leave the starter outside
+        #     them about 78% of the time and quietly turn a dead requirement
+        #     into a live one, per seed, which is not a change anyone asked for.
+        #   - the draw has to contain at least one plant that can hold a lane.
+        #     STARTER_PLANTS is CHEAP_ATTACKER_PLANTS minus the single-use and
+        #     non-damaging ones, and a blind draw of 10 can be all Cherry Bomb
+        #     and Potato Mine.
+        # Set before create_item is called for the starter, since that reads it.
+        _rest = [p for p in CHEAP_ATTACKER_PLANTS if p != starter]
+        self.logic_attackers = frozenset(
+            [starter] + self.random.sample(_rest, LOGIC_ATTACKER_COUNT - 1))
+
         self.multiworld.push_precollected(self.create_item(starter))
 
         # No sun producer is requested or granted here, and none needs to be.
@@ -266,7 +301,26 @@ class PvZ2GardendlessWorld(World):
     def create_item(self, name: str) -> Item:
         data = ITEM_NAME_TO_ITEM.get(name)
         if data:
-            return PvZ2Item(name, data.classification, data.code, self.player)
+            cls = data.classification
+            # A PLANT's classification is a per-slot question: which plants are
+            # progression depends on this slot's cheap-attacker draw and on
+            # which worlds it enabled. Decided here rather than in items.py
+            # because PLANT_ITEMS is a module-level list shared by every slot in
+            # the multiworld -- stamping a per-slot classification onto it would
+            # leak between players.
+            #
+            # Both directions matter. Promoting is what keeps a named plant
+            # satisfiable at all; demoting is what stops an Egypt-only seed
+            # carrying 13 entry plants and 36 attackers as progression for rules
+            # it never built, which is what left it no room for filler.
+            #
+            # Only plants are touched. Everything else keeps the static
+            # classification it was defined with.
+            if name in PLANT_NAMES:
+                cls = (ItemClassification.progression
+                       if name in slot_progression_plants(self)
+                       else ItemClassification.useful)
+            return PvZ2Item(name, cls, data.code, self.player)
         return PvZ2Item(name, ItemClassification.filler, None, self.player)
 
     def get_filler_item_name(self) -> str:

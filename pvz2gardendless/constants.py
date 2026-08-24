@@ -233,6 +233,20 @@ SUN_PRODUCER_PLANTS = [
 # Magnifying Grass is held out by hand despite passing every test above: it
 # spends sun to fire, so as the only plant on a sun-starved opening lawn it
 # cannot be relied on to kill anything.
+# How many of the 46 below a given slot actually uses. The list is the DERIVED
+# set of plants that qualify as a cheap attacker; this is how many of them the
+# Egypt 6 rule names, and therefore how many are promoted to progression.
+#
+# It used to be all 46, which cost the pool 36 progression slots for nothing:
+# an access rule naming a plant forces it to progression (see LOGIC_PLANTS), and
+# in a small seed the progression block is what squeezes out every useful plant,
+# every filler and every trap. An Egypt-only seed had no room for a single gem
+# or coin.
+#
+# 10 is Kurt's number (2026-08-23). Drawn per slot from the slot's own RNG, so
+# a seed is stable and two slots differ.
+LOGIC_ATTACKER_COUNT = 10
+
 CHEAP_ATTACKER_PLANTS = [
     "Blooming Heart", "Bonk Choy", "Buttercup", "Cabbage-pult",
     "Celery Stalker", "Chard Guard", "Cherry Bomb", "Chili Bean", "Chomper",
@@ -369,26 +383,50 @@ FIRE_AURA_PLANTS = [
     "Torchwood",
 ]
 
-# Plants a world needs on top of its key, as a list of requirements: the
+# Plants a world needs on top of its unlock, as a list of requirements: the
 # player needs at least one plant from EACH list, so a world can ask for more
-# than one thing at once. rules.py ANDs them onto that world's entrance.
-# NOT READ BY rules.py as of 2026-08-23: a world opens on its unlock alone.
-# Kept, with its derivation intact, because putting any of it back is a loop
-# over this table rather than a re-derivation from the game data.
+# than one thing at once. rules.py ANDs them onto that world's entrance, and
+# the stretch chain inherits it -- so an entry here gates the whole world, not
+# only its opening stretch.
+#
+# LIVE AGAIN as of 2026-08-23, for the four worlds Kurt named. It went dormant
+# on 2026-08-23 when a world became "hold the unlock and it is open"; this puts
+# a specific plant back on four of them, and the unlock rule still applies on
+# top -- Big Wave Beach 1 wants Lily Pad AND one Progressive Big Wave Beach.
+#
+# This is a LOGIC gate, not an unlock, the same footing as Ancient Egypt's
+# egypt6 checkpoint: nothing here reaches slot_data's world_gates, so the
+# client leaves those levels startable and only fill and the tracker know. Do
+# not "fix" that by adding them to world_gates -- the client cannot check a
+# plant the player has not been sent yet without stranding them in a world they
+# already opened.
+#
+# Every plant named here is promoted to progression by LOGIC_PLANTS below, and
+# joins the item-pool floor in items.py, or a small seed could trim away the
+# only thing that opens a world it enabled.
 WORLD_ENTRY_PLANTS = {
+    # Its lanes are water. Lily Pad is one of the three water-only plants and
+    # is what makes a water square hold anything else at all -- the game's own
+    # placement guard is `haveWater || TYPE has neither aquatic nor lilypad`.
     "Big Wave Beach":  [["Lily Pad"]],
-    # Frostbite Caves freezes plants and blows them away, so it wants a
-    # standing source of heat rather than any fire plant -- see
-    # FIRE_AURA_PLANTS for why Hot Potato and Pepper-pult no longer count.
-    "Frostbite Caves": [FIRE_AURA_PLANTS],
+    # Kurt's call (2026-08-23), NOT derived from a property. The evident reason
+    # is Far Future's jetpack zombies (future_jetpack, _disco, _veteran), which
+    # Blover clears -- but flight is not derivable from data in this build
+    # (IsSpawnedFlying is set on zero entries of the live ZombieProps table), so
+    # this is a design decision rather than a mechanic read out of the game.
+    "Far Future":      [["Blover"]],
     "Jurassic Marsh":  [["Perfume-shroom"]],
-    # Dark Ages is permanently night, so no sun falls at all and a sun producer
-    # is the difference between playing the world and standing still. That is
-    # no longer listed here: rules.py requires a sun producer to enter EVERY
-    # world, so naming it again would only evaluate the same has_any twice.
-    # What stays is the Jester, who returns straight-line shots, so something
-    # that gets round him is needed on top.
+    # The Jester returns straight-line shots at your own lawn. What answers him
+    # is a projectile the game explicitly marks CannotBeReversedByJester, which
+    # is what JESTER_COUNTER_PLANTS is derived from. Lobbing is NOT an answer --
+    # an earlier version of that list assumed it was and let every pult through.
     "Dark Ages":       [JESTER_COUNTER_PLANTS],
+    # Its ice blocks freeze plants solid and its winds blow them off the lawn.
+    # What answers that is a standing source of warmth, which is the game's own
+    # WarmingRadius property -- so FIRE_AURA_PLANTS, not any fire plant. Hot
+    # Potato and Pepper-pult are deliberately absent: neither has a warming
+    # radius, and an older version of this rule accepted both.
+    "Frostbite Caves": [FIRE_AURA_PLANTS],
 }
 
 # Every plant named by an access rule anywhere in rules.py. items.py forces
@@ -399,14 +437,27 @@ WORLD_ENTRY_PLANTS = {
 # hand-maintained version is what left Pepper-pult and Fire Peashooter at
 # "useful" while the Frostbite Caves rule named them, quietly collapsing that
 # rule to "Hot Potato only".
-# Only Ancient Egypt's egypt6 checkpoint names plants now, so only its two
-# groups are here. WORLD_ENTRY_PLANTS is deliberately NOT folded in any more:
-# nothing reads it, and forcing 8 plants to progression for a rule that does
-# not exist would put them in CollectionState for no reason.
+# Ancient Egypt's egypt6 checkpoint names two groups, and WORLD_ENTRY_PLANTS is
+# folded back in as of 2026-08-23 because rules.py reads it again. It was left
+# out while dormant on purpose -- forcing plants to progression for a rule that
+# does not exist puts them in CollectionState for no reason -- so if the entry
+# requirements ever go quiet again, take it back out with them.
+#
+# THE CHEAP ATTACKERS ARE NOT HERE. They are the one group whose membership is
+# per-slot: rules.py names the slot's own LOGIC_ATTACKER_COUNT draw rather than
+# the whole list, so which of the 46 are progression is a property of the seed
+# and cannot live in a module-level set. PvZ2GardendlessWorld.create_item folds
+# `world.logic_attackers` in on top of this.
 LOGIC_PLANTS = (
     set(SUN_PRODUCER_PLANTS)
-    | set(CHEAP_ATTACKER_PLANTS)
+    | {plant for groups in WORLD_ENTRY_PLANTS.values()
+       for group in groups for plant in group}
 )
+
+# Everything any rule could EVER name, whichever way the per-slot draw falls.
+# Only used to check that every such plant has an item -- a rule naming a plant
+# with no item can never pass, and would fail silently.
+ALL_LOGIC_PLANTS = LOGIC_PLANTS | set(CHEAP_ATTACKER_PLANTS)
 
 # Shop commodities, taken verbatim from the game's store data. Only the
 # one-time purchases are usable as checks -- the Gem/Coin/Zen bundles in the
@@ -458,6 +509,22 @@ SHOP_COMMODITIES = (SHOP_PLANT_COMMODITIES + SHOP_UPGRADE_COMMODITIES
 # goes in SHOP_EXTRA_COMMODITIES, never in the middle of this.
 SHOP_LEGACY_COMMODITIES = SHOP_PLANT_COMMODITIES + SHOP_UPGRADE_COMMODITIES
 SHOP_REGION = "Shop"
+
+
+def gem_grant_regions():
+    """Regions the guaranteed gem grant may be placed in: everything reachable
+    before Ancient Egypt 9.
+
+    That is the tutorial plus Egypt's two opening stretches -- egypt1-5, which
+    need nothing, and egypt6-8, which want a sun producer and a cheap attacker.
+    Egypt's " Mid" starts at egypt9.
+
+    Derived from EGYPT_STRETCHES rather than listed, so re-cutting Ancient Egypt
+    moves this with it. Deliberately NOT including SHOP_REGION even though it
+    hangs off " Early": the shop is what the gems are FOR, so a grant sitting on
+    a card the player cannot afford is the exact deadlock this exists to break.
+    """
+    return {"Tutorial"} | {"Ancient Egypt" + s for s in EGYPT_STRETCHES[:2]}
 
 # Which level makes each shop card appear, from the store data itself
 # (`StoreCommodityFeatures.Plants[].UnlockLevel` in `import/0f/0fc6e99c8.json`).

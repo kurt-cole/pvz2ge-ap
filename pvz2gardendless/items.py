@@ -8,9 +8,10 @@ from typing import Dict, List, TYPE_CHECKING
 from BaseClasses import Item, ItemClassification
 
 from .constants import (
-    BASE_ID, CHEAP_ATTACKER_PLANTS, GAME_NAME, KEY_NAME_TO_WORLD, KEYED_WORLDS,
-    LOGIC_PLANTS, SUN_PRODUCER_PLANTS, WORLD_REGIONS, progressive_count,
-    progressive_item_name,
+    ALL_LOGIC_PLANTS, BASE_ID, CHEAP_ATTACKER_PLANTS, GAME_NAME,
+    KEY_NAME_TO_WORLD, KEYED_WORLDS, LOGIC_PLANTS, SUN_PRODUCER_PLANTS,
+    WORLD_ENTRY_PLANTS, WORLD_REGIONS,
+    progressive_count, progressive_item_name,
     UPGRADE_GROUPS,
 )
 
@@ -191,9 +192,47 @@ for i, (name, cls) in enumerate(_plants):
         cls = ItemClassification.progression
     PLANT_ITEMS.append(PvZ2ItemData(name, cls, BASE_ID + i))
 
+# The classification above is the SLOT-INDEPENDENT part: sun producers and world
+# entry plants, which every seed's rules name the same way. The cheap attackers
+# are decided per slot -- rules.py names only that slot's draw -- so they are
+# promoted in PvZ2GardendlessWorld.create_item instead, and read here through
+# slot_progression_plants().
+# Every plant name, for create_item's per-slot classification. A set rather
+# than a scan of PLANT_ITEMS on every call: create_item runs once per pool item.
+PLANT_NAMES = {plant.name for plant in PLANT_ITEMS}
+
+
+def slot_progression_plants(world) -> set:
+    """Plant names that are progression FOR THIS SLOT.
+
+    Exactly the plants some rule this slot BUILT names, and nothing else.
+    Anything a rule names has to be progression: AP only tracks advancement
+    items in CollectionState.prog_items, so has_any() is permanently False for
+    a "useful" item and a rule naming one silently loses that option. The
+    converse matters just as much in a small seed -- a plant marked progression
+    for a rule this seed does not have takes a slot from the useful plants,
+    the filler and the traps, and an Egypt-only seed has room for none of them.
+
+    Three sources, all per-slot:
+      - the sun producers, for Ancient Egypt's egypt6 checkpoint, which every
+        seed has
+      - the entry plants of the worlds this seed actually ENABLED. rules.py
+        skips a world that is not in the seed, so Lily Pad gates nothing in an
+        Egypt-only run
+      - this slot's own cheap-attacker draw
+    """
+    plants = set(SUN_PRODUCER_PLANTS) | set(world.logic_attackers)
+    for w in world.enabled_worlds:
+        for group in WORLD_ENTRY_PLANTS.get(w, []):
+            plants.update(group)
+    return plants
+
+
 # A rule naming a plant with no matching item is a rule that can never pass,
-# and it would fail silently -- state.has() just returns False forever.
-_unknown_logic_plants = LOGIC_PLANTS - {plant.name for plant in PLANT_ITEMS}
+# and it would fail silently -- state.has() just returns False forever. Checked
+# over every plant any rule COULD name, not just the always-progression ones,
+# since the per-slot draw can surface any of the 46.
+_unknown_logic_plants = ALL_LOGIC_PLANTS - {plant.name for plant in PLANT_ITEMS}
 if _unknown_logic_plants:
     raise ValueError("access rules reference plants that have no item: "
                      f"{sorted(_unknown_logic_plants)}")
@@ -318,10 +357,53 @@ for i, world_name in enumerate(WORLD_REGIONS):
 
 PROGRESSIVE_ITEM_TO_WORLD = {progressive_item_name(w): w for w in WORLD_REGIONS}
 
+# Guaranteed gems. One copy, worth 150, in EVERY seed regardless of size, and
+# rules.py pins it to a location reachable before Ancient Egypt 9.
+#
+# The problem they solve: gems are the shop's only currency, and under
+# Archipelago a player can earn exactly zero of them. The game's whole resource
+# set contains one GIVE_GEM action, worth 20, inside the PREMIUM_BRING_OUT
+# dialogue -- which the client deliberately silences, because that flow
+# softlocked a real run on the world chooser. So every gem a player will ever
+# see arrives as an item.
+#
+# And the gem FILLER only appears in large seeds. Filler is what is left after
+# the plants, and the plants outnumber the locations until a seed is several
+# worlds wide: an Egypt-only shopsanity seed is 50 locations carrying 7 shop
+# cards worth 210 gems and, before this, zero gem items. A world unlock landing
+# on a 30-gem card was then unwinnable rather than a grind. Kurt hit exactly
+# that in a test run.
+#
+# Progression, not filler, and that is the entire point: filler is trimmed away
+# first in a small seed, which is the case that needs it. No access rule NAMES
+# it -- affordability is still not modelled in logic -- so it gates nothing; the
+# classification is what keeps it in the pool, makes fill place it somewhere
+# reachable, and lets rules.py restrict WHERE with an item rule.
+#
+# One 150 rather than two 75s (Kurt, 2026-08-23). A single item is a single
+# thing to find: two halves can both land late, and half of a gem budget buys
+# a 30-gem card just as well as none does if the other half is behind the wall
+# it was meant to open.
+#
+# The name is load-bearing. The client reads the amount straight off it with
+# /^(\d+) (Coins|Gems)$/, the same regex that handles "500 Coins", so this
+# needs no client change and no rebuild. Do not rename it to anything that
+# regex will not match, or the item silently becomes a toast and no gems.
+#
+# APPENDED AFTER every other group, PROGRESSIVE_WORLD_ITEMS included: item IDs
+# are positional, so a new group anywhere else renumbers everything after it
+# and breaks seeds already generated.
+GEM_GRANT = "150 Gems"
+GEM_GRANT_COUNT = 1
+_gem_grant_base = _progressive_base + len(PROGRESSIVE_WORLD_ITEMS)
+GEM_GRANT_ITEMS: List[PvZ2ItemData] = [
+    PvZ2ItemData(GEM_GRANT, ItemClassification.progression, _gem_grant_base),
+]
+
 ALL_ITEMS: List[PvZ2ItemData] = (PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS
                                  + TRAP_ITEMS + UPGRADE_ITEMS + COSTUME_ITEMS
                                  + COSTUME_TRAP_ITEMS + CURRENCY_TRAP_ITEMS
-                                 + PROGRESSIVE_WORLD_ITEMS)
+                                 + PROGRESSIVE_WORLD_ITEMS + GEM_GRANT_ITEMS)
 ITEM_NAME_TO_ITEM: Dict[str, PvZ2ItemData] = {item.name: item for item in ALL_ITEMS}
 ITEM_NAME_TO_ID: Dict[str, int]        = {item.name: item.code for item in ALL_ITEMS}
 
@@ -355,7 +437,10 @@ ITEM_NAME_GROUPS: Dict[str, set] = {
     # "Traps"; folding them in here would answer "where are my coins" with the
     # places that take them away.
     "Coins":      {i.name for i in FILLER_ITEMS if i.name.endswith("Coins")},
-    "Gems":       {i.name for i in FILLER_ITEMS if i.name.endswith("Gems")},
+    # The guaranteed grants answer here too: a player asking where their gems
+    # are means all of them, and these are the ones worth finding.
+    "Gems":       {i.name for i in FILLER_ITEMS if i.name.endswith("Gems")}
+                  | {i.name for i in GEM_GRANT_ITEMS},
     "Filler":     {i.name for i in FILLER_ITEMS} | {i.name for i in COSTUME_ITEMS},
 }
 ITEM_NAME_GROUPS["Currency"] = ITEM_NAME_GROUPS["Coins"] | ITEM_NAME_GROUPS["Gems"]
@@ -430,34 +515,66 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
             for _ in codenames:
                 pool.append(world.create_item(name))
 
+    # The guaranteed gems, before the plants for the same reason the upgrades
+    # are: not negotiable, and the trim below has to see the room they take.
+    #
+    # ONLY WITH SHOPSANITY. The grant exists to stop a progression item stranding
+    # behind a shop card the player cannot afford, and shop cards are the only AP
+    # locations in this game that cost anything -- no access rule reads currency,
+    # and nothing else in a seed can be bought. With shopsanity off there is no
+    # wall to break, and a mandatory item in a 43-check seed is a real cost: it
+    # is a slot that would otherwise be a plant.
+    #
+    # The gem FILLER (10/20/50 Gems) is not gated this way and should not be.
+    # Those are ordinary filler with in-game value; this one is mandatory, which
+    # is what makes it worth justifying. A currency trap arriving in a seed with
+    # no gems is harmless either way -- the client takes min(balance, debt) and
+    # forgives the rest rather than holding a debit against later income.
+    if world.options.shopsanity:
+        for _ in range(GEM_GRANT_COUNT):
+            pool.append(world.create_item(GEM_GRANT))
+
     # Progression plants. Every rule that names a plant is a has_any() over a
-    # whole GROUP, so what logic needs is one plant from each group, not all of
-    # them -- and since 2026-08-23 there is exactly one such rule left (Ancient
-    # Egypt's egypt6 checkpoint, a sun producer and a cheap attacker).
+    # whole GROUP, so what logic needs is one plant from each group that some
+    # rule this seed built actually asks for -- not all 55 of them.
     #
-    # So these are trimmable after all, which they were not while four worlds
-    # each named a plant of their own. An Egypt-only seed is 54 locations
-    # against 55 progression plants, and used to fail to generate outright.
+    # That is what makes them trimmable at all. An Egypt-only seed is 43
+    # locations against 55 progression plants, and used to fail to generate
+    # outright.
     #
-    # The floor is one plant from every group any rule names, drawn from the
+    # The floor is one plant from every group a rule names, drawn from the
     # slot's own RNG so a seed is stable and slots differ. Below that a gate
     # becomes unsatisfiable, so the ValueError is still the right answer.
-    prog_plants = [p for p in PLANT_ITEMS
-                   if p.classification == ItemClassification.progression]
+    #
+    # WHICH groups depends on the seed. Ancient Egypt's egypt6 checkpoint is in
+    # every seed, so its two are always here. WORLD_ENTRY_PLANTS adds one group
+    # per requirement of each ENABLED world -- Lily Pad if Big Wave Beach is in,
+    # Blover if Far Future is -- and adds nothing for a world the seed left out,
+    # whose entrance rules.py never builds. Miss this and a small seed can trim
+    # away the only plant that opens a world it enabled, which fill reports as
+    # unreachable locations rather than as anything pointing back here.
+    _slot_prog = slot_progression_plants(world)
+    prog_plants = [p for p in PLANT_ITEMS if p.name in _slot_prog]
     room = pool_size - len(pool)
     if room < len(prog_plants):
+        # The attacker group is the slot's OWN draw, not all 46: those are the
+        # only names rules.py put in the Egypt 6 rule, so keeping one of the
+        # other 36 would not satisfy it.
+        groups = [SUN_PRODUCER_PLANTS, list(world.logic_attackers)]
+        for w in sorted(world.enabled_worlds):
+            groups.extend(WORLD_ENTRY_PLANTS.get(w, []))
+        prog_names = {p.name for p in prog_plants}
         floor_names = set()
-        for group in (SUN_PRODUCER_PLANTS, CHEAP_ATTACKER_PLANTS):
-            eligible = sorted(n for n in group
-                              if n in {p.name for p in prog_plants})
+        for group in groups:
+            eligible = sorted(n for n in group if n in prog_names)
             if eligible:
                 floor_names.add(world.random.choice(eligible))
         if room < len(floor_names):
             raise ValueError(
-                f"item pool ({len(pool)} unlocks and upgrades) leaves {room} "
-                f"of the {pool_size} locations this slot builds, too few for "
-                f"the {len(floor_names)} plants its access rules need; raise "
-                "world_count or turn on include_side_paths")
+                f"item pool ({len(pool)} unlocks, upgrades and gem grants) "
+                f"leaves {room} of the {pool_size} locations this slot builds, "
+                f"too few for the {len(floor_names)} plants its access rules "
+                "need; raise world_count or turn on include_side_paths")
         spare = [p.name for p in prog_plants if p.name not in floor_names]
         keep = floor_names | set(world.random.sample(spare, room - len(floor_names)))
         prog_plants = [p for p in prog_plants if p.name in keep]
@@ -474,8 +591,11 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
     # Which ones go is drawn from the slot's own RNG so it is stable for a seed
     # and differs between slots, then re-sorted into PLANT_ITEMS order so the
     # pool itself is built in a fixed order regardless of what the draw picked.
-    useful = [p for p in PLANT_ITEMS
-              if p.classification == ItemClassification.useful]
+    # Everything not progression FOR THIS SLOT, which includes the 36 cheap
+    # attackers the draw passed over. They are ordinary plants: still worth
+    # having, still in the pool when there is room, and the first thing to go
+    # when there is not.
+    useful = [p for p in PLANT_ITEMS if p.name not in _slot_prog]
     room = pool_size - len(pool)
     if room < len(useful):
         # Cannot be negative: the progression-plant trim above already sized

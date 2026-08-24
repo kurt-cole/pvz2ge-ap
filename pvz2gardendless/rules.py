@@ -13,9 +13,10 @@ from worlds.generic.Rules import add_rule, forbid_items_for_player, set_rule
 from .constants import (
     CHEAP_ATTACKER_PLANTS, DANGER_ROOM_UNLOCK, EGYPT_STRETCH_PLANTS,
     KEYED_WORLDS, SIDE_PATH_REGIONS, STRETCH_PLANTS, SUN_PRODUCER_PLANTS,
-    WORLD_ENTRY_PLANTS, WORLD_REGIONS, is_early_region, progressive_item_name,
-    progressive_need, stretch_suffixes,
+    WORLD_ENTRY_PLANTS, WORLD_REGIONS, gem_grant_regions, is_early_region,
+    progressive_item_name, progressive_need, stretch_suffixes,
 )
+from .items import GEM_GRANT
 from .locations import SHOP_LOC_UNLOCK, goal_locations_for
 
 if TYPE_CHECKING:
@@ -40,9 +41,22 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # progressive unlock alone. The other worlds' entrances carry the same
     # requirement (below); between them, nothing in any seed opens without a
     # sun producer.
+    # The attacker half names this slot's OWN draw of LOGIC_ATTACKER_COUNT
+    # plants, not all 46 that qualify. Naming all of them forced every one to
+    # progression for no gain, and in a small seed the progression block is what
+    # squeezes out every useful plant, filler and trap.
+    #
+    # Note this half is currently satisfied for free in every seed:
+    # generate_early precollects a STARTER_PLANT, which is drawn from the same
+    # 46 and, since 2026-08-23, from the draw itself. That is deliberate -- the
+    # guarantee exists so a player always has something to place -- but it does
+    # mean egypt6-8 effectively asks for a sun producer alone. See
+    # sphere_test's "egypt6-8 need a sun producer, and want nothing else".
+    _attackers = list(world.logic_attackers)
+
     def has_sun_and_attacker(state):
         return (state.has_any(SUN_PRODUCER_PLANTS, player) and
-                state.has_any(CHEAP_ATTACKER_PLANTS, player))
+                state.has_any(_attackers, player))
 
     for suffix in EGYPT_STRETCH_PLANTS:
         name = f"Enter Ancient Egypt{suffix}"
@@ -71,22 +85,45 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
                  lambda state, i=progressive_item_name(w),
                  n=progressive_need(w, ""): state.has(i, player, n))
 
-    # NO PLANT REQUIREMENTS ON WORLDS OR THEIR STRETCHES, as of 2026-08-23.
+    # Four worlds want a plant of their own on top of that unlock, restored on
+    # 2026-08-23: Lily Pad for Big Wave Beach, Blover for Far Future,
+    # Perfume-shroom for Jurassic Marsh, and something the Jester cannot turn
+    # round for Dark Ages. So Big Wave Beach 1 is in logic on Lily Pad AND one
+    # Progressive Big Wave Beach, not on the unlock alone.
     #
-    # A world used to want a sun producer and, for four of them, a specific
-    # plant (Lily Pad for Big Wave Beach, Perfume-shroom for Jurassic Marsh, a
-    # fire aura for Frostbite Caves, a Jester answer for Dark Ages), and its
-    # later stretches wanted a plant COUNT on top of the unlock. Kurt asked for
-    # this simplified: holding a world's unlock is what says that world is
-    # open, and a tracker showing dino1-16 shut while the player held
-    # Progressive Jurassic Marsh was the complaint that prompted it.
+    # add_rule, not set_rule: this stacks onto the unlock requirement set just
+    # above rather than replacing it, and stacks again per requirement list, so
+    # a world can ask for more than one thing at once (none does today).
     #
-    # WORLD_ENTRY_PLANTS and STRETCH_PLANTS are still in constants.py, unused,
-    # so putting any of this back is a loop rather than a re-derivation. What
-    # went with them is the structural guarantee that a sun producer is
-    # findable in sphere 1: a world unlock now leaves sphere 1 on its own, so
-    # fill is no longer forced to place one early. Ancient Egypt's egypt6
-    # checkpoint below is the one plant rule left standing.
+    # It goes on the world's ENTRANCE and nothing else. regions.py chains the
+    # stretches -- Enter <W> Mid hangs off <W>, not off Tutorial -- so a rule
+    # here is inherited by every stretch of that world for free, and repeating
+    # it per stretch would only evaluate the same has_any three times.
+    #
+    # LOGIC ONLY, deliberately. Unlike the unlocks these never reach slot_data's
+    # world_gates and the client will happily start the level, exactly as with
+    # Ancient Egypt's egypt6 checkpoint. What they change is where fill may hide
+    # things and what a tracker calls reachable.
+    #
+    # STRETCH_PLANTS is still dormant beside WORLD_ENTRY_PLANTS in constants.py:
+    # what came back is the per-world plant, not the per-stretch plant COUNT
+    # that made a tracker show dino1-16 shut while the player held Progressive
+    # Jurassic Marsh.
+    for w, requirements in WORLD_ENTRY_PLANTS.items():
+        if w not in world.enabled_worlds:
+            continue  # not in this seed: no entrance to rule on
+        try:
+            entrance = multiworld.get_entrance(f"Enter {w}", player)
+        except KeyError:
+            # Ancient Egypt is the only world with no entrance, and it is not in
+            # the table. Anything else reaching here is a world that names entry
+            # plants and has nowhere to hang them, which would read as gated and
+            # be wide open -- so it raises rather than skipping quietly.
+            raise ValueError(
+                f"{w} names entry plants but has no entrance to rule on") from None
+        for group in requirements:
+            add_rule(entrance,
+                     lambda state, g=group: state.has_any(g, player))
 
     # ...and every stretch, in every world, needs that world's progressive
     # unlock: one copy for the middle stretch, two for the last. This is the
@@ -229,6 +266,36 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         # last checks in the seed.
         for shop_loc in shop_gated:
             forbid_items_for_player(shop_loc, key_names, player)
+
+    # The guaranteed gem grant lands before Ancient Egypt 9. Kurt asked for this
+    # directly, and it is what makes the item a fix rather than a lottery: the
+    # store opens at egypt6 and its five ungated upgrade cards cost 30 gems
+    # apiece, so a grant found in Egypt's endgame arrives after every point it
+    # was needed.
+    #
+    # An item RULE, the same mechanism early_world_keys uses -- it changes what
+    # fill may put where, not what any location requires. A rule that instead
+    # made shop cards REQUIRE gems would drag affordability into logic, which is
+    # deliberately not modelled: currency accrues from play as well as items.
+    #
+    # Not early_items: that is only a request, and fill warns and places
+    # normally when it cannot honour one. This has to hold.
+    #
+    # Sound because the allowed set is never empty -- Tutorial's four checks and
+    # egypt1-5 exist in every seed, Ancient Egypt being always enabled -- and
+    # never contested: at most two unlocks share the early regions with it under
+    # early_world_keys, against nine locations before the store even opens.
+    # Skipped entirely with shopsanity off, where items.py ships no grant to
+    # place. Forbidding an item that is not in the pool is harmless but not
+    # free: it walks every location in the seed to attach a rule nothing will
+    # ever consult.
+    if world.options.shopsanity:
+        _gem_ok = gem_grant_regions()
+        for region in multiworld.get_regions(player):
+            if region.name in _gem_ok:
+                continue
+            for location in region.locations:
+                forbid_items_for_player(location, {GEM_GRANT}, player)
 
     # The win condition — complete worlds_required worlds, in whichever sense
     # goal_type picks (that world's Zomboss, its final level, or its World Key
