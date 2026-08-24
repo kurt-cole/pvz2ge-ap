@@ -46,17 +46,21 @@ what every seed opens with.
 
 ## Do I have to play all thirteen worlds?
 
-No. **World Count** sets how many main worlds the seed uses, counting Ancient Egypt but not Modern
-Day, and the generator picks the rest at random — set it to `random` and it picks the number too. Use
-**Enabled Worlds** to name worlds you definitely want; any remaining slots are filled at random around
-them, and naming more worlds than the count asks for keeps all of them.
+No. **World Count** sets how many worlds the seed uses — all of them count, Ancient Egypt and Modern
+Day alike — and the generator picks the rest at random. Set it to `random` and it picks the number too.
+Use **Enabled Worlds** to name worlds you definitely want; any remaining slots are filled at random
+around them, and naming more worlds than the count asks for keeps all of them.
 
-Ancient Egypt is always in, since it is the only world playable with no items. Modern Day is always in
-too, and counts toward the goal like any other world.
+Ancient Egypt is always in, since it is the only world playable with no items. Set World Count to 1 and
+Ancient Egypt is the whole seed. Modern Day is an ordinary entry: leave it out and the seed has none.
 
-Worlds left out are gone completely: their levels are not locations, their World Key is not in the item
+Worlds left out are gone completely: their levels are not locations, their unlock items are not in the
 pool, and they stay locked for the whole run. Everything outside the main worlds — the side paths, the
-Danger Rooms, the store — is unaffected, so even a one-world seed still has a few hundred checks.
+Danger Rooms, the store — is unaffected.
+
+A seed that small has fewer places than the item pool would like, so it ships fewer plants: the ones no
+rule needs go first, then the rest down to a floor of one sun producer and one cheap attacker, which is
+all the logic can ever ask for. An Egypt-only seed is about 50 locations.
 
 **Worlds Required** shrinks to fit. Ask for 4 world keys in a 3-world seed and the run needs 3.
 

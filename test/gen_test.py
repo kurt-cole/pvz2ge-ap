@@ -52,6 +52,7 @@ def run(label, **kw):
     sd = w.fill_slot_data()
 
     locs = w.active_locations()
+    from pvz2gardendless.items import PLANT_ITEMS as _PLANTS_ALL
     keys = [i.name for i in mw.itempool if i.name.endswith(" Key")]
     unlocks = [i.name for i in mw.itempool if i.name.startswith("Progressive ")
                and i.name[len("Progressive "):] in C.WORLD_REGIONS]
@@ -110,10 +111,20 @@ def run(label, **kw):
     # in the seed is satisfied before it is ever asked and the gates go vacuous.
     assert not (set(SUN_PRODUCER_PLANTS) & {i.name for i in mw.precollected}), \
         "a sun producer was granted outright, defeating the Egypt gate"
-    # Every sun producer has to actually be in the pool, or the gate is a wall.
+    # At least one sun producer has to be in the pool, or Egypt's egypt6 gate is
+    # a wall. Normally every one of them is; a seed with fewer locations than
+    # progression plants trims down to a floor of one per group, which is what
+    # lets an Egypt-only seed generate at all.
     _pool_names = {i.name for i in mw.itempool}
-    assert set(SUN_PRODUCER_PLANTS) <= _pool_names, \
-        f"sun producers missing from the pool: {sorted(set(SUN_PRODUCER_PLANTS) - _pool_names)}"
+    _suns = set(SUN_PRODUCER_PLANTS) & _pool_names
+    assert _suns, "no sun producer in the pool, so the egypt6 gate is a wall"
+    _attackers = set(C.CHEAP_ATTACKER_PLANTS) & _pool_names
+    assert _attackers, "no cheap attacker in the pool, so the egypt6 gate is a wall"
+    _trimmed = len([i for i in mw.itempool
+                    if i.name in {p.name for p in _PLANTS_ALL}]) < len(_PLANTS_ALL)
+    if not _trimmed:
+        assert set(SUN_PRODUCER_PLANTS) <= _pool_names, \
+            f"sun producers missing from an untrimmed pool: {sorted(set(SUN_PRODUCER_PLANTS) - _pool_names)}"
     assert starter in STARTER_PLANTS, f"starter {starter} not in STARTER_PLANTS"
     assert starter not in SINGLE_USE_PLANTS, f"starter {starter} is single-use"
     assert starter not in NON_DAMAGING_PLANTS, f"starter {starter} deals no damage"
@@ -188,11 +199,31 @@ run("all worlds + shopsanity + traps", shopsanity=1, trap_percentage=50)
 w, _ = run("explicit 4 vs count 2", world_count=2,
            enabled_worlds=["Pirate Seas", "Wild West", "Far Future", "Dark Ages"])
 assert {"Pirate Seas", "Wild West", "Far Future", "Dark Ages"} <= w.enabled_worlds
-assert "Ancient Egypt" in w.enabled_worlds and "Modern Day" in w.enabled_worlds
+assert "Ancient Egypt" in w.enabled_worlds
 
-# Egypt counts toward world_count: 3 => Egypt + 2 others (+ Modern Day)
+# world_count is the WHOLE number of worlds, Ancient Egypt and Modern Day
+# included. Modern Day was forced in on top of the count until 2026-08-23,
+# which made "1" produce two worlds -- caught in a real seed whose spoiler said
+# World Count 1 and then built 103 locations across Egypt and Modern Day.
 w, _ = run("count semantics", world_count=3)
-assert len(w.enabled_worlds - {"Modern Day"}) == 3, w.enabled_worlds
+assert len(w.enabled_worlds) == 3, w.enabled_worlds
+
+# ...and 1 really is Ancient Egypt on its own, which is the case that was
+# broken. It is also the smallest seed the pool can fill, so it doubles as the
+# floor test for the progression-plant trim.
+w1, _ = run("one world means Egypt alone", world_count=1)
+assert w1.enabled_worlds == {"Ancient Egypt"}, w1.enabled_worlds
+
+# Modern Day is an ordinary selectable world now: naming it gets it, and a
+# count that cannot fit it leaves it out.
+wmd, _ = run("Modern Day by name", world_count=2, enabled_worlds=["Modern Day"])
+assert wmd.enabled_worlds == {"Ancient Egypt", "Modern Day"}, wmd.enabled_worlds
+
+# The range has to reach every world, or the option cannot ask for all of them.
+assert WorldCount.range_end == len(C.WORLD_REGIONS) == 13, WorldCount.range_end
+assert WorldCount.default == WorldCount.range_end
+wall, _ = run("every world", world_count=13)
+assert wall.enabled_worlds == set(C.WORLD_REGIONS), sorted(wall.enabled_worlds)
 
 # determinism for a given slot seed
 a, _ = run("determinism A", world_count=4)
@@ -553,7 +584,11 @@ _modern_cards = {C.shop_location_name(_c) for _c, _l in C.SHOP_UNLOCK.items()
 # Upgrades are the only ungated cards that are checks; the ungated PLANTS are
 # out entirely, since every upstream store change has landed in that set.
 _upgrade_cards = {C.shop_location_name(_c) for _c in C.SHOP_UPGRADE_COMMODITIES}
-_want_1w = _upgrade_cards | _egypt_cards | _modern_cards
+# No Modern Day cards: world_count 1 is Ancient Egypt alone as of 2026-08-23.
+# Their absence is the assertion -- Modern Day used to ride along in every seed
+# and its two cards came with it.
+_want_1w = _upgrade_cards | _egypt_cards
+assert _modern_cards and not (_modern_cards & _want_1w),     "Modern Day cards are still expected in a one-world seed"
 assert _e1shop == _want_1w,     f"one-world shop checks wrong: missing {sorted(_want_1w - _e1shop)}, "     f"extra {sorted(_e1shop - _want_1w)}"
 # ...and every world back in restores all 39, so the filter is not just deleting.
 _eall, _ = run("shop cards with every world", shopsanity=1)
@@ -1049,34 +1084,65 @@ assert _e == set(range(1, 43)), \
     f"Neon Mixtape Tour is missing levels: {sorted(set(range(1,43)) - _e)}"
 print(f"Neon Mixtape Tour covers eighties1-42 with no gaps")
 
-# ── small seeds trim useful plants rather than failing ──────────────────────
-# A one-world seed with side paths off has 101 locations (140 with shopsanity)
-# against a 149-item block. The useful plants are the only part that can give:
-# they are named by no access rule, so shipping fewer of them costs reachability
-# nothing. Progression plants, keys and upgrades all have to survive.
+# ── small seeds trim plants rather than failing ─────────────────────────────
+# A one-world seed is 54 locations (63 with shopsanity) against a block that
+# wants 55 progression plants alone. Useful plants go first -- no rule names
+# them, so shipping fewer costs reachability nothing -- and then the
+# progression plants themselves, down to a floor of one per group any rule
+# names.
+#
+# That floor is what makes an Egypt-only seed possible at all. It became safe
+# on 2026-08-23, when the last per-world plant requirement went: every
+# surviving rule is a has_any() over a group, so one plant from each is all
+# logic can ever need. The unlocks and upgrades never give.
 from apstub import ItemClassification as _IC
 _prog_plants = {p.name for p in W.items.PLANT_ITEMS
                 if p.classification == _IC.progression}
+_unlock_names = {f"Progressive {_w}" for _w in C.WORLD_REGIONS}
 
 for _label, _kw in (("1 world", dict(world_count=1)),
                     ("1 world + shopsanity", dict(world_count=1, shopsanity=1)),
-                    ("2 worlds", dict(world_count=2))):
+                    ("2 worlds", dict(world_count=2)),
+                    ("13 worlds", dict(world_count=13))):
     _w, _ = run(f"trim: {_label}", include_side_paths=0, worlds_required=11, **_kw)
     _mwT = _w.multiworld
     _names = [i.name for i in _mwT.itempool]
-    _missing = _prog_plants - set(_names)
-    assert not _missing, f"{_label}: dropped progression plants {sorted(_missing)[:5]}"
-    _keys = [n for n in _names if n.endswith(" Key")]
-    for _k in _keys:
-        assert C.KEY_NAME_TO_WORLD[_k] in _w.enabled_worlds
-    assert len(_names) == len(_w.active_locations()), f"{_label}: pool does not fill"
-    _dupes = [n for n, c in collections.Counter(
-        n for n in _names if n in _prog_plants).items() if c > 1]
-    assert not _dupes, f"{_label}: duplicated a progression plant {_dupes}"
+    _nameset = set(_names)
 
-# ...and the trim is stable for a slot: same options, same plants dropped.
-_a1, _ = run("trim determinism A", world_count=1, include_side_paths=0, worlds_required=11)
-_b1, _ = run("trim determinism B", world_count=1, include_side_paths=0, worlds_required=11)
-assert (sorted(i.name for i in _a1.multiworld.itempool)
-        == sorted(i.name for i in _b1.multiworld.itempool)), "trim is not deterministic"
+    # The floor holds in every seed, however small: each group a rule names
+    # keeps at least one member, or that gate is a wall.
+    for _group, _gname in ((C.SUN_PRODUCER_PLANTS, "sun producers"),
+                           (C.CHEAP_ATTACKER_PLANTS, "cheap attackers")):
+        assert set(_group) & _nameset, f"{_label}: no {_gname} left in the pool"
+
+    # Unlocks and upgrades are never trimmed.
+    _want_unlocks = sum(C.progressive_count(_x) for _x in _w.enabled_worlds)
+    _got_unlocks = sum(1 for n in _names if n in _unlock_names)
+    assert _got_unlocks == _want_unlocks, \
+        f"{_label}: {_got_unlocks} unlocks, expected {_want_unlocks}"
+    if _w.options.shuffle_upgrades:
+        _ups = {u.name for u in W.items.UPGRADE_ITEMS}
+        assert sum(1 for n in _names if n in _ups) == C.UPGRADE_ITEM_COUNT, \
+            f"{_label}: upgrades were trimmed"
+
+    # A seed with room keeps every progression plant; only a seed short of
+    # room may drop any, and then only after every useful plant has gone.
+    _missing = _prog_plants - _nameset
+    _useful_left = sum(1 for n in _names if n in
+                       {p.name for p in W.items.PLANT_ITEMS
+                        if p.classification == _IC.useful})
+    if _missing:
+        assert not _useful_left, \
+            f"{_label}: dropped {len(_missing)} progression plants while still " \
+            f"shipping {_useful_left} useful ones"
+    assert len(_names) == len(_w.active_locations()), \
+        f"{_label}: pool {len(_names)} does not fill {len(_w.active_locations())} locations"
+
+# The default seed must not be trimming anything -- if it is, the pool and the
+# location count have drifted and every "every X is in the pool" claim above is
+# quietly weaker than it reads.
+_wfull, _ = run("trim: default seed", )
+assert _prog_plants <= {i.name for i in _wfull.multiworld.itempool}, \
+    "the default seed is trimming progression plants"
+
 print("small seeds trim useful plants, keeping every progression plant and key")

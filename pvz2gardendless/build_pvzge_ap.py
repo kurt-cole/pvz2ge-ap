@@ -2385,21 +2385,32 @@ window.electron = electron;
     'store_open', 'store_intro',
   ];
 
-  // Flags that gate a flow which PAYS OUT. Set whatever skip_tutorial says,
-  // because leaving one unset is not a cosmetic choice -- it is free currency:
+  // The three premium-plant flows, silenced whatever skip_tutorial says.
   //
-  //     !tut.premium_bring_out && tut.premium_unlock
-  //       ? (tut.premium_bring_out = true, SetFlow("PREMIUM_BRING_OUT"), savePP())
-  //       : ...
+  // ALL THREE, TOGETHER. premium_unlock and premium_light_up used to be left
+  // alone here on the belief that they gate what the store shows; they do not.
+  // Every reference to all three in index.js is either the constructor default
+  // or the trigger itself -- checked exhaustively 2026-08-23 -- so each is
+  // purely a "have I seen this prompt" flag and forcing it hides no content.
   //
-  // and PREMIUM_BRING_OUT carries GIVE_GEM 20. Seen firing repeatedly when
-  // moving between worlds (2026-08-16), so 20 gems on tap.
+  //   PREMIUM_UNLOCK   pushPath, on finishing a level node that carries a
+  //                    premium commodity:
+  //                      !HasFlow() && !premium_unlock && this._commodity
+  //                    This is the one that softlocked the world chooser after
+  //                    egypt8 -- "I've detected a new premium plant that hadn't
+  //                    shown up in the store before", with no way out.
+  //   PREMIUM_LIGHT_UP a plant icon lighting up on a node. With the flag set
+  //                    the game shows its gameTipString instead of a flow,
+  //                    which is the same information without the dialogue.
+  //   PREMIUM_BRING_OUT the store screen:
+  //                      !premium_bring_out && premium_unlock
+  //                    and it carries GIVE_GEM 20. Seen firing repeatedly when
+  //                    moving between worlds (2026-08-16), so 20 gems on tap.
   //
-  // premium_unlock and premium_light_up are deliberately NOT here. They gate
-  // what the store shows rather than a payout, and premium_unlock is the
-  // condition this flow reads -- forcing it would arm the flow rather than
-  // silence it.
-  const PAYOUT_FLAGS = ['premium_bring_out'];
+  // The order they are set in does not matter because they are set in the same
+  // pass: setting premium_unlock ALONE would arm the bring-out flow, which is
+  // why the old comment warned against it. Setting both closes it.
+  const PREMIUM_FLAGS = ['premium_unlock', 'premium_light_up', 'premium_bring_out'];
 
   // Which cp.features flag each level clear turns on, straight out of the
   // game's own unlock chain in index.js:
@@ -2706,11 +2717,12 @@ window.electron = electron;
       for(const flag of FEATURE_TUTORIAL_FLAGS) tut[flag] = true;
     }
 
-    // 5b-ii. The paying flows are silenced regardless of skip_tutorial. A
-    // player who wants the tutorials still does not want a repeatable 20 gems.
+    // 5b-ii. The premium flows are silenced regardless of skip_tutorial. A
+    // player who wants the tutorials still does not want a repeatable 20 gems,
+    // and still does not want a dialogue that cannot be dismissed.
     {
       const tut = cp.tutorial || (cp.tutorial = {});
-      for(const flag of PAYOUT_FLAGS) tut[flag] = true;
+      for(const flag of PREMIUM_FLAGS) tut[flag] = true;
     }
 
     // 5c. Re-derive the game's feature flags from level progress. Runs after

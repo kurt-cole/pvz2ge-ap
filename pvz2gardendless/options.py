@@ -14,12 +14,16 @@ from .constants import SELECTABLE_WORLDS
 
 class WorldCount(Range):
     """
-    How many main worlds this seed uses, counting Ancient Egypt.
+    How many worlds this seed uses. This is the whole number of worlds you
+    get -- every world counts, Ancient Egypt and Modern Day included.
 
-    Ancient Egypt is always one of them -- it is the only world playable with
-    no items, so it is where the seed opens. Modern Day is always present too
-    but is not counted here, so this number is the worlds you chose, not the
-    worlds you get.
+    Ancient Egypt is always one of them: it is the only world playable with no
+    items, so it is where the seed opens. Set this to 1 and Ancient Egypt is
+    the entire seed.
+
+    Modern Day used to be forced into every seed on top of this number, so 1
+    gave you two worlds. It is an ordinary world now and takes a slot like any
+    other.
 
     The remaining slots are filled at random from the worlds not already named
     in enabled_worlds. Set this to `random` to let the generator pick the
@@ -35,7 +39,7 @@ class WorldCount(Range):
     requirement: a sun producer and a cheap attacker from Egypt level 6, which
     is logic only.
 
-    12 (the default) is every world, which is how this game has always
+    13 (the default) is every world, which is how this game has always
     generated.
     """
     display_name = "World Count"
@@ -53,8 +57,9 @@ class EnabledWorlds(OptionSet):
     name more and every one of them is still included, since an explicit
     choice always wins over the count.
 
-    Ancient Egypt is included whether or not it is listed. Modern Day is not a
-    valid entry -- it is in every seed already.
+    Ancient Egypt is included whether or not it is listed. Modern Day is an
+    ordinary entry here as of 2026-08-23; leave it out and the seed has no
+    Modern Day.
     """
     display_name = "Enabled Worlds"
     valid_keys   = SELECTABLE_WORLDS

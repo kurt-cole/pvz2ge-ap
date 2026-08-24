@@ -154,7 +154,7 @@ class PvZ2Web(WebWorld):
     # it actually means to pin; everything else falls back to its default.
     options_presets = {
         "Short": {
-            # Four worlds counting Ancient Egypt, plus Modern Day, so
+            # Four worlds in total, Ancient Egypt among them, so
             # worlds_required's 3 is comfortably inside what the seed offers.
             "world_count":        4,
             "goal_type":          "world_key",
@@ -163,14 +163,14 @@ class PvZ2Web(WebWorld):
             "shopsanity":         False,
         },
         "Standard": {
-            "world_count":        12,
+            "world_count":        13,
             "goal_type":          "world_key",
             "worlds_required":    7,
             "skip_tutorial":      True,
             "shopsanity":         False,
         },
         "Completionist": {
-            "world_count":        12,
+            "world_count":        13,
             "goal_type":          "completion",
             "worlds_required":    12,
             "skip_tutorial":      False,
@@ -250,12 +250,13 @@ class PvZ2GardendlessWorld(World):
         chosen = set(self.options.enabled_worlds.value) & set(SELECTABLE_WORLDS)
         chosen.update(ALWAYS_ENABLED_WORLDS)
 
-        # Ancient Egypt counts toward world_count (it is a world you play);
-        # Modern Day does not -- it is always present and not selectable, so
-        # counting it would silently cost the seed one of the worlds the
-        # player asked for. Top up from OPTIONAL_WORLDS, which is
-        # list-ordered, so the sample depends only on the slot's seeded RNG.
-        short = self.options.world_count.value - len(chosen - {"Modern Day"})
+        # Every world counts toward world_count, Ancient Egypt and Modern Day
+        # alike: the number is the worlds you get. Modern Day used to be
+        # subtracted here because it was forced into every seed on top of the
+        # count, which made `world_count: 1` produce two worlds. Top up from
+        # OPTIONAL_WORLDS, which is list-ordered, so the sample depends only on
+        # the slot's seeded RNG.
+        short = self.options.world_count.value - len(chosen)
         if short > 0:
             candidates = [w for w in OPTIONAL_WORLDS if w not in chosen]
             chosen.update(self.random.sample(candidates,

@@ -144,15 +144,18 @@ def is_early_region(name: str) -> bool:
     return not name.endswith(LATE_REGION_SUFFIXES) and name != "Modern Day"
 
 # Worlds every seed keeps, whatever the world-selection options say. Ancient
-# Egypt is the only world reachable with no items at all, so it is what
-# sphere 1 is made of. Modern Day is kept because it has always been kept:
-# it no longer holds the victory location (that hangs off Tutorial now), but
-# dropping it would quietly remove a world from every seed.
-ALWAYS_ENABLED_WORLDS = ["Ancient Egypt", "Modern Day"]
+# Egypt only: it is the one world reachable with no items at all, so it is what
+# sphere 1 is made of and a seed without it has nowhere to begin.
+#
+# Modern Day was in here until 2026-08-23. It was kept because it held the
+# victory location, and then out of habit after Victory moved to Tutorial --
+# which meant `world_count: 1` still produced two worlds. It is an ordinary
+# selectable world now, so 1 really does mean Ancient Egypt alone.
+ALWAYS_ENABLED_WORLDS = ["Ancient Egypt"]
 
-# The worlds enabled_worlds / world_count actually choose between. Modern Day
-# is not offered: it is in every seed, so there is nothing to decide.
-SELECTABLE_WORLDS = [w for w in WORLD_REGIONS if w != "Modern Day"]
+# The worlds enabled_worlds / world_count choose between -- every world there
+# is, since Ancient Egypt being always-in does not stop it being named.
+SELECTABLE_WORLDS = list(WORLD_REGIONS)
 OPTIONAL_WORLDS   = [w for w in SELECTABLE_WORLDS if w not in ALWAYS_ENABLED_WORLDS]
 
 # World Key item name -> world, so the pool builder can drop the keys of

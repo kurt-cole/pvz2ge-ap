@@ -8,8 +8,9 @@ from typing import Dict, List, TYPE_CHECKING
 from BaseClasses import Item, ItemClassification
 
 from .constants import (
-    BASE_ID, GAME_NAME, KEY_NAME_TO_WORLD, KEYED_WORLDS, LOGIC_PLANTS,
-    WORLD_REGIONS, progressive_count, progressive_item_name,
+    BASE_ID, CHEAP_ATTACKER_PLANTS, GAME_NAME, KEY_NAME_TO_WORLD, KEYED_WORLDS,
+    LOGIC_PLANTS, SUN_PRODUCER_PLANTS, WORLD_REGIONS, progressive_count,
+    progressive_item_name,
     UPGRADE_GROUPS,
 )
 
@@ -415,15 +416,12 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
         for _ in range(progressive_count(w)):
             pool.append(world.create_item(progressive_item_name(w)))
 
-    # Every progression plant. These are named by access rules, so dropping one
-    # can make a gate unsatisfiable -- they are not negotiable.
-    for plant in PLANT_ITEMS:
-        if plant.classification == ItemClassification.progression:
-            pool.append(world.create_item(plant.name))
-
     # Permanent upgrades, when the option has the game withhold them. With it
     # off the game hands them out itself, so shipping them as items too would
     # mean receiving something already owned.
+    #
+    # Added before the plants so the plant trim below knows how much room is
+    # actually left: these are as non-negotiable as the unlocks.
     if world.options.shuffle_upgrades:
         # One copy per level the group covers: three Progressive Sun Shovels,
         # one Sky Shield. Sized off the codename list so adding a level to a
@@ -431,6 +429,40 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
         for name, codenames in UPGRADE_GROUPS:
             for _ in codenames:
                 pool.append(world.create_item(name))
+
+    # Progression plants. Every rule that names a plant is a has_any() over a
+    # whole GROUP, so what logic needs is one plant from each group, not all of
+    # them -- and since 2026-08-23 there is exactly one such rule left (Ancient
+    # Egypt's egypt6 checkpoint, a sun producer and a cheap attacker).
+    #
+    # So these are trimmable after all, which they were not while four worlds
+    # each named a plant of their own. An Egypt-only seed is 54 locations
+    # against 55 progression plants, and used to fail to generate outright.
+    #
+    # The floor is one plant from every group any rule names, drawn from the
+    # slot's own RNG so a seed is stable and slots differ. Below that a gate
+    # becomes unsatisfiable, so the ValueError is still the right answer.
+    prog_plants = [p for p in PLANT_ITEMS
+                   if p.classification == ItemClassification.progression]
+    room = pool_size - len(pool)
+    if room < len(prog_plants):
+        floor_names = set()
+        for group in (SUN_PRODUCER_PLANTS, CHEAP_ATTACKER_PLANTS):
+            eligible = sorted(n for n in group
+                              if n in {p.name for p in prog_plants})
+            if eligible:
+                floor_names.add(world.random.choice(eligible))
+        if room < len(floor_names):
+            raise ValueError(
+                f"item pool ({len(pool)} unlocks and upgrades) leaves {room} "
+                f"of the {pool_size} locations this slot builds, too few for "
+                f"the {len(floor_names)} plants its access rules need; raise "
+                "world_count or turn on include_side_paths")
+        spare = [p.name for p in prog_plants if p.name not in floor_names]
+        keep = floor_names | set(world.random.sample(spare, room - len(floor_names)))
+        prog_plants = [p for p in prog_plants if p.name in keep]
+    for plant in prog_plants:
+        pool.append(world.create_item(plant.name))
 
     # Useful plants fill what is left. Normally that is all of them, but a small
     # seed can have fewer locations than the full plant list, and these are the
@@ -446,11 +478,9 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
               if p.classification == ItemClassification.useful]
     room = pool_size - len(pool)
     if room < len(useful):
-        if room < 0:
-            raise ValueError(
-                f"item pool ({len(pool)} keys, progression plants and upgrades) "
-                f"exceeds the {pool_size} locations this slot builds; raise "
-                "world_count or turn on include_side_paths")
+        # Cannot be negative: the progression-plant trim above already sized
+        # the pool to fit, and raises if even the floor does not.
+        assert room >= 0, f"pool {len(pool)} overruns {pool_size} locations"
         keep = set(world.random.sample([p.name for p in useful], room))
         useful = [p for p in useful if p.name in keep]
     for plant in useful:
