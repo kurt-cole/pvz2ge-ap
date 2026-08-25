@@ -85,6 +85,35 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
                  lambda state, i=progressive_item_name(w),
                  n=progressive_need(w, ""): state.has(i, player, n))
 
+    # EVERY WORLD BUT ANCIENT EGYPT ALSO WANTS A SUN PRODUCER, restored on
+    # 2026-08-23. Ancient Egypt is excluded because it has no entrance to rule
+    # on -- regions.py connects it to Tutorial unnamed, on purpose -- and it
+    # asks for one at its egypt6 checkpoint instead.
+    #
+    # THIS IS WHAT MAKES A SUN PRODUCER STRUCTURALLY GUARANTEED, which the
+    # apworld went without between 2026-08-23 and today. Sphere 1 is the
+    # tutorial plus egypt1-5, and now every single way out of it runs through a
+    # sun producer: Egypt's own checkpoint at egypt6, and every other world's
+    # entrance. So fill cannot bury all five -- it has to place one in sphere 1
+    # or the seed never opens at all. Without this a player could hold
+    # Progressive Jurassic Marsh and 16 levels of dinosaurs with no sun.
+    #
+    # It also means a world unlock on its own now opens NOTHING. That is the
+    # strongest statement sphere_test can make about what leaves sphere 1, and
+    # it is the one it makes.
+    #
+    # Logic only, like the entry plants below: no plant requirement reaches
+    # slot_data's world_gates, so the client still lets those levels start.
+    #
+    # Safe from being satisfied for free: starting_plants never grants a sun
+    # producer, precisely so this rule cannot go vacuous, and the item-pool
+    # floor always keeps one sun producer however small the seed.
+    for w in KEYED_WORLDS:
+        if w not in world.enabled_worlds:
+            continue
+        add_rule(multiworld.get_entrance(f"Enter {w}", player),
+                 lambda state: state.has_any(SUN_PRODUCER_PLANTS, player))
+
     # Four worlds want a plant of their own on top of that unlock, restored on
     # 2026-08-23: Lily Pad for Big Wave Beach, Blover for Far Future,
     # Perfume-shroom for Jurassic Marsh, and something the Jester cannot turn

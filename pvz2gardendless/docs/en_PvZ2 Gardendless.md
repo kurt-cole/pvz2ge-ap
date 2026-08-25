@@ -25,8 +25,13 @@ Each world other than Ancient Egypt is locked behind its own **Progressive <Worl
 order you see the game in is decided by the multiworld rather than by the map. For most worlds that
 unlock is the whole requirement: hold one and that world's opening is open.
 
-Five worlds want a plant as well, on top of the unlock, because they are the ones you cannot
-sensibly play without it:
+**Every world but Ancient Egypt also wants a sun producer.** Nothing but sunlight pays for
+anything, so a world you cannot make sun in is a world you cannot play. This is what guarantees a
+sun producer turns up early: every way out of the opening runs through one, so the generator has to
+place one where you can reach it.
+
+Five worlds want a further plant on top of that, because they are the ones you cannot sensibly play
+without it:
 
 | world | wants |
 | --- | --- |
@@ -36,7 +41,8 @@ sensibly play without it:
 | Dark Ages | one plant whose shots the Jester cannot turn back on you: Banana Launcher, Electric Peashooter, Magnifying Grass, Missile Toe, Sap-fling or Strawburst |
 | Frostbite Caves | a plant that gives off standing heat: Fire Peashooter, Hot Date, Jack O' Lantern, Lava Guava or Torchwood |
 
-So Big Wave Beach 1 needs Lily Pad **and** one Progressive Big Wave Beach, not either on its own,
+So Big Wave Beach 1 needs Lily Pad **and** a sun producer **and** one Progressive Big Wave Beach,
+not any of them on its own,
 and the requirement covers the whole world rather than only its opening. This is a logic
 requirement, which means the multiworld will not hide anything behind a world you cannot really
 play, but the game itself does not stop you starting those levels. Frostbite Caves asks for no
