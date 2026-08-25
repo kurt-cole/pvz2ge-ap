@@ -23,7 +23,12 @@ from apstub import DeathLink
 class Opts:
     def __init__(self, **kw):
         self.world_count = WorldCount(kw.get("world_count", WorldCount.default))
-        self.enabled_worlds = EnabledWorlds(frozenset(kw.get("enabled_worlds", ())))
+        # Follow the option's own default rather than an empty set: with a
+        # world_count below 13 an empty set makes every default seed pick its
+        # worlds AT RANDOM, so a test naming one world's content fails
+        # intermittently on whichever seeds left that world out.
+        self.enabled_worlds = EnabledWorlds(
+            frozenset(kw.get("enabled_worlds", EnabledWorlds.default)))
         self.starting_plants = StartingPlants(
             kw.get("starting_plants", StartingPlants.default))
         self.goal_type = GoalType(kw.get("goal_type", GoalType.default))
@@ -42,6 +47,12 @@ class Opts:
         self.early_world_keys = EarlyWorldKeys(kw.get("early_world_keys", 0))
         self.trap_percentage = TrapPercentage(kw.get("trap_percentage", 5))
         self.death_link = DeathLink(0)
+
+
+# The default seed is ELEVEN worlds (Kongfu Temple and Aerial Fortress are out
+# by default), so a test that means "every world" has to say so. Both keys
+# are needed: world_count is a hard cap and enabled_worlds is what fills it.
+ALL_WORLDS = {"world_count": 13, "enabled_worlds": list(C.SELECTABLE_WORLDS)}
 
 
 def run(label, **kw):
@@ -207,17 +218,46 @@ run("1 world (Egypt only)", world_count=1, worlds_required=11, include_side_path
 run("explicit list only", world_count=1, include_side_paths=1,
     enabled_worlds=["Pirate Seas", "Wild West"], worlds_required=11)
 run("explicit + topup", world_count=5, enabled_worlds=["Big Wave Beach"])
-run("zomboss, 3 worlds", world_count=3, goal_type=0, worlds_required=11)
-run("completions, 2 worlds", world_count=2, goal_type=1, worlds_required=11,
+run("zomboss, 3 worlds", world_count=3,
+    goal_type=GoalType.option_zomboss, worlds_required=11)
+run("completions, 2 worlds", world_count=2,
+    goal_type=GoalType.option_completion, worlds_required=11,
     include_side_paths=1)
 run("3 worlds + shopsanity", world_count=3, shopsanity=1, worlds_required=11)
 run("all worlds + shopsanity + traps", shopsanity=1, trap_percentage=50)
 
-# explicit beats a lower count
-w, _ = run("explicit 4 vs count 2", world_count=2,
-           enabled_worlds=["Pirate Seas", "Wild West", "Far Future", "Dark Ages"])
-assert {"Pirate Seas", "Wild West", "Far Future", "Dark Ages"} <= w.enabled_worlds
-assert "Ancient Egypt" in w.enabled_worlds
+# world_count beats a longer explicit list. This reversed on 2026-08-24: naming
+# a world used to guarantee it, on the reasoning that an explicit choice
+# outranks a target. That became untenable when enabled_worlds gained a default
+# naming eleven worlds -- every count from 1 to 11 was already satisfied, so
+# world_count did nothing at all below 12 and `world_count: 1` built eleven
+# worlds. The count is a hard cap now.
+_named4 = ["Pirate Seas", "Wild West", "Far Future", "Dark Ages"]
+w, _ = run("explicit 4 vs count 2", world_count=2, enabled_worlds=_named4)
+assert len(w.enabled_worlds) == 2, sorted(w.enabled_worlds)
+
+# Ancient Egypt survives the trim whatever else goes: it is the only world
+# playable with no items, so a seed without it opens on nothing at all.
+assert "Ancient Egypt" in w.enabled_worlds, sorted(w.enabled_worlds)
+
+# The trim only ever DROPS from what was asked for -- it must never substitute
+# a world nobody named. Egypt is forced in and so is exempt.
+_stray = w.enabled_worlds - set(_named4) - {"Ancient Egypt"}
+assert not _stray, f"the trim invented worlds nobody named: {sorted(_stray)}"
+
+# Trimming is seeded, not incidental: the same slot seed must build the same
+# worlds twice. This does NOT prove the candidate list is list-ordered --
+# set iteration is stable for the same strings within one process, so sampling
+# out of a set passes here and only diverges across processes. The list
+# comprehension in _choose_worlds is what actually guarantees that.
+_wA, _ = run("trim determinism A", world_count=2, enabled_worlds=_named4)
+_wB, _ = run("trim determinism B", world_count=2, enabled_worlds=_named4)
+assert _wA.enabled_worlds == _wB.enabled_worlds,     (sorted(_wA.enabled_worlds), sorted(_wB.enabled_worlds))
+
+# The cap holds at the extreme: every world named, one world asked for.
+_w1, _ = run("all named vs count 1", world_count=1,
+             enabled_worlds=list(C.SELECTABLE_WORLDS))
+assert _w1.enabled_worlds == {"Ancient Egypt"}, sorted(_w1.enabled_worlds)
 
 # world_count is the WHOLE number of worlds, Ancient Egypt and Modern Day
 # included. Modern Day was forced in on top of the count until 2026-08-23,
@@ -239,7 +279,23 @@ assert wmd.enabled_worlds == {"Ancient Egypt", "Modern Day"}, wmd.enabled_worlds
 
 # The range has to reach every world, or the option cannot ask for all of them.
 assert WorldCount.range_end == len(C.WORLD_REGIONS) == 13, WorldCount.range_end
-assert WorldCount.default == WorldCount.range_end
+
+# The default is 11, not 13: Kongfu Temple and Aerial Fortress are out of a
+# default seed. Literals, because the point is to catch the two defaults
+# drifting apart -- reading either from the other would agree with anything.
+assert WorldCount.default == 11,     f"world_count default is {WorldCount.default}, want 11"
+assert set(EnabledWorlds.default) == set(C.SELECTABLE_WORLDS) - {
+    "Kongfu Temple", "Aerial Fortress"}, sorted(EnabledWorlds.default)
+
+# The two MUST agree. enabled_worlds names eleven worlds; if world_count were
+# higher the extra slots would be topped up at random from the very two worlds
+# the default means to exclude, and a "default" seed would sometimes contain
+# them. Lower and one of the eleven named worlds would be dropped instead.
+assert WorldCount.default == len(EnabledWorlds.default),     (f"world_count default {WorldCount.default} against "
+     f"{len(EnabledWorlds.default)} default enabled worlds -- a default seed "
+     "would top up or drop at random")
+_wdef, _ = run("default worlds")
+assert _wdef.enabled_worlds == set(EnabledWorlds.default), sorted(_wdef.enabled_worlds)
 wall, _ = run("every world", world_count=13)
 assert wall.enabled_worlds == set(C.WORLD_REGIONS), sorted(wall.enabled_worlds)
 
@@ -248,8 +304,10 @@ a, _ = run("determinism A", world_count=4)
 b, _ = run("determinism B", world_count=4)
 assert a.enabled_worlds == b.enabled_worlds
 
-# Frostbite Caves entry-plant rule only when the world is in
-w, _ = run("BWB forced in", world_count=1, enabled_worlds=["Big Wave Beach"],
+# Frostbite Caves entry-plant rule only when the world is in.
+# world_count 2, not 1: Ancient Egypt is forced in and takes a slot, so a
+# one-world seed drops the named world however explicitly it was asked for.
+w, _ = run("BWB forced in", world_count=2, enabled_worlds=["Big Wave Beach"],
            include_side_paths=1)
 assert "Big Wave Beach" in w.enabled_worlds
 
@@ -513,7 +571,11 @@ for _sp, _target in C.SIDE_PATH_CHAIN.items():
 # left on the world region is in sphere 1, which is how two world keys ended up
 # in Appease-mint. Danger rooms on so the stretch cut sees its real location
 # counts, side paths on so the regions exist at all.
-_pw, _ = run("side path parents", include_side_paths=1, include_danger_rooms=1)
+# Every world, explicitly: this walks all 31 side paths, and the default seed
+# is 11 worlds, so Kongfu Temple and Aerial Fortress would have no regions
+# for their paths to hang off.
+_pw, _ = run("side path parents",
+             include_side_paths=1, include_danger_rooms=1, **ALL_WORLDS)
 _pmw = _pw.multiworld
 _ploc_region = {l.name: r.name for r in _pmw.regions for l in r.locations}
 _pregions = {r.name: r for r in _pmw.regions}
@@ -611,7 +673,7 @@ _want_1w = _upgrade_cards | _egypt_cards
 assert _modern_cards and not (_modern_cards & _want_1w),     "Modern Day cards are still expected in a one-world seed"
 assert _e1shop == _want_1w,     f"one-world shop checks wrong: missing {sorted(_want_1w - _e1shop)}, "     f"extra {sorted(_e1shop - _want_1w)}"
 # ...and every world back in restores all 39, so the filter is not just deleting.
-_eall, _ = run("shop cards with every world", shopsanity=1)
+_eall, _ = run("shop cards with every world", shopsanity=1, **ALL_WORLDS)
 _all_shop = {l.name for l in _eall.active_locations() if l.is_shop}
 assert _all_shop == {C.shop_location_name(_c) for _c in C.SHOP_CHECK_COMMODITIES},     f"all-worlds shop set wrong: {_all_shop ^ {C.shop_location_name(_c) for _c in C.SHOP_CHECK_COMMODITIES}}"
 # Every check is gated on a level or is an upgrade -- no ungated plant survives.
@@ -894,8 +956,11 @@ print(f"\nDANGER_ROOM_LOCATIONS: {len(_derived)} rooms "
       f"({len(_buildable_rooms)} buildable, all gated on their unlock level), "
       f"{len(_unlocks)} unlock levels correctly left alone")
 
-_dr_off, _ = run("danger rooms off", include_danger_rooms=0)
-_dr_on, _ = run("danger rooms on", include_danger_rooms=1)
+# Every world: _buildable_rooms is derived over the whole game, and the default
+# seed is eleven worlds, so Kongfu Temple's and Aerial Fortress's rooms would
+# read as "removed by the option" when the world was never in the seed.
+_dr_off, _ = run("danger rooms off", include_danger_rooms=0, **ALL_WORLDS)
+_dr_on, _ = run("danger rooms on", include_danger_rooms=1, **ALL_WORLDS)
 _off_names = {l.name for l in _dr_off.active_locations()}
 _on_names = {l.name for l in _dr_on.active_locations()}
 assert _on_names - _off_names == _buildable_rooms,     "the option removed something other than the Danger Rooms"
@@ -931,7 +996,10 @@ print(f"include_danger_rooms removes exactly the {len(_buildable_rooms)} rooms "
 #
 # Both sides call world_stretches, so this pins that they are called with the
 # same input as well: same worlds, same active locations, same order.
-_gw, _gsd = run("world gates", include_side_paths=1, include_danger_rooms=1)
+# Every world, because the assertions below count gated worlds and gated
+# locations against the whole game rather than against this seed.
+_gw, _gsd = run("world gates", include_side_paths=1,
+                include_danger_rooms=1, **ALL_WORLDS)
 _gates = _gsd["world_gates"]
 # How many unlocks each stretch needs comes from constants, per world: a keyed
 # world's opening wants one (that is the unlock which replaced its World Key),
@@ -1672,3 +1740,48 @@ _granted = GEM_GRANT_COUNT * int(_parsed.group(1))
 print(f"guaranteed gems: {GEM_GRANT_COUNT} x {_parsed.group(1)} = {_granted} in "
       f"every SHOPSANITY seed, against {_shop_n} shop cards in the smallest one; "
       f"none at all with shopsanity off")
+
+
+# ── Option groups reach the options page ──────────────────────────────────────
+#
+# OPTION_GROUPS sat in options.py for a while with nothing reading it, so every
+# option still rendered in one undifferentiated list. WebHost reads the groups
+# off `world.web.option_groups`, so defining the list is only half the wiring.
+
+import dataclasses as _dc_og
+from pvz2gardendless.options import OPTION_GROUPS as _OG
+
+assert getattr(W.PvZ2Web, "option_groups", None), \
+    "PvZ2Web does not expose option_groups, so WebHost renders one flat list"
+assert W.PvZ2Web.option_groups is _OG, \
+    "PvZ2Web.option_groups is not the OPTION_GROUPS defined in options.py"
+
+_og_names = [g.name for g in _OG]
+assert len(set(_og_names)) == len(_og_names), \
+    f"two option groups share a name: {_og_names}"
+
+_og_flat = [o for g in _OG for o in g.options]
+_og_declared = [f.type for f in _dc_og.fields(W.PvZ2Options)]
+
+# Literals, not len(OPTION_GROUPS) / len(fields) -- an expectation read from the
+# thing under test passes whatever that thing says. 16 is every option in
+# PvZ2Options as of 2026-08-24; 6 is the groups options.py declares.
+assert len(_OG) == 6, f"expected 6 option groups, got {len(_OG)}"
+assert len(_og_declared) == 16, \
+    f"PvZ2Options declares {len(_og_declared)} options, not 16 -- if that is " \
+    "intended, update this literal AND put the new option in a group"
+
+_og_missing = [o.__name__ for o in _og_declared if o not in _og_flat]
+assert not _og_missing, \
+    f"options in PvZ2Options but in no group, so they land in AP's fallback " \
+    f"group instead of where they belong: {_og_missing}"
+
+_og_stray = [o.__name__ for o in _og_flat if o not in _og_declared]
+assert not _og_stray, \
+    f"options grouped but not in PvZ2Options, so they render nowhere: {_og_stray}"
+
+_og_dupes = sorted({o.__name__ for o in _og_flat if _og_flat.count(o) > 1})
+assert not _og_dupes, f"options named by more than one group: {_og_dupes}"
+
+print(f"option groups: {len(_OG)} groups covering all {len(_og_declared)} "
+      f"options, reached via PvZ2Web.option_groups ({', '.join(_og_names)})")

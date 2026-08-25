@@ -127,6 +127,16 @@ class DeathLink(Toggle):
     pass
 
 
+# Options.OptionGroup, a dataclass in real Archipelago (confirmed present in
+# the installed 0.6.7). WebHost reads these off WebWorld.option_groups to lay
+# out the options page; nothing at generation time consults them.
+@dataclasses.dataclass
+class OptionGroup:
+    name: str
+    options: list
+    start_collapsed: bool = False
+
+
 @dataclasses.dataclass
 class PerGameCommonOptions:
     pass
@@ -135,7 +145,8 @@ class PerGameCommonOptions:
 mod("Options", Choice=Choice, Range=Range, Toggle=Toggle, OptionSet=OptionSet,
     DefaultOnToggle=DefaultOnToggle,
     DeathLink=DeathLink, PerGameCommonOptions=PerGameCommonOptions,
-    Option=Option, AssembleOptions=AssembleOptions, Visibility=Visibility)
+    Option=Option, AssembleOptions=AssembleOptions, Visibility=Visibility,
+    OptionGroup=OptionGroup)
 
 
 class Group:

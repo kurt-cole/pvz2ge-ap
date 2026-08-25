@@ -22,7 +22,7 @@ from .constants import (
     WORLD_STRETCHES,
     progressive_item_name, progressive_need, stretch_suffixes,
 )
-from .options import PvZ2Options
+from .options import PvZ2Options, OPTION_GROUPS
 from .items import (
     FILLER_POOL, ITEM_NAME_GROUPS, ITEM_NAME_TO_ID, ITEM_NAME_TO_ITEM,
     PLANT_ITEMS, PLANT_NAMES, UPGRADE_ITEM_TO_CNS, PvZ2Item, create_item_pool,
@@ -146,6 +146,10 @@ class PvZ2Settings(settings.Group):
 
 class PvZ2Web(WebWorld):
     theme = "grass"
+    # WebHost reads the groups off the WebWorld, not off the options module --
+    # defining OPTION_GROUPS alone leaves every option in the default group.
+    # Anything not named here still shows, under AP's own fallback group.
+    option_groups = OPTION_GROUPS
     # file_name must match a real file in docs/ -- WebHost reads it straight
     # off disk, and a name that does not resolve 404s the guide.
     tutorials = [Tutorial(
@@ -325,10 +329,20 @@ class PvZ2GardendlessWorld(World):
     def _choose_worlds(self) -> Set[str]:
         """Resolve world_count and enabled_worlds into one set of worlds.
 
-        Named worlds are kept unconditionally and world_count tops the
-        selection up at random, so naming more worlds than the count asks for
-        gives you all of them rather than a truncated list -- an explicit
-        choice is a statement about the seed, the count is only a target.
+        world_count is a HARD CAP: it is exactly how many worlds the seed gets.
+        enabled_worlds picks WHICH ones, and the count tops the selection up at
+        random when it is short or trims it at random when it is over.
+
+        Naming more worlds than the count asks for used to give you all of
+        them, on the reasoning that an explicit choice outranks a target. That
+        stopped working once enabled_worlds carried a default naming eleven
+        worlds: every count from 1 to 11 was already satisfied by the default,
+        so world_count did nothing at all unless it was raised to 12 or 13.
+        The count wins now, so a small seed is a small seed whatever the yaml
+        names.
+
+        Ancient Egypt survives the trim whatever happens -- it is the only
+        world playable with no items, so a seed without it opens on nothing.
         """
         chosen = set(self.options.enabled_worlds.value) & set(SELECTABLE_WORLDS)
         chosen.update(ALWAYS_ENABLED_WORLDS)
@@ -336,14 +350,22 @@ class PvZ2GardendlessWorld(World):
         # Every world counts toward world_count, Ancient Egypt and Modern Day
         # alike: the number is the worlds you get. Modern Day used to be
         # subtracted here because it was forced into every seed on top of the
-        # count, which made `world_count: 1` produce two worlds. Top up from
-        # OPTIONAL_WORLDS, which is list-ordered, so the sample depends only on
-        # the slot's seeded RNG.
+        # count, which made `world_count: 1` produce two worlds. Sample from
+        # OPTIONAL_WORLDS, which is list-ordered, so both the top-up and the
+        # trim depend only on the slot's seeded RNG.
         short = self.options.world_count.value - len(chosen)
         if short > 0:
             candidates = [w for w in OPTIONAL_WORLDS if w not in chosen]
             chosen.update(self.random.sample(candidates,
                                              min(short, len(candidates))))
+        elif short < 0:
+            # Trim from the optional worlds only. Iterating OPTIONAL_WORLDS
+            # rather than `chosen` keeps the candidate order list-derived
+            # instead of set-derived, which would vary between runs and make
+            # the same slot seed produce different worlds.
+            droppable = [w for w in OPTIONAL_WORLDS if w in chosen]
+            chosen.difference_update(
+                self.random.sample(droppable, min(-short, len(droppable))))
         return chosen
 
     def create_item(self, name: str) -> Item:

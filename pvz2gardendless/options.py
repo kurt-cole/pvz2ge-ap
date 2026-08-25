@@ -6,7 +6,7 @@ import dataclasses
 
 from Options import (
     Choice, DefaultOnToggle, OptionSet, Range, Toggle, DeathLink,
-    PerGameCommonOptions, Visibility,
+    PerGameCommonOptions, Visibility, OptionGroup,
 )
 
 from .constants import SELECTABLE_WORLDS
@@ -21,13 +21,11 @@ class WorldCount(Range):
     items, so it is where the seed opens. Set this to 1 and Ancient Egypt is
     the entire seed.
 
-    Modern Day used to be forced into every seed on top of this number, so 1
-    gave you two worlds. It is an ordinary world now and takes a slot like any
-    other.
-
-    The remaining slots are filled at random from the worlds not already named
-    in enabled_worlds. Set this to `random` to let the generator pick the
-    number of worlds too.
+    This is a hard cap, not a target. Slots left over after enabled_worlds is
+    honoured are filled at random from the worlds it did not name, and if it
+    named more worlds than this number allows the extras are dropped at random.
+    Ancient Egypt is never one of the ones dropped. Set this to `random` to let
+    the generator pick the number of worlds too.
 
     Locations in worlds that are left out are removed from the seed entirely,
     along with their unlock items, so those worlds stay locked for good.
@@ -35,46 +33,17 @@ class WorldCount(Range):
     Every world in the seed ships three Progressive <World> items: the first
     opens the world, the second and third its middle and last stretches. The
     game enforces them, so a level you have not unlocked cannot be started.
-    Ancient Egypt needs none to enter and so gets two, plus its own
-    requirement: a sun producer and a cheap attacker from Egypt level 6, which
-    is logic only.
-
-    13 (the default) is every world, which is how this game has always
-    generated.
+    Ancient Egypt needs none to enter and and only requires two to complete.
     """
     display_name = "World Count"
     range_start  = 1
     range_end    = len(SELECTABLE_WORLDS)
-    default      = len(SELECTABLE_WORLDS)
+    default      = len(SELECTABLE_WORLDS)-2
 
 
 class StartingPlants(Range):
     """
     How many plants you begin the run with.
-
-    Every plant is normally taken away from you and scattered across the
-    multiworld, and the client blocks any of them until Archipelago sends it --
-    so without a guaranteed starting plant you would have nothing to place at
-    all. 1 (the default) is that guarantee and nothing more: one cheap attacker
-    that stays on the lawn and can kill a zombie.
-
-    Raise it and the extras are drawn at random from the rest of the roster.
-    The first plant is always the cheap attacker, so the guarantee holds
-    whatever you set this to.
-
-    No plant that logic asks for is ever given away, and that is deliberate
-    rather than an oversight: a plant you are handed at generation time
-    satisfies every rule that names it before the rule is ever checked, which
-    would make that requirement decorative. So the extras never include a sun
-    producer (Ancient Egypt expects one from level 6) and never include a
-    world's entry plant -- Lily Pad for Big Wave Beach, Blover for Far Future,
-    Perfume-shroom for Jurassic Marsh, an answer to the Jester for Dark Ages or
-    a warming plant for Frostbite Caves. Finding those stays part of the run at
-    every setting.
-
-    Plants you start with are removed from the item pool rather than shipped
-    twice, so raising this does not fill the seed with checks that hand you
-    something you already own.
     """
     display_name = "Starting Plants"
     range_start  = 1
@@ -88,16 +57,23 @@ class EnabledWorlds(OptionSet):
 
     Leave it empty to have world_count pick every world at random. Name fewer
     worlds than world_count and the rest of the slots are filled at random;
-    name more and every one of them is still included, since an explicit
-    choice always wins over the count.
+    name more and world_count still wins, so the extras are dropped at random
+    and you get exactly that many worlds.
 
-    Ancient Egypt is included whether or not it is listed. Modern Day is an
-    ordinary entry here as of 2026-08-23; leave it out and the seed has no
-    Modern Day.
+    The default names eleven, so lowering world_count is how you get a smaller
+    seed -- there is no need to empty this list first.
+
+    Kongfu Temple and Aerial Fortress are the two the default leaves out. To
+    play one, name it here AND raise world_count to match, or the list is
+    twelve worlds long against eleven slots and one of the twelve is dropped at
+    random -- sometimes the very world you added. Raising world_count on its
+    own works too: 12 gets one of the two at random and 13 gets both.
+
+    Ancient Egypt is included whether or not it is listed. Kongfu Temple and Aerial Fortress are disabled by default, but CAN be enabled.
     """
     display_name = "Enabled Worlds"
     valid_keys   = SELECTABLE_WORLDS
-    default      = frozenset()
+    default      = list(set(SELECTABLE_WORLDS) - set(["Kongfu Temple", "Aerial Fortress"])) 
 
 
 class GoalType(Choice):
@@ -123,15 +99,16 @@ class GoalType(Choice):
     world trophy always was the Zomboss fight.
     """
     display_name = "Goal Type"
-    option_zomboss    = 0
-    option_completion = 1
-    option_world_key  = 2
+    option_world_key  = 0
+    option_zomboss    = 1
+    option_completion = 2
+
     # Kept so a yaml written for an earlier version still generates. Same
     # values, so a seed rolled from one of these is identical to before.
-    alias_world_trophies    = 0
-    alias_world_completions = 1
-    alias_world_keys        = 2
-    default = 2
+    alias_world_keys        = 0
+    alias_world_trophies    = 1
+    alias_world_completions = 2
+    default = 0
 
 
 class WorldsRequired(Range):
@@ -200,29 +177,6 @@ class IncludeSidePaths(Toggle):
     Off (the default) removes every side path location from the seed, exactly
     the way an unpicked world is removed. Nothing can be placed there and
     nothing routes through them, so they become free play with no checks.
-
-    Each path is gated on the level that reveals it in game -- the Squash quest
-    at Ancient Egypt 6, Aloe at Lost City 8, Goo Peashooter at Dark Ages 16 --
-    read off the world maps, where a branch island is labelled "<N>-1". A path
-    spanning two worlds is gated on the earlier half: the Appease quest's
-    second half sits behind Frostbite Caves 25, and the quest is one region, so
-    the whole thing waits on Ancient Egypt 29. Hot Date has no branch node of
-    its own and waits on the Sweet Potato path instead, the same way the game
-    chains it.
-
-    Two things the game does that this still does not: a path's later levels
-    sit behind clearing its own first level, and a gate lands on the stretch
-    holding its level rather than on the level itself, so Appease-mint opens
-    with the rest of Egypt's Mid2 rather than at 29 exactly.
-
-    On adds 205 locations -- 736 instead of 531 with every world enabled.
-    Sphere 1 stays at 9 either way. Side paths belonging to a world this seed
-    left out are still dropped either way.
-
-    A small seed can end up with fewer locations than there are plants. Nothing
-    fails there -- the pool ships fewer of the plants that gate nothing, and
-    every progression plant, world key and upgrade still goes in. Turning this
-    on is the way to get the full plant list into a small seed.
     """
     display_name = "Include Side Paths"
 
@@ -254,35 +208,10 @@ class Shopsanity(Toggle):
     """
     Turn the in-game store's one-time purchases into location checks.
 
-    Adds 34 checks: 29 plants and 5 upgrades, all priced in gems. The gem,
+    Adds up to 34 checks: 29 plants and 5 upgrades, all priced in gems. The gem,
     coin and sprout bundles are excluded because they can be bought
     repeatedly, and the ticket-priced plants are excluded because tickets are
     pure grind with no Archipelago source.
-
-    Only plants the game stocks by CLEARING A LEVEL are used. The handful it
-    sells from the start are left alone: every change the game has made to its
-    store has been in that set -- three of them were swapped for three others
-    between game versions -- and each change either kills an Archipelago check
-    or misses a new one. Cards tied to a level have never moved.
-
-    Note no store check is priced in coins, so coins only help indirectly,
-    by buying gem bundles.
-
-    Buying a plant still will not grant it -- plants only come from
-    Archipelago -- so a purchase spends the currency and sends the check.
-
-    The store itself does not exist until you clear Egypt level 6, which is the
-    game's own rule, so logic puts these checks behind Ancient Egypt's sun
-    producer gate rather than in the opening.
-
-    Each card is gated on the level that puts it on the shelf, from the game's
-    own store data: Shrinking Violet after Modern Day 14, FloawerPot after
-    Aerial Fortress 31, Bamboozle after Kongfu Temple 38. The five upgrades are
-    the exception and are on sale as soon as the store exists.
-
-    A card whose level is in a world this seed left out is dropped, since
-    nothing could ever make it appear -- so a small seed adds fewer than 34.
-    An Egypt-only seed adds 9.
     """
     display_name = "Shopsanity"
 
@@ -309,36 +238,6 @@ class ShuffleUpgrades(DefaultOnToggle):
 class RandomizeConveyorPlants(Toggle):
     """
     Randomize which plants come down the belt on conveyor levels.
-
-    Each conveyor entry keeps the level's own drop weight and count, so the
-    pacing of the level is unchanged -- only the plant itself is swapped.
-
-    A replacement is chosen in three steps, so a belt keeps the shape the level
-    was built around. First the ROLE has to match: an attacker for an attacker,
-    a one-shot for a one-shot, a blocker for a blocker. Then the game's own
-    Family tag is preferred, so a Peashooter tends to become another Peashooter
-    and a Lobber another Lobber. Last, the replacement is about as strong as the
-    original, by damage per second where the game gives one and by sun cost
-    where it does not. A plant with nothing comparable to trade for is left as
-    the level had it.
-
-    Roughly one belt in eight instead becomes a Shadow deck: Moonflower plus the
-    plants it empowers, the same trick the game pulls by hand on Modern Day 44.
-    Moonflower is guaranteed a slot, since without it none of the others power
-    up. A Moonflower the level placed itself is never traded away.
-
-    Conveyor levels already hand out plants regardless of what Archipelago has
-    sent you, so this does not leak progression: you get the plant on the belt
-    for that level only, and do not keep it.
-
-    Bowling, power-tile and potion levels are left alone. Their belts deliver
-    projectiles and tools rather than plants, and swapping those for plants
-    would make the level unplayable.
-
-    Plants the lawn cannot host are never dealt to it. Lily Pad and Tangle Kelp
-    only appear where there is water, and Gold Leaf, which needs a gold tile, is
-    never swapped in at all. A level that puts one of these on its own belt
-    keeps it, so a water level does not lose the plant its water columns need.
 
     The roll is fixed per level, so retrying a level gives the same plants
     rather than rerolling until you like them.
@@ -452,3 +351,11 @@ class PvZ2Options(PerGameCommonOptions):
     early_world_keys: EarlyWorldKeys
     trap_percentage:  TrapPercentage
     death_link:       DeathLink
+OPTION_GROUPS = [
+    OptionGroup("Goal Settings",[GoalType, WorldsRequired, EnabledWorlds]),
+    OptionGroup("AP Settings", [DeathLink]),
+    OptionGroup("Level Access",[WorldCount, IncludeSidePaths]),
+    OptionGroup("Extra Locations",[Shopsanity,TrapPercentage]),
+    OptionGroup("Gameplay Tweaks",[SkipTutorial,ShuffleUpgrades, StartingPlants]),
+    OptionGroup("Experimental DANGER",[RandomizeConveyorPlants, ShuffleZombies, IncludeDangerRooms, ModernDayVictory, EarlyWorldKeys])
+]

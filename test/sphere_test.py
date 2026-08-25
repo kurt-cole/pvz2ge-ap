@@ -17,6 +17,7 @@ import gen_test
 import pvz2gardendless as W
 from pvz2gardendless.items import PLANT_ITEMS, ITEM_NAME_GROUPS
 from pvz2gardendless import constants as C
+from pvz2gardendless.options import GoalType
 
 PROG_PLANTS = [p.name for p in PLANT_ITEMS if p.classification == IC.progression]
 
@@ -376,10 +377,12 @@ report("3 worlds", world_count=3, worlds_required=11)
 report("1 world (Egypt only)", world_count=1, worlds_required=11)
 report("1 world + side paths", world_count=1, worlds_required=11,
        include_side_paths=1)
-report("2 worlds, completion goal", world_count=2, goal_type=1,
+report("2 worlds, completion goal", world_count=2,
+       goal_type=GoalType.option_completion,
        worlds_required=11, modern_day_victory=2, include_side_paths=1)
 report("all worlds + side paths", include_side_paths=1)
-report("12 worlds, completion goal", goal_type=1, worlds_required=11, modern_day_victory=2)
+report("12 worlds, completion goal", goal_type=GoalType.option_completion,
+       worlds_required=11, modern_day_victory=2)
 
 # ── what opens a world: its unlock, plus a plant for four of them ──────────
 # The contract as of 2026-08-23. EVERY world but Ancient Egypt wants its first
