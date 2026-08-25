@@ -33,7 +33,7 @@ class WorldCount(Range):
     Every world in the seed ships three Progressive <World> items: the first
     opens the world, the second and third its middle and last stretches. The
     game enforces them, so a level you have not unlocked cannot be started.
-    Ancient Egypt needs none to enter and and only requires two to complete.
+    Ancient Egypt needs none to enter, and so ships two rather than three.
     """
     display_name = "World Count"
     range_start  = 1
@@ -53,12 +53,14 @@ class StartingPlants(Range):
 
 class EnabledWorlds(OptionSet):
     """
-    Worlds this seed must include. Any world named here is always in.
+    Which worlds this seed uses. world_count decides HOW MANY; this decides
+    which ones they are.
 
-    Leave it empty to have world_count pick every world at random. Name fewer
-    worlds than world_count and the rest of the slots are filled at random;
-    name more and world_count still wins, so the extras are dropped at random
-    and you get exactly that many worlds.
+    Leave it empty to have world_count pick that many worlds at random. Name
+    fewer worlds than world_count and the rest of the slots are filled at
+    random; name more and world_count still wins, so the extras are dropped at
+    random and you get exactly that many worlds. Naming a world asks for it, it
+    does not guarantee it.
 
     The default names eleven, so lowering world_count is how you get a smaller
     seed -- there is no need to empty this list first.
@@ -69,11 +71,13 @@ class EnabledWorlds(OptionSet):
     random -- sometimes the very world you added. Raising world_count on its
     own works too: 12 gets one of the two at random and 13 gets both.
 
-    Ancient Egypt is included whether or not it is listed. Kongfu Temple and Aerial Fortress are disabled by default, but CAN be enabled.
+    Ancient Egypt is included whether or not it is listed, and is never one of
+    the worlds dropped to fit the count.
     """
     display_name = "Enabled Worlds"
     valid_keys   = SELECTABLE_WORLDS
-    default      = list(set(SELECTABLE_WORLDS) - set(["Kongfu Temple", "Aerial Fortress"])) 
+    default      = sorted(set(SELECTABLE_WORLDS)
+                          - {"Kongfu Temple", "Aerial Fortress"})
 
 
 class GoalType(Choice):
@@ -103,8 +107,11 @@ class GoalType(Choice):
     option_zomboss    = 1
     option_completion = 2
 
-    # Kept so a yaml written for an earlier version still generates. Same
-    # values, so a seed rolled from one of these is identical to before.
+    # Kept so a yaml written for an earlier version still generates. Each alias
+    # still means what it always meant, so a yaml naming one rolls the same seed
+    # as before. The NUMBERS changed on 2026-08-24, when world_key became 0 so
+    # the default would sort first -- a yaml setting goal_type as a raw integer
+    # rather than a name gets a different goal than it used to.
     alias_world_keys        = 0
     alias_world_trophies    = 1
     alias_world_completions = 2
