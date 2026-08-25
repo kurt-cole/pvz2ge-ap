@@ -249,7 +249,7 @@ LOGIC_ATTACKER_COUNT = 10
 
 CHEAP_ATTACKER_PLANTS = [
     "Blooming Heart", "Bonk Choy", "Buttercup", "Cabbage-pult",
-    "Celery Stalker", "Chard Guard", "Cherry Bomb", "Chili Bean", "Chomper",
+    "Celery Stalker", "Cherry Bomb", "Chili Bean", "Chomper",
     "Dusk Lobber", "Electric Blueberry", "Electric Currant", "Endurian",
     "Escape Root", "Fume-Shroom", "Ghost Pepper", "Gloom Vine", "Grapeshot",
     "Grimrose", "Guacodile", "Iceweed", "Jalapeno", "Kernel-pult",
@@ -300,7 +300,35 @@ SINGLE_USE_PLANTS = [
 # above already excludes them, and the assertion below now checks exactly that.
 # If one reappears in CHEAP_ATTACKER_PLANTS, the Ancient Egypt gate has gone
 # back to passing on a lawn that cannot kill anything.
+#
+# Chard Guard was removed on 2026-08-25 and is the reason to distrust an Action
+# damage number on its own. It qualified under "an Action with Damage >= 20":
+#
+#   {"Type": "special", "Damage": 60, "TriggerType": "rect", ...}
+#
+# but that 60 is KNOCKBACK FORCE. The rest of its sheet is KnockbackHeight,
+# KnockbackOffset, KnockbackTime and PushesPerLeaf, with the game's own comments
+# reading "# How far back in X does zombie go." It is the deeper form of the
+# "Type == special is not damage" trap: the derivation already rejects a special
+# whose Damage is absent or zero (Blover, Sunflower), and this one carries a
+# number.
+#
+# Four signals agree, and it is the only one of the 47 where they all do:
+#   - no projectile: no PeaType, no ShootInterval, no projectile Action
+#   - no `damage` almanac PlantStat, where Endurian and Pea-nut (the other two
+#     Defence-family attackers) both have damage2
+#   - no ChewDamage / ContactDamage / ExplodeDamage / StabDamage / Damage in
+#     either table
+#   - ChardGuard.ts never contains the substring "amage" -- it never calls
+#     dealDamage. Contrast Vamporcini (9 hits) and Grimrose (5), the other two
+#     plants with no damage FIELDS that nonetheless damage in CODE, which is why
+#     neither of those was removed.
+#
+# It mattered because it was in STARTER_PLANTS: roughly one seed in 35 handed a
+# player a sole guaranteed plant that cannot kill anything, the same failure
+# Intensive Carrot caused before.
 NON_DAMAGING_PLANTS = [
+    "Chard Guard",      # punts zombies back; the 60 is knockback, not damage
     "E.M. Peach",       # stuns and disarms, Damage 0
     "Explode-O-Nut",    # a wall; only hurts what is already eating it
     "Hypno-shroom",     # converts a zombie, Damage 0

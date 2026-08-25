@@ -16,6 +16,8 @@ from pvz2gardendless.options import (
     RandomizeConveyorPlants, EarlyWorldKeys, ShuffleZombies, IncludeSidePaths,
     IncludeDangerRooms,
     StartingPlants,
+    TrapWeightLawnMower, TrapWeightCostumeShuffle, TrapWeightCoins,
+    TrapWeightGems,
 )
 from apstub import DeathLink
 
@@ -46,6 +48,11 @@ class Opts:
         self.shuffle_zombies = ShuffleZombies(kw.get("shuffle_zombies", 0))
         self.early_world_keys = EarlyWorldKeys(kw.get("early_world_keys", 0))
         self.trap_percentage = TrapPercentage(kw.get("trap_percentage", 5))
+        for _tw, _cls in (("trap_weight_lawn_mower", TrapWeightLawnMower),
+                          ("trap_weight_costume_shuffle", TrapWeightCostumeShuffle),
+                          ("trap_weight_coins", TrapWeightCoins),
+                          ("trap_weight_gems", TrapWeightGems)):
+            setattr(self, _tw, _cls(kw.get(_tw, _cls.default)))
         self.death_link = DeathLink(0)
 
 
@@ -171,15 +178,21 @@ def run(label, **kw):
     # CHEAP_ATTACKER_PLANTS gates every Ancient Egypt stretch, so nothing that
     # deals no damage may be in it -- holding only Sunflower + Moonflower used
     # to read as a survivable lawn.
-    from pvz2gardendless.constants import CHEAP_ATTACKER_PLANTS
+    from pvz2gardendless.constants import CHEAP_ATTACKER_PLANTS, STARTER_PLANTS
     _overlap = set(NON_DAMAGING_PLANTS) & set(CHEAP_ATTACKER_PLANTS)
     assert not _overlap, f"non-damaging plants count as attackers: {_overlap}"
     # Water-only plants cannot be placed on Ancient Egypt's terrain.
     for _wet in ("Tangle Kelp", "Lily Pad"):
         assert _wet not in CHEAP_ATTACKER_PLANTS, f"{_wet} is water-only"
     # Real attackers the old Family heuristic wrongly dropped.
-    for _good in ("Puff-shroom", "Pea-nut", "Chard Guard", "Endurian"):
+    for _good in ("Puff-shroom", "Pea-nut", "Endurian"):
         assert _good in CHEAP_ATTACKER_PLANTS, f"{_good} should be an attacker"
+    # Chard Guard is NOT one, and used to be listed above as though it were.
+    # Its only damage signal is an Action carrying Damage 60, which is knockback
+    # force: no projectile, no `damage` PlantStat, no ChewDamage/ContactDamage/
+    # StabDamage, and ChardGuard.ts never calls dealDamage. It punts.
+    assert "Chard Guard" not in CHEAP_ATTACKER_PLANTS,         "Chard Guard is a blocker; an Action damage number alone does not "         "make an attacker"
+    assert "Chard Guard" not in STARTER_PLANTS,         "Chard Guard cannot be the sole guaranteed plant -- it cannot kill"
     # Sheetless plants are attackers by inspection, not omissions.
     for _ns in ("Scaredy-shroom", "Vamporcini", "Skyshooter"):
         assert _ns in CHEAP_ATTACKER_PLANTS, f"{_ns} dropped for having no sheet"
@@ -1355,7 +1368,7 @@ print(f"the pool floor keeps an entry plant for each of the "
 # CHEAP_ATTACKER_PLANTS is the DERIVED list of 47 plants that qualify. A slot
 # names only 10 of them in its Egypt 6 rule, and only those 10 are progression.
 #
-# Naming all 47 forced every one to progression -- items.py promotes anything a
+# Naming all 46 forced every one to progression -- items.py promotes anything a
 # rule names -- for a rule that needs exactly ONE of them to be findable. In a
 # small seed the progression block is what squeezes out the useful plants, the
 # filler and the traps, and an Egypt-only seed had room for not one coin or gem.
@@ -1363,7 +1376,9 @@ print(f"the pool floor keeps an entry plant for each of the "
 # The count is a literal 10, not LOGIC_ATTACKER_COUNT: an expectation read from
 # the constant under test passes whatever that constant says.
 assert C.LOGIC_ATTACKER_COUNT == 10, C.LOGIC_ATTACKER_COUNT
-assert len(C.CHEAP_ATTACKER_PLANTS) == 47, len(C.CHEAP_ATTACKER_PLANTS)
+# 46, not 47: Chard Guard was removed on 2026-08-25 as a false positive of the
+# "Action with Damage >= 20" rule -- its 60 is knockback force.
+assert len(C.CHEAP_ATTACKER_PLANTS) == 46, len(C.CHEAP_ATTACKER_PLANTS)
 
 _draws = {}
 for _label, _kw in (("default", {}), ("Egypt only", dict(world_count=1)),
@@ -1764,11 +1779,12 @@ _og_flat = [o for g in _OG for o in g.options]
 _og_declared = [f.type for f in _dc_og.fields(W.PvZ2Options)]
 
 # Literals, not len(OPTION_GROUPS) / len(fields) -- an expectation read from the
-# thing under test passes whatever that thing says. 16 is every option in
-# PvZ2Options as of 2026-08-24; 6 is the groups options.py declares.
-assert len(_OG) == 6, f"expected 6 option groups, got {len(_OG)}"
-assert len(_og_declared) == 16, \
-    f"PvZ2Options declares {len(_og_declared)} options, not 16 -- if that is " \
+# thing under test passes whatever that thing says. 20 is every option in
+# PvZ2Options as of 2026-08-24 (16 before the four trap weights); 7 is the
+# groups options.py declares.
+assert len(_OG) == 7, f"expected 7 option groups, got {len(_OG)}"
+assert len(_og_declared) == 20, \
+    f"PvZ2Options declares {len(_og_declared)} options, not 20 -- if that is " \
     "intended, update this literal AND put the new option in a group"
 
 _og_missing = [o.__name__ for o in _og_declared if o not in _og_flat]
@@ -1785,3 +1801,104 @@ assert not _og_dupes, f"options named by more than one group: {_og_dupes}"
 
 print(f"option groups: {len(_OG)} groups covering all {len(_og_declared)} "
       f"options, reached via PvZ2Web.option_groups ({', '.join(_og_names)})")
+
+
+# ── trap weights ──────────────────────────────────────────────────────────────
+#
+# trap_percentage decides HOW MANY traps; the four weights decide which. The
+# split is apportioned, not sampled, so a slot's trap mix is identical every
+# generation -- the property the old uniform rotation had and that a random
+# draw would have quietly given up.
+
+from pvz2gardendless.items import (weighted_trap_names, trap_weights,
+                                   TRAP_CYCLE, TRAP_WEIGHT_OPTIONS,
+                                   LAWN_MOWER_TRAP, COSTUME_SHUFFLE_TRAP,
+                                   COIN_TRAP, GEM_TRAP)
+
+# The four traps, named as literals rather than read off TRAP_CYCLE: this is
+# the set the option list has to keep up with, and reading it from the table
+# under test would agree with whatever that table said.
+assert set(TRAP_CYCLE) == {LAWN_MOWER_TRAP, COSTUME_SHUFFLE_TRAP,
+                           COIN_TRAP, GEM_TRAP}, TRAP_CYCLE
+assert set(TRAP_WEIGHT_OPTIONS) == set(TRAP_CYCLE)
+for _t, _opt in TRAP_WEIGHT_OPTIONS.items():
+    assert hasattr(Opts(), _opt), f"{_t} names {_opt}, which is not an option"
+
+# THE BACK-COMPAT CLAIM. Equal weights must reproduce the old
+# TRAP_CYCLE[i % len(TRAP_CYCLE)] rotation item for item, or every seed rolled
+# before the weights existed would regenerate with a different pool.
+for _n in range(0, 40):
+    _old = [TRAP_CYCLE[_i % len(TRAP_CYCLE)] for _i in range(_n)]
+    assert weighted_trap_names(_n, [25] * 4) == _old, _n
+    # Relative, not absolute: any equal weighting is the same even mix.
+    assert weighted_trap_names(_n, [7] * 4) == _old, _n
+print(f"trap weights: equal weights reproduce the old rotation exactly for "
+      f"every count 0..39")
+
+# A weight of 0 keeps that trap out entirely, and the others still fill the
+# whole allocation -- the slots are not silently lost.
+_only_mower = weighted_trap_names(20, [1, 0, 0, 0])
+assert _only_mower == [LAWN_MOWER_TRAP] * 20, _only_mower
+_no_gems = weighted_trap_names(21, [1, 1, 1, 0])
+assert len(_no_gems) == 21 and GEM_TRAP not in _no_gems
+assert set(_no_gems) == {LAWN_MOWER_TRAP, COSTUME_SHUFFLE_TRAP, COIN_TRAP}
+
+# Ratios are honoured, not merely "the heavy one appears more often". 3:1 over
+# 40 traps is exactly 30 and 10 -- an apportionment claim a sampler could not
+# make.
+_three_one = weighted_trap_names(40, [3, 1, 0, 0])
+assert _three_one.count(LAWN_MOWER_TRAP) == 30, _three_one.count(LAWN_MOWER_TRAP)
+assert _three_one.count(COSTUME_SHUFFLE_TRAP) == 10
+
+# Every count is filled exactly, at a lopsided weighting where the floors do
+# not add up on their own and the largest-remainder pass has to make it up.
+for _n in range(0, 60):
+    _w = weighted_trap_names(_n, [5, 3, 1, 1])
+    assert len(_w) == _n, (_n, len(_w))
+
+# All zero means no traps, whatever trap_percentage says. This is the one case
+# that returns fewer than asked for, and the pool builder turns the rest back
+# into filler rather than leaving the pool short.
+assert weighted_trap_names(50, [0, 0, 0, 0]) == []
+assert weighted_trap_names(0, [25] * 4) == []
+
+# Now through the pool builder, where the count comes from trap_percentage.
+# Every world, since a small seed ships no filler at all and so no traps.
+_tw, _ = run("traps: default weights", trap_percentage=50, **ALL_WORLDS)
+_tp = [i.name for i in _tw.multiworld.itempool if i.name in set(TRAP_CYCLE)]
+assert len(set(_tp)) == 4, f"default weights did not ship all four traps: {set(_tp)}"
+
+# Zeroing one trap removes it from the seed without changing the trap TOTAL --
+# the others absorb its share. That is the whole point of a weight as against
+# just turning the trap off.
+_zw, _ = run("traps: no gems", trap_percentage=50, trap_weight_gems=0, **ALL_WORLDS)
+_zp = [i.name for i in _zw.multiworld.itempool if i.name in set(TRAP_CYCLE)]
+assert GEM_TRAP not in _zp, "a -20 Gems trap survived a weight of 0"
+assert len(_zp) == len(_tp), \
+    f"zeroing a weight changed the trap count: {len(_zp)} against {len(_tp)}"
+
+# All four zeroed: no traps, and the pool is still exactly the right size --
+# the freed slots become filler.
+_nw, _ = run("traps: all weights zero", trap_percentage=50, **ALL_WORLDS,
+             trap_weight_lawn_mower=0, trap_weight_costume_shuffle=0,
+             trap_weight_coins=0, trap_weight_gems=0)
+assert not [i for i in _nw.multiworld.itempool if i.name in set(TRAP_CYCLE)], \
+    "traps were generated with every weight at 0"
+assert len(_nw.multiworld.itempool) == len(_nw.active_locations()), \
+    "zeroing every weight left the pool short of its locations"
+
+# ...and that matches trap_percentage=0, which is the other way to say it.
+_0w, _ = run("traps: percentage zero", trap_percentage=0, **ALL_WORLDS)
+assert not [i for i in _0w.multiworld.itempool if i.name in set(TRAP_CYCLE)]
+
+# Same seed, same mix, twice: apportionment must not have picked up an RNG
+# dependency.
+_dA, _ = run("traps: determinism A", trap_percentage=50,
+             trap_weight_coins=90, **ALL_WORLDS)
+_dB, _ = run("traps: determinism B", trap_percentage=50,
+             trap_weight_coins=90, **ALL_WORLDS)
+_cnt = lambda w: collections.Counter(
+    i.name for i in w.multiworld.itempool if i.name in set(TRAP_CYCLE))
+assert _cnt(_dA) == _cnt(_dB), (_cnt(_dA), _cnt(_dB))
+print(f"trap mix at 50%: {dict(_cnt(_tw))}, "
+      f"gems zeroed: {dict(_cnt(_zw))}, coins at 90: {dict(_cnt(_dA))}")

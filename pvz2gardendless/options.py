@@ -333,6 +333,79 @@ class TrapPercentage(Range):
     default      = 5
 
 
+class TrapWeight(Range):
+    """Base class for the per-trap weights. Not an option itself."""
+    range_start = 0
+    range_end   = 100
+    default     = 25
+
+
+class TrapWeightLawnMower(TrapWeight):
+    """
+    Relative weight of Lawn Mower Trap among the traps.
+
+    Sets off every lawn mower on the field at once. They roll out and are
+    spent, leaving those lanes with no last line of defence for the rest of the
+    level. One received outside a level is held and applied when the next level
+    starts.
+
+    Weights are relative, not percentages: what matters is each one against the
+    others, so 50/50/50/50 and 25/25/25/25 both mean an even mix. The four
+    default to 25 apiece, which is the even mix this game shipped before the
+    weights existed.
+
+    0 keeps this trap out of the seed entirely. trap_percentage still decides
+    how many traps there are in total; this only decides how that total is
+    divided up. Set every weight to 0 and no traps are generated at all,
+    whatever trap_percentage says.
+    """
+    display_name = "Trap Weight: Lawn Mower"
+
+
+class TrapWeightCostumeShuffle(TrapWeight):
+    """
+    Relative weight of Costume Shuffle Trap among the traps.
+
+    Re-rolls which costume every dressed plant is wearing, including taking
+    some back off. The mildest of the four: it costs nothing but appearances.
+
+    See Trap Weight: Lawn Mower for how the weights are read.
+    """
+    display_name = "Trap Weight: Costume Shuffle"
+
+
+class TrapWeightCoins(TrapWeight):
+    """
+    Relative weight of -500 Coins among the traps.
+
+    Takes 500 coins off your balance, about what one coin filler item gives. It
+    can never take you below zero: a trap larger than your balance empties it
+    and the rest is forgiven, never held against money you earn later.
+
+    Coins buy gem bundles in the store and nothing else Archipelago tracks, so
+    this bites hardest with shopsanity on.
+
+    See Trap Weight: Lawn Mower for how the weights are read.
+    """
+    display_name = "Trap Weight: -500 Coins"
+
+
+class TrapWeightGems(TrapWeight):
+    """
+    Relative weight of -20 Gems among the traps.
+
+    Takes 20 gems off your balance, about what one gem filler item gives, and
+    cannot push you below zero.
+
+    Worth weighting down in a small seed with shopsanity on: gems cannot be
+    earned in game under Archipelago at all, so every one you lose has to come
+    back from the multiworld.
+
+    See Trap Weight: Lawn Mower for how the weights are read.
+    """
+    display_name = "Trap Weight: -20 Gems"
+
+
 @dataclasses.dataclass
 class PvZ2Options(PerGameCommonOptions):
     world_count:      WorldCount
@@ -350,12 +423,19 @@ class PvZ2Options(PerGameCommonOptions):
     shuffle_zombies:  ShuffleZombies
     early_world_keys: EarlyWorldKeys
     trap_percentage:  TrapPercentage
+    trap_weight_lawn_mower:       TrapWeightLawnMower
+    trap_weight_costume_shuffle:  TrapWeightCostumeShuffle
+    trap_weight_coins:            TrapWeightCoins
+    trap_weight_gems:             TrapWeightGems
     death_link:       DeathLink
 OPTION_GROUPS = [
     OptionGroup("Goal Settings",[GoalType, WorldsRequired, EnabledWorlds]),
     OptionGroup("AP Settings", [DeathLink]),
     OptionGroup("Level Access",[WorldCount, IncludeSidePaths]),
-    OptionGroup("Extra Locations",[Shopsanity,TrapPercentage]),
+    OptionGroup("Extra Locations",[Shopsanity]),
+    OptionGroup("Traps",[TrapPercentage, TrapWeightLawnMower,
+                         TrapWeightCostumeShuffle, TrapWeightCoins,
+                         TrapWeightGems]),
     OptionGroup("Gameplay Tweaks",[SkipTutorial,ShuffleUpgrades, StartingPlants]),
     OptionGroup("Experimental DANGER",[RandomizeConveyorPlants, ShuffleZombies, IncludeDangerRooms, ModernDayVictory, EarlyWorldKeys])
 ]

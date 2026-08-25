@@ -339,6 +339,73 @@ TRAP_POOL: List[PvZ2ItemData] = (TRAP_ITEMS + COSTUME_TRAP_ITEMS
                                  + CURRENCY_TRAP_ITEMS)
 TRAP_CYCLE = [t.name for t in TRAP_POOL]
 
+# Which yaml option carries each trap's weight. Keyed by item name so a rename
+# on either side is a KeyError at import rather than a trap that silently
+# stops being dealt.
+TRAP_WEIGHT_OPTIONS = {
+    LAWN_MOWER_TRAP:      "trap_weight_lawn_mower",
+    COSTUME_SHUFFLE_TRAP: "trap_weight_costume_shuffle",
+    COIN_TRAP:            "trap_weight_coins",
+    GEM_TRAP:             "trap_weight_gems",
+}
+if set(TRAP_WEIGHT_OPTIONS) != set(TRAP_CYCLE):
+    raise ValueError("TRAP_WEIGHT_OPTIONS and TRAP_CYCLE disagree: "
+                     f"{set(TRAP_WEIGHT_OPTIONS) ^ set(TRAP_CYCLE)}")
+
+
+def trap_weights(world) -> List[int]:
+    """This slot's trap weights, in TRAP_CYCLE order."""
+    return [getattr(world.options, TRAP_WEIGHT_OPTIONS[name]).value
+            for name in TRAP_CYCLE]
+
+
+def weighted_trap_names(trap_count: int, weights: List[int]) -> List[str]:
+    """`trap_count` trap names, divided between the traps by weight.
+
+    Weights are RELATIVE: only their ratio matters, so 25/25/25/25 and
+    50/50/50/50 are the same even mix. All zero means no traps at all, which is
+    the only way the result is shorter than trap_count.
+
+    Deterministic, deliberately. The old uniform rotation could promise that a
+    slot's trap mix was identical every generation and did not depend on how
+    the RNG happened to fall, and that is worth keeping -- so this apportions
+    by largest remainder rather than sampling. Equal weights reproduce the old
+    `TRAP_CYCLE[i % len(TRAP_CYCLE)]` rotation exactly, item for item, which is
+    what makes the defaults a no-op against every seed generated before the
+    weights existed.
+    """
+    total = sum(weights)
+    if trap_count <= 0 or total <= 0:
+        return []
+
+    # Largest remainder: floor each share, then hand the leftovers to the
+    # biggest fractional parts. Ties break by TRAP_CYCLE position, so the
+    # result never depends on float comparison order.
+    quotas = [trap_count * w / total for w in weights]
+    counts = [int(q) for q in quotas]
+    short = trap_count - sum(counts)
+    by_remainder = sorted(range(len(weights)),
+                          key=lambda i: (-(quotas[i] - counts[i]), i))
+    for i in by_remainder[:short]:
+        counts[i] += 1
+
+    assert sum(counts) == trap_count, (counts, trap_count)
+
+    # Interleaved rather than blocked, so a partly-filled seed still gets a
+    # spread of trap types instead of every Lawn Mower Trap first.
+    #
+    # Driven by what is LEFT rather than by len(names) < trap_count: each pass
+    # of the inner loop takes at least one, so this always terminates. The
+    # count-driven form spins forever if the apportionment above ever comes up
+    # short, which is a far worse way to fail than a wrong number of traps.
+    names, left = [], list(counts)
+    while any(left):
+        for i, name in enumerate(TRAP_CYCLE):
+            if left[i]:
+                names.append(name)
+                left[i] -= 1
+    return names
+
 # Progressive world unlocks — two per world, including Ancient Egypt, which
 # has no key. A world opens at its World Key level; the first of these carries
 # it to its Zomboss and the second to its final level (see
@@ -642,11 +709,17 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
     remaining = pool_size - len(pool)
     assert remaining >= 0, f"pool {len(pool)} overruns {pool_size} locations"
     trap_count = remaining * world.options.trap_percentage.value // 100
-    # Rotated rather than picked at random, so a slot's trap mix is the same
-    # every generation and does not depend on how the RNG happened to fall.
-    for i in range(trap_count):
-        pool.append(world.create_item(TRAP_CYCLE[i % len(TRAP_CYCLE)]))
-    remaining -= trap_count
+    # Apportioned by weight rather than picked at random, so a slot's trap mix
+    # is the same every generation and does not depend on how the RNG happened
+    # to fall. The default weights are even and reproduce the old uniform
+    # rotation exactly.
+    trap_names = weighted_trap_names(trap_count, trap_weights(world))
+    for name in trap_names:
+        pool.append(world.create_item(name))
+    # Not trap_count: every weight set to 0 means the player asked for no traps
+    # at all, and those slots go back to filler rather than leaving the pool
+    # short of the locations it has to fill.
+    remaining -= len(trap_names)
 
     for i in range(remaining):
         pool.append(world.create_item(FILLER_CYCLE[i % len(FILLER_CYCLE)]))
