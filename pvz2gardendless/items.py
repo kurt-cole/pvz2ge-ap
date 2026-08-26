@@ -660,6 +660,26 @@ for _plural, _singular in (
 for _alias in ("Sun", "Sun Producers", "Sun Producer", "Sunflowers"):
     ITEM_NAME_GROUPS[_alias] = ITEM_NAME_GROUPS["Sun Plants"]
 
+# "Progressive", for the same reason but a worse failure. Eighteen items are
+# named "Progressive <something>" -- thirteen world unlocks and five upgrades --
+# so a player typing just "Progressive" hands AP eighteen candidates differing
+# only in the tail. get_intended_text compares the top two fuzzy scores and
+# refuses when they are within 5 points, so the server answers "Too many close
+# matches for 'Progressive'" and hints NOTHING. The single most natural thing to
+# type was the one thing guaranteed to fail. A group name is an exact match and
+# never reaches the fuzzy path.
+#
+# DERIVED from the names rather than listed, so a new "Progressive X" family
+# joins it automatically instead of silently reintroducing the ambiguity.
+ITEM_NAME_GROUPS["Progressive"] = {i.name for i in ALL_ITEMS
+                                   if i.name.startswith("Progressive ")}
+ITEM_NAME_GROUPS["Progressives"] = ITEM_NAME_GROUPS["Progressive"]
+
+# The narrower phrasings stay the world unlocks alone, which is what a player
+# asking about "unlocks" means -- the upgrades gate nothing.
+for _alias in ("Progressive Unlock", "Progressive Unlocks", "Unlock", "Unlocks"):
+    ITEM_NAME_GROUPS[_alias] = ITEM_NAME_GROUPS["World Unlocks"]
+
 # Same rule the location groups follow: a group sharing a name with an item
 # makes !hint ambiguous, and AP cannot tell the player which one it picked.
 _item_group_clashes = set(ITEM_NAME_GROUPS) & set(ITEM_NAME_TO_ITEM)

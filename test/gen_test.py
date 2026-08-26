@@ -801,11 +801,44 @@ assert ITEM_NAME_GROUPS["World Unlock"] == ITEM_NAME_GROUPS["World Unlocks"],   
 for _p, _sg in (("Plants", "Plant"), ("Traps", "Trap"), ("Upgrades", "Upgrade"),
                 ("Costumes", "Costume"), ("Coins", "Coin"), ("Gems", "Gem")):
     assert ITEM_NAME_GROUPS[_sg] == ITEM_NAME_GROUPS[_p], f"{_sg} does not match {_p}"
+# "Progressive" is every Progressive <something> -- the world unlocks AND the
+# progressive upgrades -- because that is what the word means to someone typing
+# it. The narrower phrasings mean the unlocks alone.
+for _pa in ("Progressive Unlock", "Progressive Unlocks", "Unlock", "Unlocks"):
+    assert ITEM_NAME_GROUPS[_pa] == ITEM_NAME_GROUPS["World Unlocks"],         f"{_pa} does not resolve to the unlocks"
+assert ITEM_NAME_GROUPS["Progressive"] == ITEM_NAME_GROUPS["Progressives"]
+assert ITEM_NAME_GROUPS["World Unlocks"] <= ITEM_NAME_GROUPS["Progressive"],     "the Progressive group does not contain every world unlock"
+assert ITEM_NAME_GROUPS["Progressive"] > ITEM_NAME_GROUPS["World Unlocks"],     "the Progressive group is only the unlocks; the progressive upgrades are "     "named Progressive too and a player typing it means those as well"
+assert ITEM_NAME_GROUPS["Progressive"] - ITEM_NAME_GROUPS["World Unlocks"]     <= ITEM_NAME_GROUPS["Upgrades"],     "the Progressive group picked up something that is neither an unlock nor an upgrade"
+
 # Every item hintable as part of something. The currencies and the costume were
 # in no group at all, so there was no way to ask about them as a set.
 _allnames = {i.name for i in ALL_ITEMS}
 _ungrouped = _allnames - set().union(*ITEM_NAME_GROUPS.values())
 assert not _ungrouped, f"items in no hint group: {sorted(_ungrouped)}"
+# A NAME THIS APWORLD INVENTS AS A PREFIX MUST ALSO BE A GROUP NAME.
+#
+# AP resolves a hint by fuzzy match and refuses outright when the top two
+# candidates score within 5 of each other: "Too many close matches for
+# 'Progressive', did you mean 'Progressive Ancient Egypt'?" -- and hints
+# nothing. Thirteen items sharing a "Progressive " prefix guaranteed exactly
+# that for the single most natural thing to type, which is how the unlocks
+# became unhintable by name. A group name is an exact match and never reaches
+# the fuzzy path.
+#
+# Scoped to the prefixes THIS apworld chose. Plant names come from the game and
+# share first words too (Fire, Primal, Pea), but those are real distinct items a
+# player names in full, not categories, and they cannot be renamed anyway.
+_OUR_PREFIXES = ("Progressive",)
+for _pre in _OUR_PREFIXES:
+    _members = {n for n in _allnames if n.startswith(_pre + " ")}
+    assert len(_members) > 1, f"{_pre} is no longer a shared prefix; drop this check"
+    assert _pre in ITEM_NAME_GROUPS, (
+        f"{len(_members)} items start with '{_pre} ' but '{_pre}' names no "
+        f"group, so !hint {_pre} refuses as 'too many close matches'")
+    assert _members <= ITEM_NAME_GROUPS[_pre], (
+        f"'{_pre}' group misses {sorted(_members - ITEM_NAME_GROUPS[_pre])}")
+
 # A group naming something that is not an item would hint nothing.
 for _g, _members in ITEM_NAME_GROUPS.items():
     assert _members, f"hint group {_g} is empty"
