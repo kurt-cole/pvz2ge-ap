@@ -3,15 +3,235 @@ Static world-shape data shared across items.py, locations.py, regions.py and
 rules.py: identifiers, world lists, and the plant sets used for logic gating.
 """
 
+from typing import Dict, List
+
 GAME_NAME = "PvZ2 Gardendless"
 BASE_ID   = 0xD1A2B3C4
 
-# Worlds that need a key item to access (Ancient Egypt is always free)
+# Worlds that need a key item to access (Ancient Egypt is always free).
+# ORDER IS LOAD-BEARING: items.py derives each World Key's item ID from this
+# list's index, so reordering or inserting renumbers keys for every existing
+# seed. Append only.
 KEYED_WORLDS = [
     "Pirate Seas", "Wild West", "Far Future", "Dark Ages",
     "Big Wave Beach", "Frostbite Caves", "Lost City",
     "Kongfu Temple", "Neon Mixtape Tour", "Jurassic Marsh", "Modern Day", "Aerial Fortress",
 ]
+
+# ── Main worlds ───────────────────────────────────────────────────────────────
+# Every main world mapped to the regions that make it up, in game order.
+# Ancient Egypt is the only multi-region entry: it is split into sequential
+# checkpoints so its 35 levels are not all flatly reachable (see regions.py).
+# Regions NOT listed here -- Tutorial, the side paths, Shop -- are not part of
+# any world and are always built.
+WORLD_REGIONS: Dict[str, List[str]] = {
+    "Ancient Egypt":     ["Ancient Egypt"],
+    "Pirate Seas":       ["Pirate Seas"],
+    "Wild West":         ["Wild West"],
+    "Far Future":        ["Far Future"],
+    "Dark Ages":         ["Dark Ages"],
+    "Big Wave Beach":    ["Big Wave Beach"],
+    "Frostbite Caves":   ["Frostbite Caves"],
+    "Lost City":         ["Lost City"],
+    "Kongfu Temple":     ["Kongfu Temple"],
+    "Neon Mixtape Tour": ["Neon Mixtape Tour"],
+    "Jurassic Marsh":    ["Jurassic Marsh"],
+    "Aerial Fortress":   ["Aerial Fortress"],
+    "Modern Day":        ["Modern Day"],
+}
+
+ALL_WORLD_REGIONS = {r for regions in WORLD_REGIONS.values() for r in regions}
+
+# ── Sphere depth ──────────────────────────────────────────────────────────────
+# A world key used to open all 44-53 of its levels at once, so a whole world
+# landed in one sphere and fill had no reason to spread progression through it.
+# regions.py now cuts each world into these three sequential stretches, in the
+# order its levels are defined, and rules.py gates the later two on how many
+# progression plants are held.
+#
+# Counted against the 58 plants that are progression items (see LOGIC_PLANTS) --
+# "useful" plants are not tracked in CollectionState, so they cannot be counted.
+# 12 of 58 for the deepest stretch of any world leaves a wide margin; the point
+# is to layer the fill, not to make late levels a grind.
+WORLD_STRETCHES = ("", " Mid", " Late")
+# Also unread as of 2026-08-23: a stretch wants its unlock and nothing else.
+STRETCH_PLANTS = {" Mid": 6, " Late": 12}
+
+# Ancient Egypt carries one EXTRA checkpoint, inside its opening. Its opening
+# stretch runs to egypt8 like every other world's runs to its World Key level,
+# but "by Egypt level 6 you are expected to have a sun producing plant" is a
+# real thing the game does, and it is the rule that forces a sun producer to be
+# findable at the start of a run. So the opening is cut again at egypt6:
+# egypt1-5 need nothing, egypt6-8 need a sun producer and a cheap attacker, and
+# NEITHER needs a progressive unlock -- both are still the opening.
+#
+# The extra region is also what the Shop and the Squash quest hang off, since
+# the game opens the store and reveals that branch at egypt6 exactly.
+EGYPT_STRETCHES = ("", " Early", " Mid", " Late")
+# The last level before the sun expectation. Named rather than numbered so the
+# cut reads the same way world_stretches' other cuts do.
+EGYPT_SUN_CUT = "egypt5"
+
+
+def stretch_suffixes(world: str):
+    """The region suffixes this world is cut into, in order."""
+    return EGYPT_STRETCHES if world == "Ancient Egypt" else WORLD_STRETCHES
+
+
+# How many progressive world unlocks a stretch needs.
+#
+# For most worlds the FIRST unlock is what opens the world at all -- it
+# replaced that world's Key item on 2026-08-23, so "Wild West Key" plus two
+# Progressive Wild West became three Progressive Wild West. Ancient Egypt needs
+# no unlock to enter (it is where a run starts) and so has two rather than
+# three, and its " Early" checkpoint at egypt6 is a logic gate rather than an
+# unlock. That is why this is a table per world shape and not "position in the
+# tuple".
+_PROGRESSIVE_NEED_KEYED = {"": 1, " Mid": 2, " Late": 3}
+_PROGRESSIVE_NEED_EGYPT = {"": 0, " Early": 0, " Mid": 1, " Late": 2}
+
+
+def progressive_need(world: str, suffix: str) -> int:
+    """How many of this world's unlocks the given stretch needs."""
+    table = (_PROGRESSIVE_NEED_EGYPT if world == "Ancient Egypt"
+             else _PROGRESSIVE_NEED_KEYED)
+    return table[suffix]
+
+
+# The three goal_type values, repeated here as literals. constants.py cannot
+# import options.py -- options.py imports THIS module for SELECTABLE_WORLDS, so
+# the other direction is a cycle. gen_test asserts these three agree with
+# GoalType, which is the only thing keeping the copy honest.
+GOAL_WORLD_KEY  = 0
+GOAL_ZOMBOSS    = 1
+GOAL_COMPLETION = 2
+
+# How many of a world's stretches survive each goal type. The goal cut lands
+# exactly on a stretch boundary, which is not a coincidence: world_stretches
+# cuts on the world's OWN milestones, stretch 0 ending at its World Key level
+# and stretch 1 at its Zomboss, and those are the same two locations the goal
+# types measure (see locations.world_stretches and goal_locations_for).
+#
+# So "nothing past the World Key" is "keep stretch 0", and no new geometry is
+# needed. Indexes are into stretch_suffixes(world), so Ancient Egypt's extra
+# " Early" opening is counted for free: its key level egypt8 ends " Early", not
+# "", which is why this is a count of SUFFIXES and not a fixed number.
+#
+# Two worlds have no milestone to cut on and take the fallback cuts
+# world_stretches computes (Kongfu Temple has no Zomboss, so its second cut is
+# the midpoint of the remainder; Aerial Fortress has neither and keeps equal
+# thirds). A zomboss cut on those two is therefore arbitrary rather than
+# meaningful -- they are trimmed consistently with everyone else because an
+# inconsistent exception is worse, and neither can satisfy that goal anyway.
+_GOAL_STRETCHES_KEPT = {
+    GOAL_WORLD_KEY:   1,   # up to and including the World Key level
+    GOAL_ZOMBOSS:     2,   # ...and the Zomboss
+    GOAL_COMPLETION:  None,  # the whole world; no cut
+}
+
+
+def stretches_kept(world: str, goal_type, past_goal: bool = False):
+    """The suffixes of `world` this slot builds, in order.
+
+    past_goal is the include_levels_past_goal option: True keeps every stretch,
+    which is how every seed behaved before the trim existed.
+    """
+    suffixes = stretch_suffixes(world)
+    if past_goal or goal_type is None:
+        return list(suffixes)
+    keep = _GOAL_STRETCHES_KEPT.get(int(goal_type))
+    if keep is None:
+        return list(suffixes)
+    # Ancient Egypt's opening is cut in two and BOTH halves are the opening as
+    # far as the milestones go, so a keep of 1 has to take "" and " Early".
+    extra = 1 if world == "Ancient Egypt" else 0
+    return list(suffixes[:keep + extra])
+
+
+def progressive_count(world: str, goal_type=None, past_goal: bool = False) -> int:
+    """How many copies of this world's unlock the pool ships.
+
+    Sized to the stretches this slot actually BUILDS. Under the world_key goal
+    a world is one stretch long, so its later unlocks would gate nothing and
+    ship as dead items -- 24 of them in a 12-world seed. Ancient Egypt needs
+    none at all there, which falls out of PROGRESSIVE_NEED rather than being a
+    special case: its opening and its " Early" checkpoint both need 0.
+    """
+    return max(progressive_need(world, s)
+               for s in stretches_kept(world, goal_type, past_goal))
+
+# Ancient Egypt's own stretches. It is cut by the same code as every other
+# world, but its gates are different: it has no key, so its later stretches ask
+# for a sun producer and a cheap attacker (rules.py) plus a plant count, where
+# other worlds ask for the counts in STRETCH_PLANTS alone.
+#
+# Its opening stretch runs to egypt8, its World Key level, and is deliberately
+# ungated -- Egypt is the only world playable with no items, so that opening is
+# what sphere 1 is made of and a seed would otherwise have nowhere to begin.
+# The counts here are lower than STRETCH_PLANTS for the same reason: this is
+# the world a run starts in.
+EGYPT_STRETCH_PLANTS = {" Early": 0, " Mid": 3, " Late": 6}
+
+# Region-name suffixes that mark a stretch past the opening of its world.
+# Every world uses the same two now; " Mid1" and " Mid2" were Ancient Egypt's
+# bespoke split and are kept so a stale name cannot read as an early region.
+LATE_REGION_SUFFIXES = (" Mid", " Mid1", " Mid2", " Late")
+# " Early" is deliberately NOT in there: egypt6-8 cost a sun producer, not a
+# key or an unlock, so a World Key found in one is still a key found early.
+
+
+def is_early_region(name: str) -> bool:
+    """Is this region reachable without grinding deeper into a world?
+
+    True for a world's opening stretch, the Danger Rooms, the tutorial and the
+    store. Entering a world's opening costs only its key -- the plant-count
+    gates sit on the later stretches -- so anything in an early region is
+    reachable as soon as the key for it turns up.
+
+    Side paths answer True here by name and must not be judged on it: they hang
+    off the stretch holding the level that reveals them, so Ice Bloom is behind
+    Big Wave Beach 40 while still being called "Ice Bloom Sidepath". rules.py
+    resolves a side path to what it hangs off before asking this.
+
+    Used by the early_world_keys option to keep World Keys from hiding behind
+    each other's endgames. Modern Day is excluded as well. It is behind its own
+    key like any other world now, so it is no longer structurally last -- but
+    it is still 53 locations of endgame content, and a key buried there is a
+    key found late, which is exactly what the option exists to prevent.
+    """
+    return not name.endswith(LATE_REGION_SUFFIXES) and name != "Modern Day"
+
+# Worlds every seed keeps, whatever the world-selection options say. Ancient
+# Egypt only: it is the one world reachable with no items at all, so it is what
+# sphere 1 is made of and a seed without it has nowhere to begin.
+#
+# Modern Day was in here until 2026-08-23. It was kept because it held the
+# victory location, and then out of habit after Victory moved to Tutorial --
+# which meant `world_count: 1` still produced two worlds. It is an ordinary
+# selectable world now, so 1 really does mean Ancient Egypt alone.
+ALWAYS_ENABLED_WORLDS = ["Ancient Egypt"]
+
+# The worlds enabled_worlds / world_count choose between -- every world there
+# is, since Ancient Egypt being always-in does not stop it being named.
+SELECTABLE_WORLDS = list(WORLD_REGIONS)
+OPTIONAL_WORLDS   = [w for w in SELECTABLE_WORLDS if w not in ALWAYS_ENABLED_WORLDS]
+
+# World Key item name -> world, so the pool builder can drop the keys of
+# worlds this slot did not enable. Built from KEYED_WORLDS rather than by
+# slicing " Key" off the item names, which would break on a world whose name
+# ever ends in "Key".
+KEY_NAME_TO_WORLD = {f"{world} Key": world for world in KEYED_WORLDS}
+
+
+def progressive_item_name(world: str) -> str:
+    """The progressive unlock item for a world.
+
+    One function rather than an f-string at each site, because the name is
+    shared by items.py (which mints them), rules.py (which asks for them) and
+    slot_data (which tells the client what to count), and a mismatch between
+    any two of those is a silently unsatisfiable gate.
+    """
+    return f"Progressive {world}"
 
 # Sequential sphere-1 gating for Ancient Egypt (see checkpoint split in
 # regions.py): each checkpoint requires at least one of these sun producers
@@ -22,38 +242,398 @@ KEYED_WORLDS = [
 # than that and would let the gate pass on a plant that generates no usable
 # sun: Magnifying Grass consumes sun to fire, Sun Bean / Moon Bean / Toadstool
 # only convert damage or eaten zombies into sun, Plantern just reveals fog,
-# and Gold Bloom is a 0-cost conveyor-only plant.
+# Shine Vine only modifies a neighbour's output (SunProductionModifier), Marigold
+# produces coins, and Gold Bloom is a 0-cost conveyor-only plant.
+#
+# Moonflower is left out despite a real `sun` action: SunPerNeighbor 25 means it
+# produces nothing without shadow plants beside it, so it cannot carry a gate
+# alone. Solar Tomato is left out by Kurt's call (2026-08-16) -- it is a
+# 100-sun, 25s-recharge plant whose production is not in its sheet at all, so
+# it is not something a player can be assumed to open a world on.
+#
+# A name here is promoted to progression in items.py, so removing one demotes
+# that plant to useful. Item IDs are unaffected.
 SUN_PRODUCER_PLANTS = [
     "Sunflower", "Sun-Shroom", "Twin Sunflower", "Primal Sunflower",
-    "Solar Tomato", "Solar Sage",
+    "Solar Sage",
 ]
 
-# SunCost <= 150 among damage-dealing Family types. Excludes a handful of
-# 0-cost/utility plants the game misclassifies as attackers (Iceberg
-# Lettuce, Hot Potato, Sea-shroom, Puff-shroom, Garlic, Grimrose) and
-# Tangle Kelp, which is water-only and unusable on Ancient Egypt's terrain.
+# Cheap plants that can actually kill a zombie. rules.py gates every Ancient
+# Egypt stretch on has_any() over this list, so a name here is a name the
+# generator will accept as "the player can fight".
+#
+# DERIVED FROM GAME DATA. A plant qualifies on all three of:
+#   1. Damage evidence -- an almanac `damage` PlantStat, a ChewDamage /
+#      ContactDamage / ExplodeDamage field, or an Action carrying Damage >= 20.
+#   2. SunCost <= 150.
+#   3. Not `IsZenGardenWaterPlant` (Lily Pad and Tangle Kelp), which cannot be
+#      placed on Ancient Egypt's dry terrain.
+#
+# This list used to be SunCost + Family, and Family is a theme tag rather than
+# a damage flag. That let six plants that cannot hurt anything satisfy the
+# Egypt gate: Moonflower, Intensive Carrot, Explode-O-Nut, Shrinking Violet,
+# Hypno-shroom and E.M. Peach. Holding only Sunflower and Moonflower read as
+# a survivable lawn.
+#
+# Three thresholds here are load-bearing and were each got wrong once:
+#   - Damage >= 20, not > 0. 20 is one NDS, the game's normal damage shot (one
+#     pea). Spring Bean's launch carries Damage 1 and Stunion's stun Damage 0;
+#     neither is an attack.
+#   - Action Type == "special" is NOT damage evidence. It only means "triggered
+#     effect" -- Sunflower, Blover and Thyme Warp all have one.
+#   - The almanac `damage` stat alone is not enough. It is a display rating and
+#     Chomper carries none despite ChewDamage 200.
+#
+# Scaredy-shroom, Vamporcini and Skyshooter have no _PLANTPROPERTIES sheet at
+# all. They are listed by hand because no sheet means unknown, not harmless --
+# all three plainly attack.
+#
+# Magnifying Grass is held out by hand despite passing every test above: it
+# spends sun to fire, so as the only plant on a sun-starved opening lawn it
+# cannot be relied on to kill anything.
+# How many of the 46 below a given slot actually uses. The list is the DERIVED
+# set of plants that qualify as a cheap attacker; this is how many of them the
+# Egypt 6 rule names, and therefore how many are promoted to progression.
+#
+# It used to be all 46, which cost the pool 36 progression slots for nothing:
+# an access rule naming a plant forces it to progression (see LOGIC_PLANTS), and
+# in a small seed the progression block is what squeezes out every useful plant,
+# every filler and every trap. An Egypt-only seed had no room for a single gem
+# or coin.
+#
+# 10 is Kurt's number (2026-08-23). Drawn per slot from the slot's own RNG, so
+# a seed is stable and two slots differ.
+# The most of a seed the permanent upgrades may take, as a percentage of the
+# locations it builds.
+#
+# All 14 of them are mandatory and gate nothing, so in a small seed they crowd
+# out the plants that make the seed worth playing: Ancient Egypt alone under the
+# world_key goal is 12 locations, and 14 upgrades left room for none at all.
+# A percentage is self-limiting -- 20% of a 531-location seed is 106, well past
+# the 14 that exist, so this only ever bites where it was needed.
+#
+# Applied on top of the "give before the plants do" rule below it: the cap
+# decides how many upgrades a seed WANTS, and the pool floor can still take more
+# away if even that does not fit.
+UPGRADE_POOL_SHARE = 20
+
+LOGIC_ATTACKER_COUNT = 10
+
+# How many Jester counters each slot's Dark Ages entrance names. ONE: the
+# rule only ever needed one to be findable, and naming all 36 would promote
+# all 36 to progression, which is the exact cost LOGIC_ATTACKER_COUNT exists
+# to avoid. Drawn per slot, so each seed asks for a different plant.
+JESTER_DRAW_COUNT = 1
+
 CHEAP_ATTACKER_PLANTS = [
-    "E.M. Peach", "Potato Mine", "Scaredy-shroom", "Celery Stalker",
-    "Chili Bean", "Escape Root", "Explode-O-Nut", "Moonflower",
-    "Primal Potato Mine", "Shadow-shroom", "Shrinking Violet", "Squash",
-    "Ghost Pepper", "Lava Guava", "Nightshade", "Cabbage-pult",
-    "Intensive Carrot", "Kernel-pult", "Peashooter", "Spikeweed",
-    "Vamporcini", "Fume-Shroom", "Gloom Vine", "Guacodile", "Hypno-shroom",
-    "Jalapeno", "Lightning Reed", "Pea Pod", "Pea Vine", "Split Pea",
-    "Blooming Heart", "Bonk Choy", "Cherry Bomb", "Chomper", "Dusk Lobber",
-    "Electric Blueberry", "Electric Currant", "Grapeshot", "Iceweed",
-    "Parsnip", "Phat Beet", "Red Stinger", "Skyshooter", "Snap Dragon",
-    "Snow Pea", "Spore-shroom", "Star Fruit",
+    "Blooming Heart", "Bonk Choy", "Buttercup", "Cabbage-pult",
+    "Celery Stalker", "Cherry Bomb", "Chili Bean", "Chomper",
+    "Dusk Lobber", "Electric Blueberry", "Electric Currant", "Endurian",
+    "Escape Root", "Fume-Shroom", "Ghost Pepper", "Gloom Vine", "Grapeshot",
+    "Grimrose", "Guacodile", "Iceweed", "Jalapeno", "Kernel-pult",
+    "Lava Guava", "Lightning Reed", "Nightshade",
+    "Parsnip", "Pea Pod", "Pea Vine", "Pea-nut", "Peashooter", "Phat Beet",
+    "Potato Mine", "Primal Potato Mine", "Puff-shroom", "Red Stinger",
+    "Shadow-shroom", "Snap Dragon", "Snow Pea", "Spikeweed", "Split Pea",
+    "Spore-shroom", "Squash", "Star Fruit",
+    # no data sheet; attackers by inspection
+    "Scaredy-shroom", "Skyshooter", "Vamporcini",
 ]
 
 # Plants a world needs on top of its key item. rules.py ANDs one has_any()
 # per entry onto that world's key requirement, so adding a world here is all
 # it takes to gate it -- and its plants are picked up by LOGIC_PLANTS below
 # automatically.
+# Plants that do not stay on the lawn: consumed when they go off, or gone on a
+# timer. They are perfectly good attackers, which is why they stay in
+# CHEAP_ATTACKER_PLANTS for the Ancient Egypt logic gate -- but they are a poor
+# GUARANTEED STARTING PLANT, which exists so a player always has something that
+# can hold a lane. A run whose only plant is Potato Mine has to replant on
+# every single zombie.
+#
+# DERIVED FROM GAME DATA, not judgement. Every plant here is one the game's own
+# _PLANTPROPERTIES sheet marks `IsConsumable` (consumed on use) or gives a
+# `Lifetime` (expires on its own -- this is what catches Ghost Pepper, which is
+# not consumable but does vanish). Peashooter has neither; Squash has
+# IsConsumable; Ghost Pepper has Lifetime.
+#
+# To regenerate after a game update, read
+# assets/resources/import/3d/3d9ce08d-*.json (the _PLANTPROPERTIES table) and
+# intersect those two flags with CHEAP_ATTACKER_PLANTS. Three of the plants
+# below have no sheet at all -- Scaredy-shroom, Vamporcini and Skyshooter --
+# and are treated as persistent, which matches what they do.
+SINGLE_USE_PLANTS = [
+    "Cherry Bomb", "Chili Bean", "Escape Root", "Ghost Pepper", "Grapeshot",
+    "Grimrose", "Jalapeno", "Lava Guava", "Potato Mine",
+    "Primal Potato Mine", "Shadow-shroom", "Squash",
+]
+
+# Plants that persist but deal no damage of their own -- support and defence.
+# Also unfit as the sole starting plant for the same reason: the guarantee is
+# meant to be something that can actually kill a zombie.
+#
+# Every one of these was in CHEAP_ATTACKER_PLANTS at some point, because the
+# old SunCost + Family derivation read a theme tag as a damage flag. They are
+# kept as a named regression guard rather than as a filter: the derivation
+# above already excludes them, and the assertion below now checks exactly that.
+# If one reappears in CHEAP_ATTACKER_PLANTS, the Ancient Egypt gate has gone
+# back to passing on a lawn that cannot kill anything.
+#
+# Chard Guard was removed on 2026-08-25 and is the reason to distrust an Action
+# damage number on its own. It qualified under "an Action with Damage >= 20":
+#
+#   {"Type": "special", "Damage": 60, "TriggerType": "rect", ...}
+#
+# but that 60 is KNOCKBACK FORCE. The rest of its sheet is KnockbackHeight,
+# KnockbackOffset, KnockbackTime and PushesPerLeaf, with the game's own comments
+# reading "# How far back in X does zombie go." It is the deeper form of the
+# "Type == special is not damage" trap: the derivation already rejects a special
+# whose Damage is absent or zero (Blover, Sunflower), and this one carries a
+# number.
+#
+# Four signals agree, and it is the only one of the 47 where they all do:
+#   - no projectile: no PeaType, no ShootInterval, no projectile Action
+#   - no `damage` almanac PlantStat, where Endurian and Pea-nut (the other two
+#     Defence-family attackers) both have damage2
+#   - no ChewDamage / ContactDamage / ExplodeDamage / StabDamage / Damage in
+#     either table
+#   - ChardGuard.ts never contains the substring "amage" -- it never calls
+#     dealDamage. Contrast Vamporcini (9 hits) and Grimrose (5), the other two
+#     plants with no damage FIELDS that nonetheless damage in CODE, which is why
+#     neither of those was removed.
+#
+# It mattered because it was in STARTER_PLANTS: roughly one seed in 35 handed a
+# player a sole guaranteed plant that cannot kill anything, the same failure
+# Intensive Carrot caused before.
+NON_DAMAGING_PLANTS = [
+    "Chard Guard",      # punts zombies back; the 60 is knockback, not damage
+    "Sap-fling",        # slows and puddles; no damage stat, no Damage anywhere
+    "E.M. Peach",       # stuns and disarms, Damage 0
+    "Explode-O-Nut",    # a wall; only hurts what is already eating it
+    "Hypno-shroom",     # converts a zombie, Damage 0
+    "Intensive Carrot", # revives a destroyed plant, no attack at all
+    "Moonflower",       # shadow support, powers other plants
+    "Shrinking Violet", # shrinks zombies, no damage
+]
+
+# What generate_early() may hand a player for free. A cheap attacker that
+# persists on the lawn and does damage on its own.
+STARTER_PLANTS = [
+    plant for plant in CHEAP_ATTACKER_PLANTS
+    if plant not in set(SINGLE_USE_PLANTS) | set(NON_DAMAGING_PLANTS)
+]
+
+# No plant that cannot deal damage may count as an attacker.
+_bad_attackers = set(NON_DAMAGING_PLANTS) & set(CHEAP_ATTACKER_PLANTS)
+if _bad_attackers:
+    raise ValueError("plants that deal no damage are being counted as "
+                     f"attackers: {sorted(_bad_attackers)}")
+
+# Single-use plants stay in CHEAP_ATTACKER_PLANTS on purpose -- they kill, so
+# they satisfy the Egypt gate -- but a name that is not one would filter
+# nothing and quietly leave that plant in the starter pool.
+_unknown_excluded = set(SINGLE_USE_PLANTS) - set(CHEAP_ATTACKER_PLANTS)
+if _unknown_excluded:
+    raise ValueError("excluded starter plants are not cheap attackers: "
+                     f"{sorted(_unknown_excluded)}")
+
+# Plants that answer the Jester (dark_juggler), who returns projectiles at
+# your own lawn.
+#
+# Lobbing is NOT an answer: he returns Cabbage-pult and Melon-pult like
+# anything else. Their projectiles carry DamageFlags ["lobbed","catapult"] and
+# no jester flag at all, so the arc buys nothing. An earlier version of this
+# list assumed otherwise and let every pult through.
+#
+# What actually qualifies is the projectile the game explicitly marks
+# CannotBeReversedByJester, checked on the plant's FIRST projectile action --
+# its normal attack. Checking any projectile would wrongly admit Guacodile,
+# whose ordinary shot is reversible and whose flagged projectile is the child
+# it leaves behind, and Iceweed, whose flagged one is its plant food.
+#
+# Six plants qualify and are in the item pool. Others do in the game --
+# Caulipower, Holly Knight, Anthurium, Dark Matter Dragonfruit -- but have no
+# item, so naming them would gate on something the multiworld cannot send.
+#
+# Deliberately NOT included: the 62 plants that damage without a projectile at
+# all, which he also has nothing to reverse. Most are melee, one-shots or
+# utility rather than something to hold a Dark Ages lane with, and folding
+# them in would make this requirement nearly free.
+#
+# SAP-FLING WAS REMOVED 2026-08-25 (Kurt: "sapfling does 0 damage full support
+# plant"), and it is the reason the flag alone is not enough. Its projectile is
+# genuinely unreversible, so the derivation admitted it -- but an unreversible
+# shot that deals no damage does not ANSWER the Jester, it only declines to arm
+# him. He walks through it.
+#
+# The data agrees, and Sap-fling is the only one of the six where it did:
+#   - no `damage` almanac PlantStat, where the other five have damage3/5/6
+#   - no damage field of any kind in the live PlantProperties table
+#   - its `sapfling` ProjectileProperties entry carries CannotBeReversedByJester
+#     and NO Damage key at all, where `cabbage` has 40 and `pea` has 20
+#   - Sapfling.ts never contains the substring "amage"
+#
+# It slows and it puddles; the Slow Family is the honest reading of it. Same
+# shape as the Chard Guard mistake in NON_DAMAGING_PLANTS above: the derivation
+# tested the special property and never tested for damage.
+#
+# So the rule is TWO conditions, not one: the damage must REACH him, and it must
+# BE damage.
+#
+# WIDENED 2026-08-25 at Kurt's request, from 5 curated plants to every plant
+# that can damage him, with one drawn per slot (JESTER_DRAW_COUNT). That makes
+# each seed ask for a different plant instead of the same five every time, and
+# it is why the list can be this big without making the gate free: only the ONE
+# drawn plant is progression, the other 35 are ordinary useful plants.
+#
+# A plant qualifies if it deals damage the Jester cannot confiscate:
+#   - a projectile the game flags CannotBeReversedByJester (it pops normally),
+#     OR
+#   - damage that is not a projectile at all -- melee, contact, explosion,
+#     beam, spikes. There is nothing for him to catch.
+# A plant whose only damage is a reversible projectile is excluded, and is worse
+# than useless: the caught shot comes back with damageScale multiplied by his
+# ProjectileDamageMult.
+#
+# THE SIGNALS ARE DELIBERATELY NARROW, because two false positives shipped from
+# this file already (Chard Guard, Sap-fling). A plant is in only on an explicit
+# damage FIELD (Damage, ChewDamage, ContactDamage, ExplodeDamage, StabDamage,
+# SmashDamage, ButterDamage, SpikeDamage...), a `damage` almanac PlantStat while
+# having no projectile action, or a flagged projectile carrying a damage number.
+#
+# NOT a signal: "its behaviour module mentions damage". That admits Moonflower,
+# Intensive Carrot, Hypno-shroom and Shrinking Violet, every one of which is in
+# NON_DAMAGING_PLANTS -- they RECEIVE damage or name a resistance constant.
+#
+# 62 of the 135 AP plants are UNKNOWN under those signals: no projectile, no
+# damage field, no damage stat. Some certainly do damage (Ice-shroom,
+# Gloom-shroom, Meteor Flower, Fire Gourd, Grimrose, Vamporcini) and are
+# excluded anyway, because the alternative is to admit Sunflower with them.
+# Excluding a real counter costs variety; including a fake one hands a player a
+# Dark Ages "answer" that cannot fight. See the open list in
+# [[attacker-list-false-positives]].
+#
+# TWO PLANTS WERE DROPPED that used to be listed, both worth knowing:
+#   - Magnifying Grass. Its ONLY projectile is MagnifyingGrassPoweredShot and
+#     it is NOT flagged, so he catches it. It should never have been here.
+#   - Strawburst. Its six projectile actions all resolve to unflagged entries,
+#     though separate `strawburst0/1/2` entries in the projectile table ARE
+#     flagged. The projectile table is sparse and evidently inherits, so which
+#     entry a Strawburst shot really uses is unresolved. Left out until it is.
+# 36 plants, one of which each slot draws (see JESTER_DRAW_COUNT). Derived,
+# not curated: see the two-condition rule above.
+JESTER_COUNTER_PLANTS = [
+    "Bamboo Shoot",
+    "Banana Launcher",
+    "Bonk Choy",
+    "Buttercup",
+    "Cactus",
+    "Celery Stalker",
+    "Cherry Bomb",
+    "Chili Bean",
+    "Chomper",
+    "Cold Snapdragon",
+    "Doom-shroom",
+    "Electric Currant",
+    "Electric Peashooter",
+    "Endurian",
+    "Escape Root",
+    "Fume-Shroom",
+    "Ghost Pepper",
+    "Gloom Vine",
+    "Grapeshot",
+    "Iceweed",
+    "Jalapeno",
+    "Laser Bean",
+    "Lava Guava",
+    "Lightning Reed",
+    "Missile Toe",
+    "Parsnip",
+    "Phat Beet",
+    "Potato Mine",
+    "Primal Potato Mine",
+    "Primal Wall-nut",
+    "Shadow-shroom",
+    "Snap Dragon",
+    "Spikerock",
+    "Spikeweed",
+    "Squash",
+    "Torchwood",
+]
+
+# Every one of these must actually DEAL DAMAGE, or it is not an answer. See the
+# Sap-fling note above; this is the check that was missing when it was listed.
+_no_damage_counters = set(JESTER_COUNTER_PLANTS) & set(NON_DAMAGING_PLANTS)
+if _no_damage_counters:
+    raise ValueError("plants that deal no damage are being counted as Jester "
+                     f"counters: {sorted(_no_damage_counters)}")
+
+# Plants that give off heat, for Frostbite Caves. Its ice blocks freeze plants
+# solid and its winds blow them off the lawn, and only a standing source of
+# warmth keeps a lawn workable.
+#
+# These are the plants the game gives a WarmingRadius: a 1.5-square aura that
+# pulses every 6 seconds, deals 200 fire damage to grid items (the ice blocks)
+# and applies "thaw_whole_stage" to plants. That property is the mechanic, so
+# it is the definition used here.
+#
+# Six plants have it; Wasabi Whip is the one with no Archipelago item, so it
+# is left out. Deliberately absent are Hot Potato and Pepper-pult, which the
+# old version of this rule accepted: neither has a warming radius. Hot Potato
+# thaws one plant once and is gone, and Pepper-pult only deals fire damage.
+# Both help, but neither keeps a lawn warm, which is what the world asks for.
+FIRE_AURA_PLANTS = [
+    "Fire Peashooter",
+    "Hot Date",
+    "Jack O' Lantern",
+    "Lava Guava",
+    "Torchwood",
+]
+
+# Plants a world needs on top of its unlock, as a list of requirements: the
+# player needs at least one plant from EACH list, so a world can ask for more
+# than one thing at once. rules.py ANDs them onto that world's entrance, and
+# the stretch chain inherits it -- so an entry here gates the whole world, not
+# only its opening stretch.
+#
+# LIVE AGAIN as of 2026-08-23, for the four worlds Kurt named. It went dormant
+# on 2026-08-23 when a world became "hold the unlock and it is open"; this puts
+# a specific plant back on four of them, and the unlock rule still applies on
+# top -- Big Wave Beach 1 wants Lily Pad AND one Progressive Big Wave Beach.
+#
+# This is a LOGIC gate, not an unlock, the same footing as Ancient Egypt's
+# egypt6 checkpoint: nothing here reaches slot_data's world_gates, so the
+# client leaves those levels startable and only fill and the tracker know. Do
+# not "fix" that by adding them to world_gates -- the client cannot check a
+# plant the player has not been sent yet without stranding them in a world they
+# already opened.
+#
+# Every plant named here is promoted to progression by LOGIC_PLANTS below, and
+# joins the item-pool floor in items.py, or a small seed could trim away the
+# only thing that opens a world it enabled.
 WORLD_ENTRY_PLANTS = {
-    "Big Wave Beach":  ["Lily Pad"],
-    "Frostbite Caves": ["Hot Potato", "Pepper-pult", "Fire Peashooter"],
-    "Jurassic Marsh":  ["Perfume-shroom"],
+    # Its lanes are water. Lily Pad is one of the three water-only plants and
+    # is what makes a water square hold anything else at all -- the game's own
+    # placement guard is `haveWater || TYPE has neither aquatic nor lilypad`.
+    "Big Wave Beach":  [["Lily Pad"]],
+    # Kurt's call (2026-08-23), NOT derived from a property. The evident reason
+    # is Far Future's jetpack zombies (future_jetpack, _disco, _veteran), which
+    # Blover clears -- but flight is not derivable from data in this build
+    # (IsSpawnedFlying is set on zero entries of the live ZombieProps table), so
+    # this is a design decision rather than a mechanic read out of the game.
+    "Far Future":      [["Blover"]],
+    "Jurassic Marsh":  [["Perfume-shroom"]],
+    # The Jester returns straight-line shots at your own lawn. What answers him
+    # is a projectile the game explicitly marks CannotBeReversedByJester, which
+    # is what JESTER_COUNTER_PLANTS is derived from. Lobbing is NOT an answer --
+    # an earlier version of that list assumed it was and let every pult through.
+    "Dark Ages":       [JESTER_COUNTER_PLANTS],
+    # Its ice blocks freeze plants solid and its winds blow them off the lawn.
+    # What answers that is a standing source of warmth, which is the game's own
+    # WarmingRadius property -- so FIRE_AURA_PLANTS, not any fire plant. Hot
+    # Potato and Pepper-pult are deliberately absent: neither has a warming
+    # radius, and an older version of this rule accepted both.
+    "Frostbite Caves": [FIRE_AURA_PLANTS],
 }
 
 # Every plant named by an access rule anywhere in rules.py. items.py forces
@@ -64,11 +644,95 @@ WORLD_ENTRY_PLANTS = {
 # hand-maintained version is what left Pepper-pult and Fire Peashooter at
 # "useful" while the Frostbite Caves rule named them, quietly collapsing that
 # rule to "Hot Potato only".
+# Ancient Egypt's egypt6 checkpoint names two groups, and WORLD_ENTRY_PLANTS is
+# folded back in as of 2026-08-23 because rules.py reads it again. It was left
+# out while dormant on purpose -- forcing plants to progression for a rule that
+# does not exist puts them in CollectionState for no reason -- so if the entry
+# requirements ever go quiet again, take it back out with them.
+#
+# THE CHEAP ATTACKERS ARE NOT HERE. They are the one group whose membership is
+# per-slot: rules.py names the slot's own LOGIC_ATTACKER_COUNT draw rather than
+# the whole list, so which of the 46 are progression is a property of the seed
+# and cannot live in a module-level set. PvZ2GardendlessWorld.create_item folds
+# `world.logic_attackers` in on top of this.
+# Plants a particular STRETCH of a world wants, on top of whatever its world
+# entrance already asks for. WORLD_ENTRY_PLANTS gates a world; this gates the
+# back half of one.
+#
+# Grave Buster digs up the tombstones that Ancient Egypt and Dark Ages build
+# their later levels around -- graves that keep spawning zombies until they are
+# removed, and that block the tiles they sit on. Both worlds are cut at their
+# own milestones, so " Mid" is exactly World Key level -> Zomboss and " Late" is
+# Zomboss -> final level: everything past the World Key, which is where the
+# graves get thick.
+#
+# LOGIC ONLY, like every other plant requirement. It never reaches slot_data's
+# world_gates, so the client still lets those levels start -- the same footing
+# as Ancient Egypt's egypt6 checkpoint and the world entry plants. What it
+# changes is where fill may hide things and what a tracker calls reachable.
+#
+# A list of GROUPS per stretch, matching WORLD_ENTRY_PLANTS, so a stretch can
+# ask for more than one thing later and so a requirement can be "any of these"
+# rather than one named plant. Grave Buster is alone in its group because it is
+# the only grave-removal plant in the Archipelago range.
+GRAVE_CLEAR_PLANTS = ["Grave Buster"]
+
+STRETCH_ENTRY_PLANTS = {
+    "Ancient Egypt": {" Mid": [GRAVE_CLEAR_PLANTS], " Late": [GRAVE_CLEAR_PLANTS]},
+    "Dark Ages":     {" Mid": [GRAVE_CLEAR_PLANTS], " Late": [GRAVE_CLEAR_PLANTS]},
+}
+
+
 LOGIC_PLANTS = (
     set(SUN_PRODUCER_PLANTS)
-    | set(CHEAP_ATTACKER_PLANTS)
-    | {plant for plants in WORLD_ENTRY_PLANTS.values() for plant in plants}
+    | {plant for groups in WORLD_ENTRY_PLANTS.values()
+       for group in groups for plant in group}
+    | {plant for per_world in STRETCH_ENTRY_PLANTS.values()
+       for groups in per_world.values()
+       for group in groups for plant in group}
 )
+
+# Everything any rule could EVER name, whichever way the per-slot draw falls.
+# Only used to check that every such plant has an item -- a rule naming a plant
+# with no item can never pass, and would fail silently.
+ALL_LOGIC_PLANTS = (LOGIC_PLANTS | set(CHEAP_ATTACKER_PLANTS)
+                    | set(JESTER_COUNTER_PLANTS))
+
+
+
+
+def slot_stretch_groups(world, world_name, suffix):
+    """This slot's plant requirements for one stretch of one world.
+
+    Empty for a stretch this slot does not build: under the world_key goal a
+    world ends at its World Key level, so its " Mid" and " Late" never exist and
+    gating them would promote a plant to progression for a rule nothing built.
+    """
+    if suffix not in world.kept_stretches(world_name):
+        return []
+    return STRETCH_ENTRY_PLANTS.get(world_name, {}).get(suffix, [])
+
+
+def slot_entry_groups(world, world_name):
+    """This slot's entry-plant requirements for `world_name`.
+
+    Identical to WORLD_ENTRY_PLANTS except that the Jester group is narrowed to
+    the ONE counter this slot drew. Everything downstream -- the access rule,
+    the progression classification and the item-pool floor -- has to agree on
+    that single plant, so they all come through here rather than reading the
+    table directly.
+
+    Matched by identity against JESTER_COUNTER_PLANTS, which is the same list
+    object the table holds, so a group that merely has the same contents is
+    left alone.
+    """
+    groups = []
+    for group in WORLD_ENTRY_PLANTS.get(world_name, []):
+        if group is JESTER_COUNTER_PLANTS:
+            groups.append(list(world.logic_jesters))
+        else:
+            groups.append(group)
+    return groups
 
 # Shop commodities, taken verbatim from the game's store data. Only the
 # one-time purchases are usable as checks -- the Gem/Coin/Zen bundles in the
@@ -97,25 +761,495 @@ SHOP_UPGRADE_COMMODITIES = [
     'upgrade_starting_sun_lvl2', 'upgrade_manual_mowers_2',
 ]  # 5, all gem-priced
 
-SHOP_COMMODITIES = SHOP_PLANT_COMMODITIES + SHOP_UPGRADE_COMMODITIES
+# Sold by the game NOW but added upstream after the two lists above were
+# written, so it cannot go in them: location ids are assigned by increment and
+# the shop block is not last in _make_locs(), so appending there would renumber
+# every location after it. locations.py adds these at the very end instead.
+SHOP_EXTRA_COMMODITIES = ['chillypepper']  # 40 gem, no UnlockLevel
+
+# In those lists, but NOT in the store the game actually loads. Kurt's build
+# sells witchhazel, slingpea and chillypepper where this table has mirrornut,
+# wasabiwhip and pyrevine -- 43 commodities either way, three swapped upstream
+# (confirmed 2026-08-18 against PVZGE-Electron/pvzge_web, not the `Base Game`
+# snapshot, which is older and still lists the old three).
+#
+# A card that is not in StoreCommodityFeatures is never drawn, so its check can
+# never fire. Kept here rather than deleted for the same id reason, and routed
+# into UNREACHABLE_LOCATIONS so no seed ever builds them.
+SHOP_ABSENT_COMMODITIES = ['mirrornut', 'wasabiwhip', 'pyrevine']
+
+SHOP_COMMODITIES = (SHOP_PLANT_COMMODITIES + SHOP_UPGRADE_COMMODITIES
+                    + SHOP_EXTRA_COMMODITIES)
+# The order locations.py must keep for the ids already assigned. Anything new
+# goes in SHOP_EXTRA_COMMODITIES, never in the middle of this.
+SHOP_LEGACY_COMMODITIES = SHOP_PLANT_COMMODITIES + SHOP_UPGRADE_COMMODITIES
 SHOP_REGION = "Shop"
+
+
+def gem_grant_regions():
+    """Regions the guaranteed gem grant may be placed in: everything reachable
+    before Ancient Egypt 9.
+
+    That is the tutorial plus Egypt's two opening stretches -- egypt1-5, which
+    need nothing, and egypt6-8, which want a sun producer and a cheap attacker.
+    Egypt's " Mid" starts at egypt9.
+
+    Derived from EGYPT_STRETCHES rather than listed, so re-cutting Ancient Egypt
+    moves this with it. Deliberately NOT including SHOP_REGION even though it
+    hangs off " Early": the shop is what the gems are FOR, so a grant sitting on
+    a card the player cannot afford is the exact deadlock this exists to break.
+    """
+    return {"Tutorial"} | {"Ancient Egypt" + s for s in EGYPT_STRETCHES[:2]}
+
+# Which level makes each shop card appear, from the store data itself
+# (`StoreCommodityFeatures.Plants[].UnlockLevel` in `import/0f/0fc6e99c8.json`).
+#
+# The game destroys a card before drawing it unless its UnlockLevel is cleared:
+#
+#   getPlantProgressByID(id).progress > 0 ||
+#   (UnlockLevel && getLevelProgressByID(UnlockLevel).progress < 3)
+#
+# so the store is not one shop that opens at egypt6 -- it is 39 cards that
+# appear one at a time across the whole run. 29 of the 34 gem-priced plants
+# carry an UnlockLevel; jalapeno, mirrornut, wasabiwhip, pyrevine and cranjelly
+# do not, and neither does any of the five upgrade commodities, so those ten
+# are on sale as soon as the store button exists.
+#
+# Read straight out of the store file and NOT from anything else that names the
+# same level. These collide with the side-path branch levels in three places
+# (beach14, eighties14, lostcity14) and mean something unrelated each time.
+SHOP_UNLOCK = {
+    "iceweed":            "egypt9",
+    "snowdrop":           "egypt28",
+    "starfruit":          "future20",
+    "pinkstarfruit":      "future28",
+    "asparagus":          "sky14",
+    "hypnoshroom":        "dark8",
+    "peanut":             "dark18",
+    "homingthistle":      "beach31",
+    "chomper":            "beach14",
+    "hurrikale":          "iceage14",
+    "lavaguava":          "lostcity14",
+    "toadstool":          "lostcity31",
+    "powerlily":          "kongfu22",
+    "bamboozle":          "kongfu38",
+    "firepeashooter":     "iceage29",
+    "cactus":             "neon14",
+    "electricblueberry":  "neon31",
+    "caulipower":         "neon39",
+    "jackolantern":       "iceage34",
+    "grapeshot":          "dino3",
+    "escaperoot":         "modern31",
+    "explodeonut":        "dino39",
+    "applemortar":        "future31",
+    "floawerPot":         "sky31",
+    "coldsnapdragon":     "dino19",
+    "missiletoe":         "beach35",
+    "electricpeashooter": "cowboy28",
+    "zoybeanpod":         "lostcity37",
+    "shrinkingviolet":    "modern14",
+}  # 29 gated cards
+
+# Which commodities are actually used as AP checks: the ones the game puts on
+# the shelf by CLEARING A LEVEL, plus the five upgrades.
+#
+# The ungated gem plants are deliberately left out. Every bit of upstream churn
+# has happened in exactly that set -- mirrornut, wasabiwhip and pyrevine were
+# swapped for witchhazel, slingpea and chillypepper between the snapshot in
+# `Base Game` and the build the installer clones, while all 29 UnlockLevel
+# entries agreed exactly. A card with no UnlockLevel is a shelf item the game
+# can add or drop without touching anything else, and each time it does, an AP
+# check either dies or is missed.
+#
+# So the rule is derived rather than listed: a plant is a check IF AND ONLY IF
+# it has an UnlockLevel. Upstream reshuffling the ungated tail now costs
+# nothing. It also means every shop check is gated on a level, which is what
+# rules.py was already doing for 29 of them.
+#
+# The names stay in the lists above so their ids never move; locations.py
+# filters them out of every seed instead.
+SHOP_CHECK_COMMODITIES = ([c for c in SHOP_PLANT_COMMODITIES if c in SHOP_UNLOCK]
+                          + list(SHOP_UPGRADE_COMMODITIES))
+
+# ── Permanent upgrades ────────────────────────────────────────────────────────
+# The game's fourteen permanent upgrades, as (item name, game codename), in
+# the game's own UpgradeEnum order. The codenames are what the save file keys
+# currentPlayer.upgradeProps by, and what unlockUpgrade() takes.
+#
+# ORDER IS LOAD-BEARING for the same reason as KEYED_WORLDS: items.py numbers
+# these from the end of the trap block. Append only.
+#
+# Nine are level rewards and five are store purchases, which is only about
+# where their *location* is -- every one of them is an item either way.
+#
+# Grouped as (item name, [codenames granted in this order]). The multi-level
+# ones are PROGRESSIVE rather than one item per level, because the game's
+# upgrade loop simply sums whatever is held:
+#   starting sun +25 each   plant food slots +1 each, base 3 cap 5
+#   seed slots   +1 each, base 6 cap 8
+#   sun shovel   +0.25 rate each   manual mower +1 each
+# lvl1 and lvl2 have identical effects, so receiving "Sun Shovel III" first
+# would be indistinguishable from receiving "Sun Shovel I" first -- separate
+# items would imply an ordering the game does not have, and would show up on
+# a tracker as holding III while missing I and II. The last three are one-shot
+# flags with nothing to progress through, so they stay single items.
+UPGRADE_GROUPS = [
+    ("Progressive Starting Sun",    ["upgrade_starting_sun_lvl1",
+                                     "upgrade_starting_sun_lvl2"]),
+    ("Progressive Plant Food Slot", ["upgrade_pf_slots_lvl1",
+                                     "upgrade_pf_slots_lvl2"]),
+    ("Progressive Seed Slot",       ["upgrade_7_slots", "upgrade_8_slots"]),
+    ("Progressive Sun Shovel",      ["upgrade_sunshovel_lvl1",
+                                     "upgrade_sunshovel_lvl2",
+                                     "upgrade_sunshovel_lvl3"]),
+    ("Progressive Manual Mower",    ["upgrade_manual_mowers_1",
+                                     "upgrade_manual_mowers_2"]),
+    ("Wall-nut First Aid",          ["upgrade_wallnut_firstaid"]),
+    ("Plant Food Refresh",          ["upgrade_pf_refresh"]),
+    ("Sky Shield",                  ["upgrade_sky_shield"]),
+]
+
+# Total upgrade items in a shuffled pool: 8 distinct names, 14 copies.
+UPGRADE_ITEM_COUNT = sum(len(cns) for _, cns in UPGRADE_GROUPS)
 
 
 def shop_location_name(commodity: str) -> str:
     return f"Shop: {commodity}"
 
 
+# Which world a side path is entered from. A side path is not a separate place
+# you can walk to -- it branches off a specific level on a specific world map,
+# so it is unreachable until that world is. These were all sitting in sphere 1,
+# which meant logic thought a Far Future side path was enterable from Egypt.
+#
+# Read out of the game rather than guessed. Three sources, in order of
+# authority: the world-map branch nodes (a map entry like [6,"25-1",
+# ["conceal0"]] places that side path at level 25 of the map it appears on),
+# the Epic Quest tables that group each side path's levels under an
+# epic_<world> codename, and for Rhythm the level's own "#comment": "Iceage 1".
+#
+# Appease is TWO paths, because the game treats it as two. appease1_* branches
+# off Ancient Egypt 29 and runs on epic_egypt; appease2_* branches off Frostbite
+# Caves 25 and runs on epic_iceage. It used to be one region tied to Egypt, the
+# earlier half, which put seven Frostbite Caves levels in logic from Egypt.
+SIDE_PATH_WORLD = {
+    "Aloe Sidepath":            "Lost City",
+    "Appease-mint Sidepath":         "Ancient Egypt",
+    "Appease-mint 2 Sidepath":       "Frostbite Caves",
+    "Atomic Bombegranate Sidepath":        "Kongfu Temple",
+    "Blooming Heart Sidepath":  "Neon Mixtape Tour",
+    "Buttercup Sidepath":       "Pirate Seas",
+    "Conceal-mint Sidepath":         "Modern Day",
+    "Doom-shroom Sidepath":      "Dark Ages",
+    "Electric Currant Sidepath": "Wild West",
+    "Enlighten-mint Sidepath":       "Lost City",
+    "Ghost Pepper Sidepath":     "Big Wave Beach",
+    "Goo Peashooter Sidepath":  "Dark Ages",
+    "Gloom-shroom Sidepath":     "Modern Day",
+    "Gold Bloom Sidepath":       "Modern Day",
+    "Hot Date Sidepath":         "Frostbite Caves",
+    "Ice Bloom Sidepath":        "Big Wave Beach",
+    "Ice-shroom Sidepath":       "Dark Ages",
+    "Meteor Flower Sidepath":    "Jurassic Marsh",
+    "Mirror-nut Sidepath":       "Neon Mixtape Tour",
+    "Pepper-mint Sidepath":      "Frostbite Caves",
+    "Parsnip Sidepath":         "Big Wave Beach",
+    "Plantern Sidepath":        "Dark Ages",
+    "Reinforce-mint Sidepath":       "Far Future",
+    "Rhythm Sidepath":          "Frostbite Caves",
+    "Sap-fling Sidepath":        "Wild West",
+    "Seashooter Sidepath":      "Big Wave Beach",
+    "Solar Tomato Sidepath":     "Far Future",
+    "Squash Sidepath":          "Ancient Egypt",
+    "Strawburst Sidepath":      "Neon Mixtape Tour",
+    "Sweet Potato Sidepath":     "Frostbite Caves",
+    "Umbrella Leaf Sidepath":    "Modern Day",
+    "Vamporcini Sidepath":      "Dark Ages",
+}
+
+# Which world level opens each side path, read off the world-map scenes.
+#
+# A branch island is labelled "<N>-1" and carries the quest's demo level, so
+# `[9,"6-1",["squash0"]]` in Ancient Egypt's map means the Squash quest appears
+# once egypt6 is cleared. The same convention labels a world's own optional
+# levels (`[.."20-1",["egypt20_1"]]`), where "clear level N to reveal N-1" is
+# already known to be how it reads.
+#
+# All 27 branch nodes, swept 2026-08-18 out of every scene carrying LevelIsland
+# data (26 files -- the 11 world maps plus the epic maps, which carry no branch
+# nodes of their own). Nothing else in the game reveals a quest: see
+# level-and-shop-gating for the full list of ways a level can start.
+#
+# Two-step in game, and only the first step is modelled here: clearing this
+# level reveals the quest's level 0, and clearing THAT opens the epic portal to
+# levels 1..k. A side path is one flat region, so it is gated on the branch
+# level alone and its own internal chain is not expressed.
+#
+# Appease-mint is two entries because it is two branches on two world maps.
+SIDE_PATH_UNLOCK = {
+    "Squash Sidepath":              "egypt6",       # 6-1   -> squash0
+    "Appease-mint Sidepath":        "egypt29",      # 29-1  -> appease1_0
+    "Appease-mint 2 Sidepath":      "iceage25",     # 25-1  -> appease2_0
+    "Buttercup Sidepath":           "pirate33",     # 33-1  -> buttercup0
+    "Sap-fling Sidepath":           "cowboy29",     # 29-1  -> sapfling0
+    "Electric Currant Sidepath":    "cowboy34",     # 34-1  -> electriccurrant0
+    "Reinforce-mint Sidepath":      "future13",     # 13-1  -> reinforce0
+    "Solar Tomato Sidepath":        "future28",     # 28-1  -> solartomato0
+    "Vamporcini Sidepath":          "dark4",        # 4-1   -> vamporcini0
+    "Plantern Sidepath":            "dark9",        # 9-1   -> plantern0
+    "Goo Peashooter Sidepath":      "dark16",       # 16-1  -> poisonpeashooter0
+    "Ice-shroom Sidepath":          "dark22",       # 22-1  -> iceshroom0
+    "Doom-shroom Sidepath":         "dark28",       # 28-1  -> doomshroom0
+    "Seashooter Sidepath":          "beach7",       # 7-1   -> seashooter0
+    "Ghost Pepper Sidepath":        "beach14",      # 14-1  -> ghostpepper0
+    "Parsnip Sidepath":             "beach22",      # 22-1  -> parsnip0
+    "Ice Bloom Sidepath":           "beach40",      # 40-1  -> icebloom0
+    "Sweet Potato Sidepath":        "iceage12",     # 12-1  -> sweetpotato0
+    "Aloe Sidepath":                "lostcity8",    # 8-1   -> aloe0
+    "Enlighten-mint Sidepath":      "lostcity38",   # 38-1  -> enlighten0
+    "Atomic Bombegranate Sidepath": "kongfu12",     # 12-1  -> atombomb0
+    "Strawburst Sidepath":          "neon14",   # 14-1  -> strawburst0
+    "Blooming Heart Sidepath":      "neon25",   # 25-1  -> bloominghearts0
+    "Meteor Flower Sidepath":       "dino40",       # 40-1  -> meteorflower0
+    "Pepper-mint Sidepath":         "iceage27",     # 27-1  -> pepper0
+    "Mirror-nut Sidepath":          "neon21",   # 21-1  -> mirrornut0
+    "Umbrella Leaf Sidepath":       "modern10",     # 10-1  -> umbrellaleaf0
+    "Conceal-mint Sidepath":        "modern25",     # 25-1  -> conceal0
+    "Gold Bloom Sidepath":          "modern28",     # 28-1  -> goldbloom0
+    "Gloom-shroom Sidepath":        "modern40",     # 40-1  -> gloomshroom0
+}
+
+# Side paths reached through another side path rather than from a world map.
+#
+# Hot Date is the only one. It has no branch node and no portal of its own --
+# 27 chain-starts have one, Hot Date has none -- because it sits on the SAME
+# epic_iceage chain immediately after sweetpotato5, so it is revealed by that
+# chain cascading rather than by clearing a world level. Gating it on entering
+# the Sweet Potato path is as close as a flat region gets to the game's "finish
+# the Sweet Potato path"; the levels between are inside that one region and
+# cannot be asked for separately.
+SIDE_PATH_CHAIN = {
+    "Hot Date Sidepath": "Sweet Potato Sidepath",
+}
+
+# The seven side paths the game data ties to no world: Sandbox, the Bank Theft
+# levels, Epic Beghouled, FloawerPot, the Mixed Danger Room, Reinforcemint and
+# ShootingStarFruit. They are standalone content reached from the world
+# chooser rather than from inside a world, so when they are in the seed at all
+# they are reachable from the start. The Mixed one is now always empty:
+# mixed_dangerroom2 was its only location and it is unreachable in game, see
+# UNREACHABLE_LOCATIONS.
+#
+# The whole list is dropped unless include_side_paths is on, which it is not by
+# default. That default is now a content choice rather than a logic one: each
+# path is gated on the level that reveals it (SIDE_PATH_UNLOCK), so leaving
+# them in no longer puts late content in sphere 1. It used to -- a path hung
+# off the opening of its world, and Ancient Egypt's opening is ungated, so
+# Squash and Appease-mint were sphere 1 whatever the game says.
 SIDE_PATH_REGIONS = [
-    "Aloe Sidepath", "Appease Sidepath", "Atombomb Sidepath", "Bank Sidepath",
-    "Bloominghearts Sidepath", "Buttercup Sidepath", "Conceal Sidepath",
-    "Doomshroom Sidepath", "Electriccurrant Sidepath", "Enlighten Sidepath",
+    "Aloe Sidepath", "Appease-mint Sidepath", "Appease-mint 2 Sidepath",
+    "Atomic Bombegranate Sidepath", "Bank Sidepath",
+    "Blooming Heart Sidepath", "Buttercup Sidepath", "Conceal-mint Sidepath",
+    "Doom-shroom Sidepath", "Electric Currant Sidepath", "Enlighten-mint Sidepath",
     "Epic Beghouled Sidepath", "Floawerpot Sidepath",
-    "Ghostpepper Sidepath", "Gloomshroom Sidepath", "Goldbloom Sidepath",
-    "Hotdate Sidepath", "Icebloom Sidepath", "Iceshroom Sidepath",
-    "Meteorflower Sidepath", "Mixed Sidepath", "Parsnip Sidepath", "Plantern Sidepath",
-    "Reinforce Sidepath", "Reinforcemint Sidepath", "Rhythm Sidepath",
-    "Sandbox Sidepath", "Sapfling Sidepath", "Seashooter Sidepath",
-    "Shootingstarfruit Sidepath", "Solartomato Sidepath", "Squash Sidepath",
-    "Strawburst Sidepath", "Sweetpotato Sidepath", "Umbrellaleaf Sidepath",
+    "Ghost Pepper Sidepath", "Gloom-shroom Sidepath", "Gold Bloom Sidepath",
+    "Goo Peashooter Sidepath",
+    "Hot Date Sidepath", "Ice Bloom Sidepath", "Ice-shroom Sidepath",
+    "Meteor Flower Sidepath", "Mirror-nut Sidepath", "Mixed Sidepath",
+    "Parsnip Sidepath", "Pepper-mint Sidepath", "Plantern Sidepath",
+    "Reinforce-mint Sidepath", "Reinforcemint Unused Sidepath", "Rhythm Sidepath",
+    "Sandbox Sidepath", "Sap-fling Sidepath", "Seashooter Sidepath",
+    "Shootingstarfruit Sidepath", "Solar Tomato Sidepath", "Squash Sidepath",
+    "Strawburst Sidepath", "Sweet Potato Sidepath", "Umbrella Leaf Sidepath",
     "Vamporcini Sidepath",
 ]
+
+# The Danger Rooms: the game's endless survival mode, one per world (two to
+# four for some), plus Big Wave Beach's eight themed minigame rooms and the
+# Mixed Danger Room.
+#
+# 37 entries, of which 35 are ever built: kongfu_dangerroom4 and
+# mixed_dangerroom2 are in UNREACHABLE_LOCATIONS. They stay named here so the
+# set keeps matching its stated derivation from LOC_LEVELS.
+#
+# DERIVED, not hand-picked: these are exactly the locations whose level
+# codename in the client's LOC_LEVELS contains "dangerroom". Every one of them
+# is named after its own codename, because a Danger Room hands out no reward
+# for the randomizer to borrow a name from. The 28 locations called
+# "Dangerroom <World> Unlock" are NOT in here and must never be -- those are
+# ordinary numbered levels (egypt12, pirate4, beach20 ...) whose reward is
+# unlocking the room. gen_test pins both halves of that.
+#
+# Dropped from the seed unless include_danger_rooms is on.
+DANGER_ROOM_LOCATIONS = frozenset({
+    "egypt_dangerroom", "egypt_dangerroom2", "egypt_dangerroom_minigame",
+    "pirate_dangerroom", "pirate_dangerroom2",
+    "cowboy_dangerroom", "cowboy_dangerroom2",
+    "future_dangerroom", "future_dangerroom2", "future_dangerroom_sunbomb",
+    "dark_dangerroom", "dark_dangerroom2", "dark_dangerroom_potion",
+    "beach_dangerroom", "beach_dangerroom2",
+    "beach_dangerroom_minigame_beach", "beach_dangerroom_minigame_cowboy",
+    "beach_dangerroom_minigame_dark", "beach_dangerroom_minigame_egypt",
+    "beach_dangerroom_minigame_future", "beach_dangerroom_minigame_iceage",
+    "beach_dangerroom_minigame_lostcity", "beach_dangerroom_minigame_pirate",
+    "iceage_dangerroom", "iceage_dangerroom2",
+    "lostcity_dangerroom", "lostcity_dangerroom2",
+    "kongfu_dangerroom", "kongfu_dangerroom2", "kongfu_dangerroom3",
+    "kongfu_dangerroom4",
+    "neon_dangerroom", "neon_dangerroom2",
+    "dino_dangerroom", "dino_dangerroom2",
+    "sky_dangerroom",
+    "modern_dangerroom", "modern_dangerroom2",
+    "mixed_dangerroom2",
+})
+
+
+# Which level unlocks each Danger Room, as the location name of that level.
+#
+# DERIVED FROM GAME DATA, not from the naming. A Danger Room's map node is
+# locked until its own level progress is above zero, and the only thing that
+# raises it is `AllPlayerProperties.unlockTrophy` in index.js:
+#
+#   case "dangerroom":
+#     n.objdata.UnlockLevel.forEach(r => {
+#       var t = e.getLevelProgressByID(r);
+#       t.progress <= 0 && (t.progress = g.unlocked_neverPlayed); ... })
+#
+# so the chain is: a level's `FirstRewardParam` names a `dangerroom_*` trophy in
+# the TROPHIES table (`import/0f/0fc6e99c8.json`), and that trophy's
+# `objdata.UnlockLevel` lists the rooms it opens. Scanning every level
+# definition for a `dangerroom_*` FirstRewardParam produces exactly the 28
+# levels below, and they match the client's own LOC_LEVELS mapping.
+#
+# Beating that level is therefore the whole condition -- there is no separate
+# world-progress requirement -- which is what rules.py gates each room on.
+# One level can open several rooms: beach24 opens all eight of Big Wave
+# Beach's themed minigame rooms at once.
+DANGER_ROOM_UNLOCK = {
+    "egypt_dangerroom":                   "egypt12",           # egypt12
+    "egypt_dangerroom_minigame":          "egypt23",  # egypt23
+    "egypt_dangerroom2":                  "egypt31",          # egypt31
+    "pirate_dangerroom":                  "pirate4",          # pirate4
+    "pirate_dangerroom2":                 "pirate33",         # pirate33
+    "cowboy_dangerroom":                  "cowboy3",          # cowboy3
+    "cowboy_dangerroom2":                 "cowboy33",         # cowboy33
+    "future_dangerroom":                  "future4",          # future4
+    "future_dangerroom2":                 "future32",         # future32
+    "future_dangerroom_sunbomb":          "future33",  # future33
+    "dark_dangerroom":                    "dark12",            # dark12
+    "dark_dangerroom2":                   "dark26",           # dark26
+    "dark_dangerroom_potion":             "dark27",     # dark27
+    "beach_dangerroom":                   "beach20",           # beach20
+    "beach_dangerroom2":                  "beach36",          # beach36
+    "beach_dangerroom_minigame_egypt":    "beach24",  # beach24
+    "beach_dangerroom_minigame_pirate":   "beach24",  # beach24
+    "beach_dangerroom_minigame_cowboy":   "beach24",  # beach24
+    "beach_dangerroom_minigame_future":   "beach24",  # beach24
+    "beach_dangerroom_minigame_dark":     "beach24",  # beach24
+    "beach_dangerroom_minigame_beach":    "beach24",  # beach24
+    "beach_dangerroom_minigame_iceage":   "beach24",  # beach24
+    "beach_dangerroom_minigame_lostcity": "beach24",  # beach24
+    "iceage_dangerroom":                  "iceage20",          # iceage20
+    "iceage_dangerroom2":                 "iceage35",         # iceage35
+    "lostcity_dangerroom":                "lostcity20",        # lostcity20
+    "lostcity_dangerroom2":               "lostcity39",       # lostcity39
+    "kongfu_dangerroom":                  "kongfu14",          # kongfu14
+    "kongfu_dangerroom2":                 "kongfu30",         # kongfu30
+    "kongfu_dangerroom3":                 "kongfu47",         # kongfu47
+    "neon_dangerroom":                "neon20",        # eighties20
+    "neon_dangerroom2":               "neon38",       # eighties38
+    "sky_dangerroom":                     "sky20",            # sky20
+    "dino_dangerroom":                    "dino20",            # dino20
+    "dino_dangerroom2":                   "dino36",           # dino36
+    "modern_dangerroom":                  "modern20",          # modern20
+    "modern_dangerroom2":                 "modern40",         # modern40
+}
+
+
+# Levels the game defines but never attaches to a map, so nothing can launch
+# them and their checks can never fire by playing.
+#
+# VERIFIED, not assumed (2026-08-16): each of these appears in exactly ONE
+# resource file, `import/02/02ed09922.json`, which holds level definitions.
+# They are absent from the world tables (`import/01/01c3025f0.json`), from
+# every world's map-node data (e.g. `import/06/0611992e3.json` for Egypt), and
+# from index.js entirely -- zero references. A live level like egypt35 or
+# egypt_dangerroom appears in four files by comparison.
+#
+# They were reachable in logic, so fill could put a world key or a gated plant
+# on one and leave the seed uncompletable -- and random_zomboss_egypt sat in
+# Ancient Egypt's opening stretch, making it a PREFERRED early-fill target.
+#
+# Dropped in active_locations() rather than deleted from the table below: the
+# IDs there are assigned by increment, so removing an entry would renumber
+# every location after it and break seeds already generated.
+UNREACHABLE_LOCATIONS = frozenset({
+    "random_egypt",   "random_zomboss_egypt",
+    "random_pirate",  "random_zomboss_pirate",
+    "random_cowboy",  "random_zomboss_cowboy",
+    "random_future",  "random_zomboss_future",
+    "random_dark",    "random_zomboss_dark",
+    "random_beach",   # no random_zomboss_beach exists
+    # Two Danger Rooms in the same position, found while deriving
+    # DANGER_ROOM_UNLOCK (2026-08-17). Every other room has a map node in its
+    # world's scene data AND a level whose FirstRewardParam opens it; these two
+    # have neither, so nothing can put them on a map and nothing can raise their
+    # progress above locked:
+    #   kongfu_dangerroom4 -- the dangerroom_kongfu4 trophy exists, but no level
+    #     awards it and Kongfu Temple's map (`import/08/08fde7325.json`) carries
+    #     only three DANGERROOM nodes, for rooms 1-3.
+    #   mixed_dangerroom2 -- appears in exactly ONE resource file, the level
+    #     definitions. No trophy, no node. This is the "Mixed Danger Room" the
+    #     side-path option describes as Modern Day's "Highway to the Danger
+    #     Room"; it is the sole location of the Mixed Sidepath region, which is
+    #     now always empty.
+    "kongfu_dangerroom4", "mixed_dangerroom2",
+    # An alternate "Iceage 24" -- the preset-plant variant where the lawn
+    # starts frozen and the seed bank is five Hot Potatoes, with no sun
+    # dropper. Frostbite Caves' map chain is nodes 1-40 carrying a plain
+    # iceage24; there is no 24-B node, the world table does not list it, and
+    # index.js never names it. It is the ONLY level asset in the game with a
+    # capital letter in its name (checked across all 1183), so there is no
+    # variant family behind it -- just this one stray.
+    "iceage24_B",
+    # The eight side paths with no map node anywhere. Each appears in exactly
+    # one resource file -- its own definition -- and the world chooser has no
+    # icon for the aggregate `epic` map that would otherwise reach them.
+    # Nothing else can launch a level either: Level of the Day is gated on
+    # feature_lod, which is never set true in this build, and the only seven
+    # ForceNextLevel entries are the tutorial chain.
+    #
+    # They were the whole reason side paths "hang off the tutorial" in
+    # regions.py -- there is nothing to hang them off, because they cannot be
+    # reached at all.
+    "bank_theft1", "bank_theft2", "bank_theft3", "bank_theft4", "bank_theft5",
+    "epic_beghouled1", "epic_beghouled2", "epic_beghouled3", "epic_beghouled4",
+    "epic_beghouled5",
+    "floawerpot1", "floawerpot2", "floawerpot3",
+    "reinforcemint_unused_try1", "reinforcemint_unused_try2", "reinforcemint_unused_try3",
+    "rhythm1",
+    "sandbox", "sandbox_green", "sandbox_modern", "sandbox_modern_night",
+    "sandbox_sky",
+    "shootingstarfruit1", "shootingstarfruit2", "shootingstarfruit3",
+}) | frozenset(shop_location_name(c) for c in SHOP_ABSENT_COMMODITIES)
+
+
+# Every side path named above has to be a real region, or its entry silently
+# gates nothing.
+_unknown_side_paths = set(SIDE_PATH_WORLD) - set(SIDE_PATH_REGIONS)
+if _unknown_side_paths:
+    raise ValueError(f"SIDE_PATH_WORLD names unknown side paths: {sorted(_unknown_side_paths)}")
+_unknown_side_path_worlds = set(SIDE_PATH_WORLD.values()) - set(WORLD_REGIONS)
+if _unknown_side_path_worlds:
+    raise ValueError(f"side paths tied to unknown worlds: {sorted(_unknown_side_path_worlds)}")
+
+# Every Danger Room the seed can build has to name the level that unlocks it, or
+# rules.py silently leaves it ungated -- which is the bug this table exists to
+# fix, and it would look identical to it working. The only rooms allowed to have
+# no unlock level are the two that are never built at all.
+_ungated_rooms = set(DANGER_ROOM_LOCATIONS) - set(DANGER_ROOM_UNLOCK) - UNREACHABLE_LOCATIONS
+if _ungated_rooms:
+    raise ValueError(f"Danger Rooms with no unlock level: {sorted(_ungated_rooms)}")
+_unknown_rooms = set(DANGER_ROOM_UNLOCK) - set(DANGER_ROOM_LOCATIONS)
+if _unknown_rooms:
+    raise ValueError(f"DANGER_ROOM_UNLOCK names non-rooms: {sorted(_unknown_rooms)}")
