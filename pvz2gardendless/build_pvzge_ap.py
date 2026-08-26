@@ -3981,12 +3981,31 @@ window.electron = electron;
   // nobody sat down and won. isFinished() reads the game's own levelProps, so
   // it answers "did you play this", which is what the goal is meant to mean.
   //
-  // A level with no LOC_LEVELS entry falls back to isChecked. That cannot
-  // happen for a goal location today (every one is an ordinary level), and
-  // failing closed there would strand the run instead of just being lax.
+  // A goal location with no LOC_LEVELS entry FAILS CLOSED -- it does not
+  // count, and isChecked() is never consulted for it. That entry is the only
+  // thing that lets this client ask "was it played", so without one the lax
+  // answer is the exact hole this function exists to close: a released or
+  // !collect'd goal would count as a world beaten.
+  //
+  // It cannot happen for a goal location today (every one is an ordinary
+  // level, and generation only ever picks levels). The realistic way to reach
+  // it is an OLD client on a NEW seed, naming a level it has never heard of.
+  // That strands the run -- which is why it is loud: unknownGoalLocs warns
+  // once per name, and the overlay tracker's total drops below the goal
+  // count, so the run reads as stuck rather than silently unwinnable.
+  const unknownGoalLocs = {};
   function goalPlayed(loc){
     const levelId = LOC_LEVELS[loc];
-    return levelId ? isFinished(levelId) : isChecked(loc);
+    if(!levelId){
+      if(!unknownGoalLocs[loc]){
+        unknownGoalLocs[loc] = 1;
+        log('Goal location "' + loc + '" is not a level this client knows; ' +
+            'it can never count. Rebuild the client against the apworld ' +
+            'this seed was rolled with.');
+      }
+      return false;
+    }
+    return isFinished(levelId);
   }
 
   // {done, need} for the overlay tracker as well as the win check, so the

@@ -295,5 +295,41 @@ G.updateGoalTracker();
 if (G.goalEl().style.display !== 'none') fail('tracker shown before slot_data');
 else ok('the tracker stays hidden until slot_data lands');
 
+// -- a goal location this client has no level for -----------------------------
+// The realistic case is an old injected client meeting a new seed: slot_data
+// names a goal level it has never heard of. goalPlayed() cannot ask "was this
+// played" without a level id, so it FAILS CLOSED. Counting it off isChecked
+// instead would reopen the exact hole -- a released goal would count as a
+// world beaten, by the client that is least able to tell.
+G.reset(keyed({ unknownLocs: ['modern16'] }));
+for (const g of GOALS) G.check(g);   // released, or !collect'd: never played
+if (G.goalMet()) fail('an unknown goal location counted off a bare check');
+else ok('an unknown goal location does not count when merely checked');
+
+// And it stays uncounted even when the level "was played" -- with no level id
+// there is nothing to have played, so the only honest answer is no.
+G.reset(keyed({ unknownLocs: ['egypt8', 'pirate8', 'cowboy8'] }));
+for (const g of GOALS.slice(0, 3)) beat(g);
+if (G.goalProgress().done !== 0)
+  fail('unknown goals counted: ' + G.goalProgress().done);
+else ok('unknown goal locations never reach the done count');
+
+// Loud, not silent: the run is stranded and the player has to be told why,
+// once per name rather than once per poll.
+const warns = () => G.logs.filter(l => /not a level this client knows/.test(l)).length;
+if (warns() !== 3) fail('warned the wrong number of times: ' + warns());
+else ok('each unknown goal location warns exactly once');
+
+G.goalProgress(); G.goalProgress();
+if (warns() !== 3) fail('re-warned on a later poll');
+else ok('the warning does not repeat every poll');
+
+// Known goals still count normally alongside an unknown one, so one bad name
+// costs exactly one world rather than the whole run.
+G.reset(keyed({ unknownLocs: ['modern16'], worldsReq: 3 }));
+for (const g of ['egypt8', 'pirate8', 'cowboy8']) beat(g);
+if (!G.goalMet()) fail('known goals stopped counting because of an unknown one');
+else ok('an unknown goal does not poison the goals the client does know');
+
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nGOAL OK');
 process.exit(failed ? 1 : 0);

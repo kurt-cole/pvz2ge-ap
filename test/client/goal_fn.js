@@ -27,7 +27,11 @@ function victoryLoc(){ return st.victoryLoc || 'modern_zomboss_01_egypt'; }
 // progress off the save. Here both are driven by the harness: st.levels is the
 // set of level ids the player has actually beaten, which is the whole point of
 // the distinction goalPlayed() draws.
-const LOC_LEVELS = new Proxy({}, { get: (_, k) => 'lvl:' + String(k) });
+// st.unknownLocs names the locations this "client" has no level for, which is
+// how an old client meeting a new seed is modelled.
+const LOC_LEVELS = new Proxy({}, { get: (_, k) =>
+  ((st.unknownLocs || []).indexOf(String(k)) >= 0 ? undefined
+                                                  : 'lvl:' + String(k)) });
 function isFinished(levelId){ return (st.levels || []).indexOf(levelId) >= 0; }
 
 // The #ap-goal div. Only what updateGoalTracker writes.
@@ -57,9 +61,19 @@ function canAccessModernDay(){
   return completed >= worldsReq;
 }
 
+const unknownGoalLocs = {};
 function goalPlayed(loc){
   const levelId = LOC_LEVELS[loc];
-  return levelId ? isFinished(levelId) : isChecked(loc);
+  if(!levelId){
+    if(!unknownGoalLocs[loc]){
+      unknownGoalLocs[loc] = 1;
+      log('Goal location "' + loc + '" is not a level this client knows; ' +
+          'it can never count. Rebuild the client against the apworld ' +
+          'this seed was rolled with.');
+    }
+    return false;
+  }
+  return isFinished(levelId);
 }
 
 function goalProgress(){
@@ -120,6 +134,9 @@ function reset(state, opts){
   // has to be dropped with the state it was built from.
   _checkedSet = null; _checkedSrc = null; _checkedLen = -1;
   sent.length = 0; logs.length = 0;
+  // The warn-once ledger is module scope in the real client too, so it has to
+  // be emptied with everything else or case two sees case one's warning.
+  for(const k of Object.keys(unknownGoalLocs)) delete unknownGoalLocs[k];
   goalEl = { innerHTML: '', className: '', style: { display: '' } };
 }
 
