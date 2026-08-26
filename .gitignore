@@ -1,4 +1,6 @@
 .claude/
+.vscode
+.vexp
 build/
 
 # Python bytecode
