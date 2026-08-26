@@ -2449,8 +2449,12 @@ window.electron = electron;
   // feature_lod and feature_worldkeys are deliberately absent: neither is ever
   // set to true anywhere in index.js, so there is no condition to mirror and
   // inventing one would grant something the game never grants.
+  //
+  // feature_almanac is also absent, but for the opposite reason: the almanac
+  // is reference material, not something earned by play, so syncFeatureFlags
+  // forces it on unconditionally instead of gating it on egypt2 like the game
+  // does.
   const FEATURE_UNLOCK_LEVELS = {
-    feature_almanac:   [['egypt2', 3]],
     feature_coins:     [['tutorial4', 3], ['egypt1', 1]],
     feature_plantfood: [['egypt1', 3]],
     feature_worldmap:  [['egypt1', 3]],
@@ -2500,6 +2504,10 @@ window.electron = electron;
     // set, every other flag is undefined and therefore still falsy, exactly as
     // the game's own all-false constructor leaves them.
     const feats = cp.features || (cp.features = {});
+    if (!feats.feature_almanac) {
+      feats.feature_almanac = true;
+      opened.push('feature_almanac');
+    }
     for (const flag of Object.keys(FEATURE_UNLOCK_LEVELS)) {
       if (feats[flag]) continue;
       const met = FEATURE_UNLOCK_LEVELS[flag].some(function(cond) {
