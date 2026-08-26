@@ -372,76 +372,33 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
             for location in region.locations:
                 forbid_items_for_player(location, {GEM_GRANT}, player)
 
-    # The win condition — complete worlds_required worlds, in whichever sense
-    # goal_type picks (that world's Zomboss, its final level, or its World Key
-    # level). Modern Day is one of them now; it used to be the goal world, and
-    # this same count used to be what unlocked it.
-    goal_locs = goal_locations_for(world.options.goal_type.value,
-                                   world.enabled_regions)
+    # The win condition — hold worlds_required goal McGuffins.
+    #
+    # Each goal level carries one (create_items locks it there), so holding N
+    # of them means N worlds were completed in whatever sense goal_type picks:
+    # that world's World Key level, its Zomboss, or its final level.
+    #
+    # It used to be a rule counting REACHABLE goal locations. An item does the
+    # same job with none of the machinery: fill already knows how to reason
+    # about "has N of this item", the multiworld can hint and track it, and the
+    # player can see the count in game instead of inferring it. It also stopped
+    # needing the local-item rule that used to sit on every goal location --
+    # the location is not fillable at all now.
+    goal_locs = world.goal_locations()
+    goal_item = world.goal_item_name()
 
-    # EVERY GOAL LEVEL HOLDS ONE OF THIS SLOT'S OWN ITEMS.
-    #
-    # The client already refuses to count a goal world until its level has been
-    # BEATEN rather than merely checked, which is the real guard. This is the
-    # generation-side half, and it exists because the two failure modes are
-    # different: the client protects the run, this protects the seed.
-    #
-    # A goal location holding another player's item is a location this slot has
-    # every incentive to hand over without playing -- release it, and someone
-    # else gets their item while the level is never touched. Holding a LOCAL
-    # item means the only person who benefits from that level is the player who
-    # has to beat it.
-    #
-    # It does NOT make release impossible, and is not meant to: releasing is how
-    # you end a run you are giving up on, and the client's played-not-checked
-    # rule is what keeps an ordinary run honest. What this removes is the
-    # incentive to skip a goal level in a multiworld, and the case where someone
-    # ELSE's progression sits behind a level you have no reason to play.
-    #
-    # Solo seeds are entirely local already, so this constrains nothing there.
-    for _goal_name in goal_locs:
-        try:
-            _goal_loc = multiworld.get_location(_goal_name, player)
-        except KeyError:
-            continue  # a world this seed left out; goal_locations_for filters
-        add_item_rule(_goal_loc, lambda item, p=player: item.player == p)
     # Clamp: the goal list shrinks with the seed. The zomboss goal has only 11
     # eligible locations to begin with (Kongfu Temple has no Zomboss level),
     # and world_count / enabled_worlds cut it down further, so the option's
-    # nominal 1-12 range can ask for more goals than exist -- which would make
-    # the seed unwinnable.
+    # nominal 1-12 range can ask for more McGuffins than the seed contains --
+    # which would make it unwinnable.
     req = min(world.options.worlds_required.value, len(goal_locs))
-
-    # Resolve the goal Locations once, here, rather than by name inside the
-    # rule. This rule is re-evaluated constantly during fill and sweeping, and
-    # state.can_reach(name, "Location", player) pays a type dispatch plus a
-    # name lookup on every goal on every call before it reaches the actual
-    # reachability test. Location.can_reach() is what that resolves to anyway.
-    goal_locations = [multiworld.get_location(name, player) for name in goal_locs]
-
-    def goal_rule(state, n=req, locs=goal_locations):
-        # Counts reachable goals, but stops as soon as the answer is settled:
-        # once n are reachable the rest cannot change it, and once too few are
-        # left to ever total n the answer is already no. The old version always
-        # walked all 11.
-        completed = 0
-        left = len(locs)
-        for loc in locs:
-            if completed >= n:
-                return True
-            if completed + left < n:
-                return False
-            if loc.can_reach(state):
-                completed += 1
-            left -= 1
-        return completed >= n
 
     # On the Victory event rather than on an entrance, so no region has to be
     # invented to hold the win. A location rule needs no
-    # register_indirect_condition: the advancement sweep re-runs until it
-    # stops collecting, so a rule that depends on other regions is picked up
-    # on a later pass. An ENTRANCE rule is what needs the hint, which is why
-    # the Modern Day version of this had a register_indirect_condition loop.
-    set_rule(multiworld.get_location("Victory", player), goal_rule)
+    # register_indirect_condition: this one reads only items, so the ordinary
+    # advancement sweep settles it.
+    set_rule(multiworld.get_location("Victory", player),
+             lambda state, n=req, it=goal_item: state.has(it, player, n))
 
     multiworld.completion_condition[player] = lambda state: state.has("Victory", player)

@@ -2255,7 +2255,7 @@ window.electron = electron;
   // undefined reads as on, which is the behaviour that shipped.
   let cfg   = { server:'localhost:38281', slot:'', password:'', deathLink:true };
   let st    = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
-                upgradeCounts:{}, worldUnlocks:{}, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey:'' };
+                upgradeCounts:{}, worldUnlocks:{}, goalItems:0, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey:'' };
   let sessionActive = false; // set true only after explicit Connect + server ack
   // Whether this session has told the server the goal is met. Session state,
   // not persisted: it is reset on every disconnect so a reconnect re-sends,
@@ -3011,7 +3011,7 @@ window.electron = electron;
           // so it has to be cleared here explicitly -- carrying it into a new
           // seed would grant upgrades that seed never sent.
           st = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
-                 upgradeCounts:{}, worldUnlocks:{}, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey };
+                 upgradeCounts:{}, worldUnlocks:{}, goalItems:0, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey };
           window._AP_grantedPlantIds = new Set();
           window._AP_grantedUpgrades = new Set();
           // st was replaced wholesale, so the in-memory shop label maps are
@@ -3039,6 +3039,14 @@ window.electron = electron;
           // rolled before this was sent reads as the default rather than as
           // blank, which is what the goal tables themselves default to.
           st.goalType  = pkt.slot_data.goal_type || 'world_key';
+          // The goal McGuffin: one sits on each goal level, and holding
+          // worlds_required of them is the win. ABSENT on a seed rolled before
+          // 2026-08-25, and absent is meaningful -- that seed has no McGuffin
+          // to count, so the client falls back to counting goal LOCATIONS,
+          // which is what those seeds were played with.
+          st.goalItem   = pkt.slot_data.goal_item || '';
+          st.goalItemPlural = pkt.slot_data.goal_item_plural ||
+                              (st.goalItem ? st.goalItem + 's' : '');
           st.shopsanity = !!pkt.slot_data.shopsanity;
           st.victoryLoc = pkt.slot_data.modern_day_victory || 'modern_zomboss_01_egypt';
           skipTutorial = !!pkt.slot_data.skip_tutorial;
@@ -3272,6 +3280,7 @@ window.electron = electron;
     // Progressive world unlocks. Counted the way the upgrades are, and safe
     // against the post-connect replay for the same reason: applyItem() is only
     // reached for items at or past st.lastIdx.
+    if(receiveGoalItem(name)) return;
     const unlockedWorld = unlockWorldOf[name];
     if(unlockedWorld){
       if(!st.worldUnlocks) st.worldUnlocks = {};
@@ -3989,11 +3998,43 @@ window.electron = electron;
     return levelId ? isFinished(levelId) : isChecked(loc);
   }
 
+  // Counts an arriving goal McGuffin. True when the name was one, so applyItem
+  // can stop there.
+  //
+  // Counted rather than deduplicated for the same reason the world unlocks are:
+  // st.receivedItems is a name list and cannot tell one copy from three. Safe
+  // against the post-connect item replay because applyItem() is only reached
+  // for items at or past st.lastIdx, so a replayed McGuffin is never recounted.
+  //
+  // Its own function so the suite can reach it: the alternative is another arm
+  // buried in applyItem(), which no test can call a piece of.
+  function receiveGoalItem(name){
+    if(!st.goalItem || name !== st.goalItem) return false;
+    st.goalItems = (st.goalItems || 0) + 1;
+    svSt();
+    const need = st.worldsReq || 0;
+    toast('🏅 ' + name + ' ' + st.goalItems + (need ? '/' + need : ''), '#fc4');
+    // The copy that completes the run reports it HERE rather than on the next
+    // poll: this is the moment the goal is met, and a poll is two seconds away.
+    maybeSendGoal();
+    updateGoalTracker();
+    return true;
+  }
+
   // {done, need} for the overlay tracker as well as the win check, so the
   // number a player reads and the number that ends the run are the same one.
+  //
+  // done is the number of McGuffins HELD on a seed that ships them. On an older
+  // seed it is the number of goal levels beaten, which is what that seed's win
+  // was defined as -- the two models never mix, because a seed either sends
+  // goal_item or it does not.
   function goalProgress(){
     const goalLocs  = st.goalLocs || [];
     const worldsReq = st.worldsReq || 0;
+    if(st.goalItem){
+      const held = st.goalItems || 0;
+      return { done: held, need: worldsReq, total: goalLocs.length };
+    }
     let done = 0;
     for(const l of goalLocs) if(goalPlayed(l)) done++;
     return { done: done, need: worldsReq, total: goalLocs.length };
@@ -4186,7 +4227,7 @@ window.electron = electron;
     };
     document.getElementById('ap-reset').onclick=()=>{
       if(!confirm('Reset all AP progress for this slot? This clears checked locations, received items, and run state.')) return;
-      st={checked:[],lastIdx:0,receivedKeys:[],receivedItems:[],upgradeCounts:{},worldUnlocks:{},costumes:{},wornCostume:{},pendingCostumes:0,runKey:''};
+      st={checked:[],lastIdx:0,receivedKeys:[],receivedItems:[],upgradeCounts:{},worldUnlocks:{},goalItems:0,costumes:{},wornCostume:{},pendingCostumes:0,runKey:''};
       // The victory location is no longer checked, so clearing goalSent lets
       // re-earning it send the goal again.
       goalSent=false;
@@ -4234,7 +4275,10 @@ window.electron = electron;
     if(!goalEl) return;
     const g = goalProgress();
     if(!g.total || !g.need){ goalEl.style.display='none'; return; }
-    const label = GOAL_LABEL[st.goalType] || GOAL_LABEL.world_key;
+    // The McGuffin's own plural once a seed ships one -- "2/3 Time Keys" says
+    // what the player is holding, which the goal-type label never did.
+    const label = st.goalItemPlural ||
+                  GOAL_LABEL[st.goalType] || GOAL_LABEL.world_key;
     goalEl.style.display='block';
     goalEl.className = g.done >= g.need ? 'ap-goal-done' : '';
     goalEl.innerHTML = '<b>' + g.done + '/' + g.need + '</b> ' + label +

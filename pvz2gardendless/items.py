@@ -531,10 +531,62 @@ GEM_GRANT_ITEMS: List[PvZ2ItemData] = [
     PvZ2ItemData(GEM_GRANT, ItemClassification.progression, _gem_grant_base),
 ]
 
+# Goal McGuffins. The goal used to be "have worlds_required goal LOCATIONS
+# checked", read straight off the location list. Now each goal level holds one
+# of these instead, and the win is holding worlds_required of them.
+#
+# Why the indirection is worth it: an item is a thing the multiworld already
+# knows how to route, hint, count and show on a tracker, and it makes the goal
+# legible in game -- "2/3 Time Keys" is a number the player is HOLDING rather
+# than one derived from a location list they cannot see. It also means the goal
+# survives the level being played out of order, which is the whole point of
+# receiving a location check in this randomizer.
+#
+# One name per goal type, and a seed only ever ships the one its goal_type
+# names: clearing a World Key level yields a Time Key, a Zomboss yields a
+# Trophy, a world's final level yields a Gold Medal. Kurt named all three.
+#
+# Indexed by the GoalType option VALUE, and the list order fixes the item ids,
+# so neither may be reordered -- see the alias note on GoalType, whose numbers
+# already moved once.
+GOAL_ITEM_NAMES: List[str] = ["Time Key", "Trophy", "Gold Medal"]
+
+# Plurals for the client's tracker. "Trophys" is why this is a table and not
+# name + "s".
+GOAL_ITEM_PLURALS: Dict[str, str] = {
+    "Time Key":   "Time Keys",
+    "Trophy":     "Trophies",
+    "Gold Medal": "Gold Medals",
+}
+
+
+def goal_item_name(goal_type: int) -> str:
+    """The McGuffin a seed with this goal type ships.
+
+    Out-of-range falls back to the default goal type rather than raising: a
+    yaml carrying a goal_type this build does not know should still generate.
+    """
+    if 0 <= goal_type < len(GOAL_ITEM_NAMES):
+        return GOAL_ITEM_NAMES[goal_type]
+    return GOAL_ITEM_NAMES[0]
+
+
+# Progression: they are the only thing the Victory rule reads.
+#
+# APPENDED AFTER every other group, GEM_GRANT_ITEMS included: item IDs are
+# positional, so a new group anywhere else renumbers everything after it and
+# breaks seeds already generated.
+_goal_item_base = _gem_grant_base + len(GEM_GRANT_ITEMS)
+GOAL_ITEMS: List[PvZ2ItemData] = [
+    PvZ2ItemData(name, ItemClassification.progression, _goal_item_base + i)
+    for i, name in enumerate(GOAL_ITEM_NAMES)
+]
+
 ALL_ITEMS: List[PvZ2ItemData] = (PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS
                                  + TRAP_ITEMS + UPGRADE_ITEMS + COSTUME_ITEMS
                                  + COSTUME_TRAP_ITEMS + CURRENCY_TRAP_ITEMS
-                                 + PROGRESSIVE_WORLD_ITEMS + GEM_GRANT_ITEMS)
+                                 + PROGRESSIVE_WORLD_ITEMS + GEM_GRANT_ITEMS
+                                 + GOAL_ITEMS)
 ITEM_NAME_TO_ITEM: Dict[str, PvZ2ItemData] = {item.name: item for item in ALL_ITEMS}
 ITEM_NAME_TO_ID: Dict[str, int]        = {item.name: item.code for item in ALL_ITEMS}
 
@@ -583,6 +635,11 @@ ITEM_NAME_GROUPS: Dict[str, set] = {
     "Gems":       {i.name for i in FILLER_ITEMS if i.name.endswith("Gems")}
                   | {i.name for i in GEM_GRANT_ITEMS},
     "Filler":     {i.name for i in FILLER_ITEMS} | {i.name for i in COSTUME_ITEMS},
+    # All three McGuffins under one group name, so "!hint Goal" answers
+    # whichever one this seed actually ships without the player having to know
+    # which goal type they rolled. The two the seed does not contain simply
+    # match nothing.
+    "Goal":       {i.name for i in GOAL_ITEMS},
 }
 ITEM_NAME_GROUPS["Currency"] = ITEM_NAME_GROUPS["Coins"] | ITEM_NAME_GROUPS["Gems"]
 

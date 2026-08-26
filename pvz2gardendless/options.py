@@ -123,6 +123,10 @@ class WorldsRequired(Range):
     How many worlds must be completed, in the sense the Goal Type picks,
     before the run is won.
 
+    Each world's goal level carries one goal item -- a Time Key, a Trophy or a
+    Gold Medal, depending on the Goal Type -- and the win is holding this many
+    of them.
+
     Every world in the seed counts, Modern Day included, so the ceiling is 12
     -- or 11 for the zomboss goal, since Kongfu Temple has no Zomboss level.
 

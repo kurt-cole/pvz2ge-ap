@@ -134,10 +134,20 @@ different lawns.
 
 ## What is the goal?
 
-Complete **Worlds Required** worlds. Which worlds is up to you — any of them count, Modern Day
-included — and the run ends the moment the last one is done.
+Collect **Worlds Required** goal items. Which worlds they come from is up to you — any of them
+count, Modern Day included — and the run ends the moment the last one lands.
 
-**Goal Type** decides what completing a world means:
+Every world's goal level carries one, and it is the only thing on that level:
+
+- **Time Key** under the World Key goal
+- **Trophy** under the Zomboss goal
+- **Gold Medal** under the Completion goal
+
+They show up in the AP panel as `2/3 Time Keys`, and `!hint Goal` finds whichever one your seed
+ships. Because the win counts items rather than levels, a goal level someone else checks for you
+still counts — you just have to end up holding the item.
+
+**Goal Type** decides which level carries it:
 
 - **World Key** — clear that world's World Key level (`egypt8`, `dark10`, `modern16`). The shortest,
   and the default. It is not the same stage in every world; hint the `World Key Levels` group to see
@@ -152,7 +162,10 @@ there, so a three-world seed asking for eleven needs three.
 
 Aerial Fortress is playable but never counts: it has neither a World Key level nor a Zomboss.
 
-*Changed in this version.* The run used to end on one specific Modern Day level, with everything above
+*Changed in this version.* The goal items are new: the win used to be measured off the goal
+locations directly, with nothing on them to collect.
+
+*Changed in an earlier version.* The run used to end on one specific Modern Day level, with everything above
 deciding how much of the game you needed before Modern Day opened at all. A seed generated before the
 change still plays the old way — the client handles both.
 

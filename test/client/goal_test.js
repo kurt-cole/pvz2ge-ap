@@ -295,5 +295,66 @@ G.updateGoalTracker();
 if (G.goalEl().style.display !== 'none') fail('tracker shown before slot_data');
 else ok('the tracker stays hidden until slot_data lands');
 
+// -- the goal is an item now -------------------------------------------------
+// Each goal level carries a McGuffin -- a Time Key under the world_key goal, a
+// Trophy under zomboss, a Gold Medal under completion -- and holding
+// worlds_required of them is the win. Which means the level can be checked in
+// any order, or received from elsewhere, and the goal still adds up: that is
+// the point, and it is what the level-played rule used to get in the way of.
+const mcguffin = extra => keyed(Object.assign(
+  { goalItem: 'Time Key', goalItemPlural: 'Time Keys', goalItems: 0,
+    worldsReq: 3 }, extra));
+
+G.reset(mcguffin());
+if (G.goalMet()) fail('the goal was met holding no McGuffins');
+G.receiveGoalItem('Time Key');
+G.receiveGoalItem('Time Key');
+if (G.goalProgress().done !== 2) fail('McGuffins were not counted: ' + G.goalProgress().done);
+else if (G.goalMet()) fail('2 of 3 McGuffins met the goal');
+else ok('McGuffins are counted as they arrive, and 2 of 3 is not the win');
+
+if (!G.receiveGoalItem('Time Key')) fail('the third McGuffin was not recognised');
+else if (!G.goalMet()) fail('3 of 3 McGuffins did not meet the goal');
+else if (!G.sentGoal()) fail('the goal was not reported when the last one landed');
+else ok('the third McGuffin wins the run, and reports it without waiting for a poll');
+
+G.reset(mcguffin({ worldsReq: 1 }));
+if (G.receiveGoalItem('Trophy')) fail('a McGuffin from another goal type was counted');
+else if (G.goalProgress().done !== 0) fail('a foreign McGuffin moved the count');
+else ok('only the McGuffin this seed ships counts');
+
+// Levels played are now irrelevant to the goal -- playing every goal level
+// without receiving the items is not the win, and receiving the items without
+// playing anything IS. Out-of-order play is the feature.
+G.reset(mcguffin({ worldsReq: 2 }));
+for (const g of GOALS) beat(g);
+if (G.goalMet()) fail('beating the levels won a run whose McGuffins never arrived');
+else ok('beating goal levels does not win on its own; the McGuffins do');
+
+G.reset(mcguffin({ worldsReq: 2 }));
+G.receiveGoalItem('Time Key'); G.receiveGoalItem('Time Key');
+if (!G.goalMet()) fail('the McGuffins did not win without the levels being played');
+else ok('receiving the McGuffins wins, whoever checked the level');
+
+// The tracker names what the player is holding.
+G.reset(mcguffin({ worldsReq: 3 }));
+G.receiveGoalItem('Time Key');
+G.updateGoalTracker();
+if (!/<b>1\/3<\/b> Time Keys/.test(G.goalEl().innerHTML))
+  fail('tracker does not read "1/3 Time Keys": ' + G.goalEl().innerHTML);
+else ok('the tracker counts the McGuffins by name');
+
+// An older seed sends no goal_item, and must keep the model it was played
+// with: goal levels beaten.
+G.reset(keyed({ worldsReq: 2 }));
+if (G.goalProgress().done !== 0) fail('a seed with no McGuffin started part-done');
+for (const g of GOALS.slice(0, 2)) beat(g);
+if (!G.goalMet()) fail('a seed with no goal_item stopped counting levels beaten');
+else ok('a seed rolled before the McGuffins still counts goal levels');
+
+G.reset(keyed({ worldsReq: 2 }));
+if (G.receiveGoalItem('Time Key')) fail('a McGuffin counted on a seed that ships none');
+else ok('a seed with no goal_item ignores a McGuffin it could not have');
+
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nGOAL OK');
 process.exit(failed ? 1 : 0);

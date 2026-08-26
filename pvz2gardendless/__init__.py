@@ -26,7 +26,8 @@ from .constants import (
 from .options import PvZ2Options, OPTION_GROUPS
 from .items import (
     FILLER_POOL, ITEM_NAME_GROUPS, ITEM_NAME_TO_ID, ITEM_NAME_TO_ITEM,
-    PLANT_ITEMS, PLANT_NAMES, UPGRADE_ITEM_TO_CNS, PvZ2Item, create_item_pool,
+    GOAL_ITEM_PLURALS, PLANT_ITEMS, PLANT_NAMES, UPGRADE_ITEM_TO_CNS,
+    PvZ2Item, create_item_pool, goal_item_name,
     slot_progression_plants,
 )
 from .locations import (
@@ -463,8 +464,30 @@ class PvZ2GardendlessWorld(World):
                                         self.options.goal_type.value,
                                         bool(self.options.include_levels_past_goal))
 
+    def goal_locations(self) -> List[str]:
+        """This slot's goal levels, one per world it built.
+
+        Every caller has to agree: the McGuffins are placed here, the clamp on
+        worlds_required counts these, and the pool is sized around them.
+        """
+        return goal_locations_for(self.options.goal_type.value,
+                                  self.enabled_regions)
+
+    def goal_item_name(self) -> str:
+        """The McGuffin this seed's goal type ships."""
+        return goal_item_name(self.options.goal_type.value)
+
     def create_items(self) -> None:
-        pool = create_item_pool(self, len(self.active_locations()))
+        # One McGuffin locked onto each goal level, placed before the pool is
+        # built because those locations are no longer fillable -- the pool has
+        # to be that much smaller or fill has more items than places to put
+        # them.
+        goal_locs = self.goal_locations()
+        goal_item = self.goal_item_name()
+        for loc_name in goal_locs:
+            self.multiworld.get_location(loc_name, self.player)                 .place_locked_item(self.create_item(goal_item))
+        pool = create_item_pool(
+            self, len(self.active_locations()) - len(goal_locs))
         self.multiworld.itempool += pool
 
     def create_regions(self) -> None:
@@ -543,8 +566,7 @@ class PvZ2GardendlessWorld(World):
         return gates
 
     def fill_slot_data(self) -> Dict[str, Any]:
-        goal_locs = goal_locations_for(self.options.goal_type.value,
-                                       self.enabled_regions)
+        goal_locs = self.goal_locations()
         # Must match the clamp in rules.py's goal_rule, or the client holds
         # the run to a stricter (unreachable) threshold than the
         # generation-time rule actually requires.
@@ -557,6 +579,12 @@ class PvZ2GardendlessWorld(World):
             # One per world in this seed. Checking worlds_required of them is
             # the win, and the client sends the StatusUpdate off this list.
             "goal_locations":  goal_locs,
+            # The McGuffin sitting on each of those levels, and what the win
+            # actually counts. A client too old to know the field falls back to
+            # counting goal LOCATIONS, which is what those seeds did.
+            "goal_item":       self.goal_item_name(),
+            "goal_item_plural": GOAL_ITEM_PLURALS.get(self.goal_item_name(),
+                                                      self.goal_item_name()),
             "victory_locations": VICTORY_LOC_NAMES,
             # Modern Day is gated on its key again, and the run no longer ends
             # on one Modern Day level. A client built before 2026-08-23 does

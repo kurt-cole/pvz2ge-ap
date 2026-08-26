@@ -7,6 +7,9 @@ let conn = true, sessionActive = true, goalSent = false;
 const sent = [], logs = [];
 function send(pkts){ for(const p of pkts) sent.push(p); }
 function log(m){ logs.push(String(m)); }
+// Persisting st, and the on-screen popup. Only that they are callable matters.
+function svSt(){}
+function toast(m){ logs.push(String(m)); }
 
 // ── copied verbatim from build_pvzge_ap.py ───────────────────────────────────
 let _checkedSet = null, _checkedSrc = null, _checkedLen = -1;
@@ -62,9 +65,36 @@ function goalPlayed(loc){
   return levelId ? isFinished(levelId) : isChecked(loc);
 }
 
+// Counts an arriving goal McGuffin. True when the name was one, so applyItem
+// can stop there.
+//
+// Counted rather than deduplicated for the same reason the world unlocks are:
+// st.receivedItems is a name list and cannot tell one copy from three. Safe
+// against the post-connect item replay because applyItem() is only reached
+// for items at or past st.lastIdx, so a replayed McGuffin is never recounted.
+//
+// Its own function so the suite can reach it: the alternative is another arm
+// buried in applyItem(), which no test can call a piece of.
+function receiveGoalItem(name){
+  if(!st.goalItem || name !== st.goalItem) return false;
+  st.goalItems = (st.goalItems || 0) + 1;
+  svSt();
+  const need = st.worldsReq || 0;
+  toast('🏅 ' + name + ' ' + st.goalItems + (need ? '/' + need : ''), '#fc4');
+  // The copy that completes the run reports it HERE rather than on the next
+  // poll: this is the moment the goal is met, and a poll is two seconds away.
+  maybeSendGoal();
+  updateGoalTracker();
+  return true;
+}
+
 function goalProgress(){
   const goalLocs  = st.goalLocs || [];
   const worldsReq = st.worldsReq || 0;
+  if(st.goalItem){
+    const held = st.goalItems || 0;
+    return { done: held, need: worldsReq, total: goalLocs.length };
+  }
   let done = 0;
   for(const l of goalLocs) if(goalPlayed(l)) done++;
   return { done: done, need: worldsReq, total: goalLocs.length };
@@ -89,7 +119,10 @@ function updateGoalTracker(){
   if(!goalEl) return;
   const g = goalProgress();
   if(!g.total || !g.need){ goalEl.style.display='none'; return; }
-  const label = GOAL_LABEL[st.goalType] || GOAL_LABEL.world_key;
+  // The McGuffin's own plural once a seed ships one -- "2/3 Time Keys" says
+  // what the player is holding, which the goal-type label never did.
+  const label = st.goalItemPlural ||
+                GOAL_LABEL[st.goalType] || GOAL_LABEL.world_key;
   goalEl.style.display='block';
   goalEl.className = g.done >= g.need ? 'ap-goal-done' : '';
   goalEl.innerHTML = '<b>' + g.done + '/' + g.need + '</b> ' + label +
@@ -131,6 +164,7 @@ function check(loc){ st.checked.push(loc); }
 function play(loc){ (st.levels = st.levels || []).push(LOC_LEVELS[loc]); }
 
 module.exports = { canAccessModernDay, goalMet, goalProgress, goalPlayed,
+                   receiveGoalItem,
                    updateGoalTracker, goalEl: () => goalEl,
                    maybeSendGoal, victoryLoc,
                    isChecked, reset, check, play, sent, logs,

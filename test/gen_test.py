@@ -94,7 +94,19 @@ def run(label, **kw):
           f"keys={len(keys)}  unlocks={len(unlocks)}")
     print(f"  goal_type={sd['goal_type']} worlds_required={sd['worlds_required']}"
           f" goal_locations={len(sd['goal_locations'])}")
-    assert len(locs) == len(mw.itempool), "pool must exactly fill locations"
+    # Every goal level carries a locked McGuffin, so those locations are not
+    # fillable and the pool must be exactly that much shorter. A pool sized to
+    # the raw location count would hand fill more items than places.
+    goal_locs = sd["goal_locations"]
+    assert len(locs) - len(goal_locs) == len(mw.itempool),         (f"pool must exactly fill the fillable locations: {len(locs)} locations "
+         f"- {len(goal_locs)} goal levels != {len(mw.itempool)} items")
+    # ...and one McGuffin per goal level actually got there, all of them the
+    # single name this goal type ships.
+    placed = [l for r in mw.regions for l in r.locations
+              if l.item and l.item.name == sd["goal_item"]]
+    assert len(placed) == len(goal_locs),         f"{len(placed)} {sd['goal_item']}s placed for {len(goal_locs)} goal levels"
+    assert {l.name for l in placed} == set(goal_locs),         "McGuffins are not on the goal levels"
+    assert sd["worlds_required"] <= len(goal_locs),         "more McGuffins required than the seed contains"
     assert not (built & dead), f"built a disabled region: {built & dead}"
     # every location built lands in a region that exists
     for loc in locs:
@@ -228,6 +240,30 @@ def run(label, **kw):
     # the path to winning any more.
     _vic = mw.get_location("Victory", 1)
     assert _vic.parent_region.name == "Tutorial",         f"Victory is in {_vic.parent_region.name}, not Tutorial"
+    # The win flips exactly at worlds_required McGuffins and not one earlier.
+    # Stated as a ladder over the count rather than as one true/false pair: a
+    # rule that ignored its state entirely -- "always winnable" -- would satisfy
+    # any single positive check, and that is the mutation that matters, since it
+    # would let a seed be finished the moment it started.
+    class _McgState:
+        """Holds n copies of the goal McGuffin and nothing else."""
+        def __init__(self, n, name):
+            self.n, self.name = n, name
+
+        def has(self, name, player, count=1):
+            return name == self.name and self.n >= count
+
+    _req = sd["worlds_required"]
+    for _n in range(0, _req + 2):
+        _want = _n >= _req
+        _got = bool(_vic.access_rule(_McgState(_n, sd["goal_item"])))
+        assert _got == _want, (
+            f"Victory {'open' if _got else 'shut'} holding {_n}/{_req} "
+            f"{sd['goal_item']}s")
+    # ...and it is THIS seed's McGuffin that opens it, not any goal item.
+    _other = next(n for n in ("Time Key", "Trophy", "Gold Medal")
+                  if n != sd["goal_item"])
+    assert not _vic.access_rule(_McgState(_req + 5, _other)),         f"another goal type's McGuffin opens a {sd['goal_item']} seed"
     from pvz2gardendless.items import UPGRADE_ITEMS
     from pvz2gardendless.constants import UPGRADE_GROUPS, UPGRADE_ITEM_COUNT
     upnames = {u.name for u in UPGRADE_ITEMS}
@@ -238,7 +274,10 @@ def run(label, **kw):
     # world_key goal is 12 locations against 14 upgrades.
     want = UPGRADE_ITEM_COUNT if w.options.shuffle_upgrades else 0
     if want and len(ups) < want:
-        assert len(mw.itempool) == len(w.active_locations()),             "upgrades were trimmed in a seed that was not full"
+        # Full means "the pool filled every FILLABLE location" -- the goal
+        # levels hold locked McGuffins and were never the pool's to fill.
+        assert len(mw.itempool) == (len(w.active_locations())
+                                    - len(w.goal_locations())),             "upgrades were trimmed in a seed that was not full"
         assert len(ups) == len(mw.itempool) - sum(
             1 for i in mw.itempool if i.name not in upnames), None
     else:
@@ -400,7 +439,7 @@ assert _SLOT_DATA_BEFORE_ZOMBIES <= set(_z_on), \
     f"slot_data lost keys: {sorted(_SLOT_DATA_BEFORE_ZOMBIES - set(_z_on))}"
 assert set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES == \
     {"shuffle_zombies", "zombie_tiers", "zombie_seed", "modern_day_keyed",
-     "world_gates"}, \
+     "world_gates", "goal_item", "goal_item_plural"}, \
     f"unexpected new slot_data keys: {sorted(set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES)}"
 
 # modern_day_keyed is additive for the same reason, and modern_day_victory
@@ -408,6 +447,10 @@ assert set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES == \
 # 2026-08-23 gates Modern Day on the goal count and ends the run on that one
 # level, so removing either key would strand every build already out there.
 assert _z_on["modern_day_keyed"] is True
+# The McGuffin keys are additive too: a client that does not know goal_item
+# falls back to counting goal LOCATIONS, which is what those builds did.
+assert _z_on["goal_item"] in {"Time Key", "Trophy", "Gold Medal"}
+assert _z_on["goal_item_plural"]
 assert _z_on["modern_day_victory"], "old clients still need a victory location"
 
 # Every tier must be non-empty and every zombie in exactly one tier, or the
@@ -509,7 +552,8 @@ from pvz2gardendless.items import (PLANT_ITEMS, KEY_ITEMS, FILLER_ITEMS,
                                    CURRENCY_TRAP_ITEMS, TRAP_POOL,
                                    COIN_TRAP, GEM_TRAP,
                                    PROGRESSIVE_WORLD_ITEMS,
-                                   GEM_GRANT, GEM_GRANT_COUNT, GEM_GRANT_ITEMS)
+                                   GEM_GRANT, GEM_GRANT_COUNT, GEM_GRANT_ITEMS,
+                                   GOAL_ITEMS)
 BLOCKS = [
     ("plants+keys+filler+traps", PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS + TRAP_ITEMS),
     ("upgrades", UPGRADE_ITEMS),
@@ -518,6 +562,7 @@ BLOCKS = [
     ("currency traps", CURRENCY_TRAP_ITEMS),
     ("progressive world unlocks", PROGRESSIVE_WORLD_ITEMS),
     ("guaranteed gem grants", GEM_GRANT_ITEMS),
+    ("goal mcguffins", GOAL_ITEMS),
 ]
 for bi in range(1, len(BLOCKS)):
     name, block = BLOCKS[bi]
@@ -1322,7 +1367,10 @@ for _label, _kw in (("1 world", dict(world_count=1)),
         _ups = {u.name for u in W.items.UPGRADE_ITEMS}
         _n_ups = sum(1 for n in _names if n in _ups)
         if _n_ups != C.UPGRADE_ITEM_COUNT:
-            assert len(_names) == len(_w.active_locations()), (
+            # Fillable locations, not all of them: each goal level already
+            # holds its locked McGuffin.
+            assert len(_names) == (len(_w.active_locations())
+                                   - len(_w.goal_locations())), (
                 f"{_label}: upgrades trimmed in a seed with room to spare")
 
     # A seed with room keeps every progression plant; only a seed short of
@@ -1340,8 +1388,10 @@ for _label, _kw in (("1 world", dict(world_count=1)),
         assert not _useful_left, \
             f"{_label}: dropped {len(_missing)} progression plants while still " \
             f"shipping {_useful_left} useful ones"
-    assert len(_names) == len(_w.active_locations()), \
-        f"{_label}: pool {len(_names)} does not fill {len(_w.active_locations())} locations"
+    # Fillable only: the goal levels hold locked McGuffins.
+    _fillable = len(_w.active_locations()) - len(_w.goal_locations())
+    assert len(_names) == _fillable, \
+        f"{_label}: pool {len(_names)} does not fill {_fillable} fillable locations"
 
 # The default seed must not be trimming anything -- if it is, the pool and the
 # location count have drifted and every "every X is in the pool" claim above is
@@ -1596,8 +1646,9 @@ for _n in (1, 2, 5, 10):
         _pool = [i.name for i in _wS.multiworld.itempool]
         _dupes = sorted(p for p in _pre if p in _pool)
         assert not _dupes, f"start {_n} {_label}: granted plants also in the pool: {_dupes}"
-        assert len(_pool) == len(_wS.active_locations()), \
-            f"start {_n} {_label}: pool {len(_pool)} does not fill {len(_wS.active_locations())}"
+        _fillableS = len(_wS.active_locations()) - len(_wS.goal_locations())
+        assert len(_pool) == _fillableS, \
+            f"start {_n} {_label}: pool {len(_pool)} does not fill {_fillableS}"
 
 # ...and sphere 1 is untouched at every setting, which is the whole reason sun
 # producers are held back. Checked through the region graph, not by counting.
@@ -2004,7 +2055,8 @@ _nw, _ = run("traps: all weights zero", trap_percentage=50, **ALL_WORLDS,
              trap_weight_coins=0, trap_weight_gems=0)
 assert not [i for i in _nw.multiworld.itempool if i.name in set(TRAP_CYCLE)], \
     "traps were generated with every weight at 0"
-assert len(_nw.multiworld.itempool) == len(_nw.active_locations()), \
+assert len(_nw.multiworld.itempool) == (len(_nw.active_locations())
+                                       - len(_nw.goal_locations())), \
     "zeroing every weight left the pool short of its locations"
 
 # ...and that matches trap_percentage=0, which is the other way to say it.
@@ -2224,7 +2276,9 @@ _ew, _esd = run("goal trim: Egypt only, world_key", world_count=1,
 _enames = [l.name for l in _ew.active_locations()]
 assert len(_enames) == 12, f"Egypt-only world_key is {len(_enames)} locations, want 12"
 assert "egypt8" in _enames and "egypt9" not in _enames, sorted(_enames)
-assert len(_ew.multiworld.itempool) == 12, len(_ew.multiworld.itempool)
+# Eleven, not twelve: egypt8 is the goal level and holds the locked Time Key.
+assert len(_ew.multiworld.itempool) == 11, len(_ew.multiworld.itempool)
+assert _ew.multiworld.get_location("egypt8", 1).item.name == "Time Key"
 _eprog = [i.name for i in _ew.multiworld.itempool
           if i.classification == _IC_j.progression]
 # Every progression item is a sun producer, and there is at least one. Not a
@@ -2422,39 +2476,36 @@ print(f"create_item: all {len(W.items.ITEM_NAME_TO_ID)} items resolve on a world
       f"that has not run generate_early")
 
 
-# ── goal levels hold this slot's own items ───────────────────────────────────
+# ── goal levels hold the McGuffin, and nothing else ──────────────────────────
 #
-# The client refuses to count a goal world until its level has been BEATEN, and
-# that is the real guard. This is the generation-side half: a goal location
-# holding ANOTHER player's item is one this slot has every reason to hand over
-# without playing, and it would put someone else's progression behind a level
-# its owner has no incentive to touch.
-class _Foreign:
-    """An item belonging to a different slot."""
-    def __init__(self, name="Foreign Item", player=2):
-        self.name, self.player, self.advancement = name, player, True
-
-
+# Each goal level carries a locked McGuffin, which is what makes the win an
+# item rather than a location-reachability rule. Locked means fill never sees
+# the location at all -- so this replaces the old "goal locations accept only
+# this slot's items" item rule, which existed to stop another player's
+# progression sitting behind a level its owner had no reason to play.
 for _gt3 in (C.GOAL_WORLD_KEY, C.GOAL_ZOMBOSS, C.GOAL_COMPLETION):
-    _lw, _lsd = run(f"goal locals: goal {_gt3}", goal_type=_gt3, **ALL_WORLDS)
+    _lw, _lsd = run(f"goal mcguffins: goal {_gt3}", goal_type=_gt3, **ALL_WORLDS)
     _goals3 = _lsd["goal_locations"]
     assert _goals3, "no goal locations, so this proves nothing"
+    _mcg = _lsd["goal_item"]
     for _gn in _goals3:
         _gl = _lw.multiworld.get_location(_gn, 1)
-        assert not _gl.item_rule(_Foreign()), \
-            f"goal {_gn} accepts another player's item"
-        # ...and it still accepts this slot's own, or fill has nowhere to put
-        # anything and generation dies.
-        _own = next(i for i in _lw.multiworld.itempool if i.player == 1)
-        assert _gl.item_rule(_own), f"goal {_gn} rejects its own slot's items"
+        assert _gl.item is not None and _gl.item.name == _mcg,             f"goal {_gn} holds {_gl.item and _gl.item.name}, not {_mcg}"
+        assert _gl.item.player == 1, f"goal {_gn} holds another slot's McGuffin"
+        assert _gl.locked, f"goal {_gn} is not locked; fill could move the McGuffin"
 
-# A NON-goal location is unaffected: this is a rule about the goals, not a
-# blanket local-items setting, which would be a very different seed.
-_open3 = [l for l in _lw.multiworld.get_regions(1)
-          for l in l.locations if l.name not in set(_goals3)]
-assert any(l.item_rule(_Foreign()) for l in _open3), \
-    "every location refuses foreign items; the rule is not scoped to the goals"
-print(f"goal locals: all {len(_goals3)} goal locations take only this slot's items")
+    # The McGuffin exists ONLY on goal levels. One loose in the pool would let
+    # the goal be met without completing the world it stands for.
+    assert not [i for i in _lw.multiworld.itempool if i.name == _mcg],         f"{_mcg} is in the fillable pool as well as on the goal levels"
+    # And the other two goal types' McGuffins are not in this seed at all.
+    _others = set(W.items.GOAL_ITEM_NAMES) - {_mcg}
+    assert not [i for i in _lw.multiworld.itempool if i.name in _others],         "a seed ships a McGuffin belonging to a goal type it did not roll"
+
+# A NON-goal location is untouched: still fillable, still open to anyone.
+_open3 = [l for r in _lw.multiworld.get_regions(1)
+          for l in r.locations if l.name not in set(_goals3)]
+assert any(l.item is None for l in _open3),     "every location is pre-filled; the McGuffins are not scoped to the goals"
+print(f"goal mcguffins: {len(_goals3)} goal levels each hold a locked {_mcg}")
 
 
 # ── the upgrades take a proportional share ───────────────────────────────────

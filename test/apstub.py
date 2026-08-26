@@ -236,6 +236,9 @@ class CollectionState:
         self.prog_items = {}
         self.item_name_groups = item_name_groups or {}
         self._reachable = set()
+        # Locations whose placed item has already been swept in, so a second
+        # pass over the same location does not collect it twice.
+        self._advanced = set()
 
     def collect(self, name, count=1):
         self.prog_items[name] = self.prog_items.get(name, 0) + count
@@ -283,6 +286,24 @@ class CollectionState:
                     if ok:
                         reach.add(tgt)
                         changed = True
+            # Collect progression items sitting ON reachable locations, the way
+            # AP's sweep_for_advancements does. Without this a locked item is
+            # invisible to logic -- which is exactly what the goal McGuffins
+            # are, so every Victory rule would read as unreachable.
+            for r in list(reach):
+                for l in r.locations:
+                    if l in self._advanced or l.item is None:
+                        continue
+                    if getattr(l.item, "classification", None) !=                             ItemClassification.progression:
+                        continue
+                    try:
+                        if not l.access_rule(self):
+                            continue
+                    except Exception:
+                        continue
+                    self._advanced.add(l)
+                    self.collect(l.item.name)
+                    changed = True
         self._reachable = reach
         return reach
 
