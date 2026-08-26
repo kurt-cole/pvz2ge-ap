@@ -13,11 +13,12 @@ sys.path.insert(0, S)
 sys.path.insert(0, os.path.dirname(S))
 import apstub
 from apstub import MultiWorld, CollectionState, ItemClassification as IC
-import gen_test
+import gen_test  # for _EVERY_WORLD only; Opts itself now lives in opts.py
 import pvz2gardendless as W
 from pvz2gardendless.items import PLANT_ITEMS, ITEM_NAME_GROUPS
 from pvz2gardendless import constants as C
 from pvz2gardendless.options import GoalType
+from opts import Opts
 
 PROG_PLANTS = [p.name for p in PLANT_ITEMS if p.classification == IC.progression]
 
@@ -47,7 +48,7 @@ def build(**kw):
     kw.setdefault("include_levels_past_goal", 1)
     mw = MultiWorld()
     w = W.PvZ2GardendlessWorld(mw, 1)
-    w.options = gen_test.Opts(**kw)
+    w.options = Opts(**kw)
     w.generate_early()
     w.create_regions()
     w.set_rules()

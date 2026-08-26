@@ -19,6 +19,7 @@ PY_SUITES = [
     ("generation", "gen_test.py",    "pool, locations, options, item IDs"),
     ("spheres",    "sphere_test.py", "reachability and sphere depth"),
     ("drift",      "drift_test.py",  "client JS copies match the real client"),
+    ("tracker",    "tracker_test.py", "Universal Tracker rebuilds the same seed"),
 ]
 JS_SUITES = [
     # First: the others require *_fn.js copies, so none of them ever runs the

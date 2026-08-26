@@ -126,7 +126,8 @@ def _launch_installer(*args) -> None:
 # the previous bare `except Exception: pass` meant any breakage here showed up
 # as the installer silently vanishing from the Launcher with no explanation.
 try:
-    from worlds.LauncherComponents import components, Component, Type
+    from worlds.LauncherComponents import (components, Component, Type,
+                                           launch_subprocess)
 except ImportError:  # pragma: no cover - depends on the host AP version
     logging.warning(
         "PvZ2 Gardendless: worlds.LauncherComponents unavailable, so the "
@@ -136,6 +137,23 @@ else:
     components.append(Component("PvZ2 Gardendless Installer", func=_launch_installer,
         component_type=Type.CLIENT,
         description="Build and install the PvZ2 Gardendless Archipelago mod."))
+
+    def _launch_client(*args) -> None:
+        # Imported inside the function, not at module scope: the client pulls
+        # CommonClient and (when installed) Universal Tracker, and none of that
+        # belongs in a headless generation import.
+        from .client import launch
+        launch_subprocess(launch, name="PvZ2GardendlessClient", args=args)
+
+    # The companion text client. The game itself is played in the injected JS
+    # client, which connects on its own; this window is the chat log, the
+    # server commands and -- with Universal Tracker installed -- the Tracker
+    # tab, which is the only place this seed's logic can be viewed.
+    components.append(Component("PvZ2 Gardendless Client", func=_launch_client,
+        component_type=Type.CLIENT,
+        game_name=GAME_NAME,
+        supports_uri=True,
+        description="Text client and Universal Tracker window for PvZ2 Gardendless."))
 
 
 # ── Settings (persisted to host.yaml) ────────────────────────────────────────
@@ -252,7 +270,88 @@ class PvZ2GardendlessWorld(World):
     # empty default means "nothing granted" rather than an AttributeError.
     starting_plants: list = []
 
+    # ── Universal Tracker ─────────────────────────────────────────────────
+
+    @property
+    def tracker_passthrough(self):
+        """The real seed's slot data, when Universal Tracker is re-generating.
+
+        UT does not read the multiworld off the server; it RE-RUNS this world's
+        generation locally and reasons about the result. Several of our answers
+        are ROLLED rather than derived -- which worlds the seed uses when
+        world_count trims the whitelist (or waives it entirely), which plants
+        the run was handed, and this slot's cheap-attacker and Jester draws --
+        so a local re-roll disagrees with the server about which regions even
+        exist: every location in a world the roll dropped is shown out of logic,
+        and worlds the server never built are shown in it.
+
+        UT is also commonly run WITHOUT the player's YAML, in which case its
+        options are the defaults, so the options that decide which locations get
+        built have to come back through here too.
+
+        interpret_slot_data is the other half: it hands UT the seed's real slot
+        data, UT stashes it on multiworld.re_gen_passthrough keyed by game name,
+        and generate_early reads it back here.
+        """
+        return getattr(self.multiworld, "re_gen_passthrough", {}).get(GAME_NAME)
+
+    def interpret_slot_data(self, slot_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Universal Tracker's hook. Returning a value asks UT to generate again.
+
+        Everything UT needs is already in slot data, because the injected client
+        needed most of it too -- and what it did not need (the rolled draws and
+        the location-shaping options) was added for this.
+        """
+        return slot_data
+
+    def _apply_passthrough(self, passthrough: Dict[str, Any]) -> None:
+        """Force this slot's options to the ones the seed was generated with.
+
+        Only ever called under Universal Tracker. Options are overwritten in
+        place so that every downstream reader -- kept_stretches,
+        active_locations, goal_locations, rules.py -- agrees without any of them
+        having to know the tracker exists.
+
+        Every key is optional: a seed generated before it was sent leaves the
+        option at whatever the YAML (or the default) said, which is exactly the
+        behaviour those seeds already had.
+        """
+        def set_value(option_name: str, key: str) -> None:
+            if key in passthrough:
+                getattr(self.options, option_name).value = int(passthrough[key])
+
+        # The worlds the seed actually built. world_count is pinned to match so
+        # _choose_worlds neither tops the list up nor trims it -- the list IS
+        # the answer, and re-rolling it either way is the bug this exists for.
+        worlds = passthrough.get("enabled_worlds")
+        if worlds:
+            self.options.enabled_worlds.value = frozenset(
+                w for w in worlds if w in SELECTABLE_WORLDS)
+            self.options.world_count.value = len(set(worlds)
+                                                 | set(ALWAYS_ENABLED_WORLDS))
+
+        # Sent as the option's key ("world_key"), not its number. A key this
+        # build does not know leaves the local option alone, which is a better
+        # answer than a crash inside the tracker.
+        goal_value = getattr(type(self.options.goal_type),
+                             f"option_{passthrough.get('goal_type')}", None)
+        if goal_value is not None:
+            self.options.goal_type.value = goal_value
+
+        # worlds_required arrives already clamped to the goal count. rules.py
+        # clamps it again against the same number, so this is a fixed point.
+        set_value("worlds_required", "worlds_required")
+        set_value("shopsanity", "shopsanity")
+        set_value("skip_tutorial", "skip_tutorial")
+        set_value("include_side_paths", "include_side_paths")
+        set_value("include_danger_rooms", "include_danger_rooms")
+        set_value("include_levels_past_goal", "include_levels_past_goal")
+
     def generate_early(self) -> None:
+        passthrough = self.tracker_passthrough
+        if passthrough:
+            self._apply_passthrough(passthrough)
+
         self.enabled_worlds  = self._choose_worlds()
         self.enabled_regions = {region for world in self.enabled_worlds
                                 for region in WORLD_REGIONS[world]}
@@ -354,6 +453,22 @@ class PvZ2GardendlessWorld(World):
         # Read by create_item_pool, which drops these from the pool. Sorted so
         # the pool is built in a fixed order regardless of how the draw fell.
         self.starting_plants = sorted([starter] + extras)
+
+        # THE SEED'S OWN ROLLS, under Universal Tracker. All three are drawn
+        # from self.random above, and a tracker's local draw is a different
+        # draw: the granted plants decide what is precollected (and so what is
+        # missing from the pool), and the two logic draws decide which plants
+        # rules.py names and which create_item promotes to progression.
+        # Overwritten here rather than skipped above so the RNG stream is
+        # consumed identically either way.
+        if passthrough:
+            if passthrough.get("granted_plants"):
+                self.starting_plants = sorted(passthrough["granted_plants"])
+            if passthrough.get("logic_attackers"):
+                self.logic_attackers = frozenset(passthrough["logic_attackers"])
+            if passthrough.get("logic_jesters"):
+                self.logic_jesters = frozenset(passthrough["logic_jesters"])
+
         for name in self.starting_plants:
             self.multiworld.push_precollected(self.create_item(name))
 
@@ -653,5 +768,34 @@ class PvZ2GardendlessWorld(World):
             # Informational for now -- worlds left out simply never receive a
             # key, which is what keeps them locked. Sorted so the value is
             # stable for a given seed rather than varying with set order.
+            #
+            # ALSO what Universal Tracker rebuilds this seed's regions from:
+            # with world_count trimming a whitelist (or waiving it), which
+            # worlds a slot got is a ROLL, and a tracker that re-rolls it shows
+            # the wrong worlds in logic. See interpret_slot_data.
             "enabled_worlds":    sorted(self.enabled_worlds),
+            # ── For Universal Tracker ────────────────────────────────────────
+            # The rest of what generation ROLLED, so UT reproduces THIS slot
+            # rather than a fresh one. The injected client ignores all of it,
+            # and a seed predating these keys leaves UT on its own local roll,
+            # which is what it always had.
+            #
+            # The plants the run was handed. Precollected, so they are also the
+            # plants the pool does not contain.
+            "granted_plants":    list(self.starting_plants),
+            # This slot's cheap-attacker and Jester draws. The attacker half of
+            # the Egypt 6 gate was dropped on 2026-08-25 so no rule names those
+            # today, but both draws decide which plants create_item promotes to
+            # progression -- and an item a tracker believes is merely `useful`
+            # is invisible to its logic entirely.
+            "logic_attackers":   sorted(self.logic_attackers),
+            "logic_jesters":     sorted(self.logic_jesters),
+            # The options that decide which locations exist. goal_type,
+            # shopsanity, worlds_required and skip_tutorial are above already;
+            # these three were client-irrelevant and so were never sent. UT is
+            # routinely run WITHOUT the player's YAML, in which case its options
+            # are the defaults and it builds a different location set.
+            "include_side_paths":       bool(self.options.include_side_paths),
+            "include_danger_rooms":     bool(self.options.include_danger_rooms),
+            "include_levels_past_goal": bool(self.options.include_levels_past_goal),
         }
