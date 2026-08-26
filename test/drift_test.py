@@ -73,7 +73,19 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # check() records a check the way fireCheck does. isChecked,
          # victoryLoc, canAccessModernDay, goalMet and maybeSendGoal ARE
          # copies and are checked.
-         "goal_fn.js:reset", "goal_fn.js:check",
+         # goal_fn.js harness: poll() models pollChecks' ORDER -- observe what
+         # the save says was beaten, then rebuild the save from the ledger --
+         # without the socket, traps, costumes and hook installs the real one
+         # also drives. recordPlayed, isPlayed, playedList and
+         # restoreLevelProgress, the functions that order exists to protect,
+         # ARE copies and are checked.
+         "goal_fn.js:reset", "goal_fn.js:check", "goal_fn.js:poll",
+         # goal_fn.js harness: setServerChecked() stands in for the Connected
+         # packet plus the DataPackage id map, and rebuildAPSave() is cut down
+         # to the one step the merge is being judged on. mergeServerChecks
+         # itself IS a copy and is checked -- it is the last place a check
+         # still implies a level was played.
+         "goal_fn.js:setServerChecked", "goal_fn.js:rebuildAPSave",
          # worldgate_fn.js harness: reset() rebuilds module scope between
          # cases, makeKeyListener() stands in for the game class the hook is
          # installed on, and gates() is a slot_data fixture. rebuildLevelGates,

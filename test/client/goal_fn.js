@@ -7,8 +7,98 @@ let conn = true, sessionActive = true, goalSent = false;
 const sent = [], logs = [];
 function send(pkts){ for(const p of pkts) sent.push(p); }
 function log(m){ logs.push(String(m)); }
+// Persisting st. Only that it is called matters here: the ledger has to reach
+// localStorage or a reload would forget what was played.
+let saves = 0;
+function svSt(){ saves++; }
+function toast(){}
+// The merge calls the full save rebuild; only its level-progress step matters
+// here, and that step IS a copy and is checked.
+function rebuildAPSave(){ restoreLevelProgress(cp); }
+// What the Connected packet left behind, and the DataPackage's id -> name map.
+let serverCheckedIds = [], idToLoc = {};
+function setServerChecked(names){
+  idToLoc = {}; serverCheckedIds = [];
+  names.forEach((n, i) => { idToLoc[100 + i] = n; serverCheckedIds.push(100 + i); });
+}
+
+// Every location this harness can name. The client's LOC_LEVELS is generated
+// from constants.py; here a fixed handful is enough, and being a fixed list is
+// what lets reset() model a client that has never heard of one of them.
+const KNOWN_LOCS = ['egypt8', 'pirate8', 'cowboy8', 'dark10', 'modern16',
+                    'egypt6', 'tutorial1'];
 
 // ── copied verbatim from build_pvzge_ap.py ───────────────────────────────────
+let _playedSet = null, _playedSrc = null, _playedLen = -1;
+function playedList(){
+  // Absent means state written by a client from before this ledger existed.
+  // Seed it from st.checked: for a run already in progress those levels were
+  // played, and it keeps the wiped-localStorage recovery in
+  // mergeServerChecks() working exactly as it did. A new run starts [].
+  if(!st.played) st.played = (st.checked || []).slice();
+  return st.played;
+}
+
+function isPlayed(loc){
+  const arr = playedList();
+  if(_playedSrc !== arr || _playedLen !== arr.length){
+    _playedSet = new Set(arr);
+    _playedSrc = arr;
+    _playedLen = arr.length;
+  }
+  return _playedSet.has(loc);
+}
+
+function recordPlayed(loc){
+  if(isPlayed(loc)) return false;
+  playedList().push(loc);
+  svSt();
+  return true;
+}
+
+function restoreLevelProgress(cp){
+  if(!cp.levelProps) cp.levelProps = {};
+  for(const lvl of new Set(Object.values(LOC_LEVELS))) delete cp.levelProps[lvl];
+  for(const locName of playedList()) {
+    const lvl = LOC_LEVELS[locName];
+    if(lvl) cp.levelProps[lvl] = { progress: 3 };
+  }
+  return cp.levelProps;
+}
+
+function mergeServerChecks(){
+  if(!serverCheckedIds.length) return;
+  // Needs the DataPackage; Connected and DataPackage can arrive in either
+  // order, so this is called from both and no-ops until the map exists.
+  if(!idToLoc || !Object.keys(idToLoc).length) return;
+  let added = 0;
+  // A save with NO play history of its own is a run being resumed, not a run
+  // in progress: wiped localStorage, a second machine, an AP state reset. The
+  // server's list is then the only record that those levels were ever played,
+  // so it is taken as one and the map progression comes back as it always
+  // did. Once this save has played anything, server checks stop implying
+  // play -- which is what stops /send_location handing out a goal world.
+  const resuming = playedList().length === 0;
+  // Local Set rather than isChecked(): this loop pushes as it goes, which
+  // would invalidate the shared mirror on every iteration and rebuild it
+  // each time. One Set built up front stays O(n + m).
+  const known = new Set(st.checked);
+  for(const id of serverCheckedIds){
+    const name = idToLoc[id];
+    if(name && !known.has(name)){
+      st.checked.push(name); known.add(name); added++;
+      if(resuming) st.played.push(name);
+    }
+  }
+  serverCheckedIds = [];
+  if(added){
+    svSt();
+    rebuildAPSave();
+    log('Restored ' + added + ' check(s) from server');
+    toast('↺ Restored ' + added + ' check(s)', '#4af');
+  }
+}
+
 let _checkedSet = null, _checkedSrc = null, _checkedLen = -1;
 function isChecked(loc){
   const arr = st.checked || [];
@@ -27,12 +117,22 @@ function victoryLoc(){ return st.victoryLoc || 'modern_zomboss_01_egypt'; }
 // progress off the save. Here both are driven by the harness: st.levels is the
 // set of level ids the player has actually beaten, which is the whole point of
 // the distinction goalPlayed() draws.
-// st.unknownLocs names the locations this "client" has no level for, which is
-// how an old client meeting a new seed is modelled.
-const LOC_LEVELS = new Proxy({}, { get: (_, k) =>
-  ((st.unknownLocs || []).indexOf(String(k)) >= 0 ? undefined
-                                                  : 'lvl:' + String(k)) });
-function isFinished(levelId){ return (st.levels || []).indexOf(levelId) >= 0; }
+// A real object rather than a Proxy: restoreLevelProgress() walks
+// Object.values(LOC_LEVELS) to clear stale entries, and a Proxy with only a get
+// trap answers that with [] -- the model would silently skip the clearing half.
+// Names absent from it are the locations this "client" has no level for, which
+// is how an old client meeting a new seed is modelled (st.unknownLocs).
+let LOC_LEVELS = {};
+
+// The save. cp.levelProps is the game's own record of what has been beaten, and
+// is the only thing isFinished() reads -- exactly as in the live client, which
+// is what makes "a check must not write here" a testable claim.
+let cp = { levelProps: {} };
+
+function isFinished(levelId){
+  const e = cp.levelProps[levelId];
+  return !!(e && (e.progress || 0) >= 3);
+}
 
 // The #ap-goal div. Only what updateGoalTracker writes.
 let goalEl = { innerHTML: '', className: '', style: { display: '' } };
@@ -73,7 +173,11 @@ function goalPlayed(loc){
     }
     return false;
   }
-  return isFinished(levelId);
+  // The ledger is the persistent answer; isFinished() is the live one, for a
+  // level beaten in this session before the poll has recorded it. Neither can
+  // be forged by a check any more, now that rebuildAPSave() restores from
+  // st.played.
+  return isPlayed(loc) || isFinished(levelId);
 }
 
 function goalProgress(){
@@ -126,7 +230,16 @@ function maybeSendGoal(){
 // left on st; omitting modernKeyed models a seed rolled before that flag.
 function reset(state, opts){
   const o = opts || {};
-  st = Object.assign({ checked: [], levels: [] }, state || {});
+  st = Object.assign({ checked: [], played: [] }, state || {});
+  // Every location the harness may name, minus the ones this client is meant
+  // not to know. KNOWN_LOCS is fixed rather than derived from goalLocs so a
+  // non-goal level can still be played.
+  LOC_LEVELS = {};
+  const unknown = new Set(st.unknownLocs || []);
+  for(const n of KNOWN_LOCS) if(!unknown.has(n)) LOC_LEVELS[n] = 'lvl:' + n;
+  cp = { levelProps: {} };
+  serverCheckedIds = []; idToLoc = {};
+  _playedSet = null; _playedSrc = null; _playedLen = -1;
   conn = o.conn !== false;
   sessionActive = o.sessionActive !== false;
   goalSent = false;
@@ -140,14 +253,31 @@ function reset(state, opts){
   goalEl = { innerHTML: '', className: '', style: { display: '' } };
 }
 
-// Records a check the way fireCheck does, so the cache invalidation is
-// exercised rather than bypassed.
+// A check arriving from ANYWHERE -- fireCheck, /send_location, a release, the
+// mergeServerChecks() reconnect merge. It touches st.checked and nothing else,
+// which is the whole claim under test.
 function check(loc){ st.checked.push(loc); }
 
-// Beating a level in game, which is what goalPlayed() actually asks about.
-function play(loc){ (st.levels = st.levels || []).push(LOC_LEVELS[loc]); }
+// Beating the level in game: the GAME writes the save, not the client.
+function play(loc){
+  const lvl = LOC_LEVELS[loc];
+  if(lvl) cp.levelProps[lvl] = { progress: 3 };
+}
+
+// One poll tick, in the client's order: observe what the save says was beaten,
+// THEN rebuild the save from the ledger. The order is load-bearing -- rebuild
+// first and the game's own write is erased before it is ever seen.
+function poll(){
+  for(const loc of Object.keys(LOC_LEVELS)){
+    if(isFinished(LOC_LEVELS[loc])) recordPlayed(loc);
+  }
+  restoreLevelProgress(cp);
+}
 
 module.exports = { canAccessModernDay, goalMet, goalProgress, goalPlayed,
+                   restoreLevelProgress, isPlayed, recordPlayed, poll,
+                   levelProps: () => cp.levelProps, saves: () => saves,
+                   mergeServerChecks, setServerChecked,
                    updateGoalTracker, goalEl: () => goalEl,
                    maybeSendGoal, victoryLoc,
                    isChecked, reset, check, play, sent, logs,
