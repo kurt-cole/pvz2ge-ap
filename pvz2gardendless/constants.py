@@ -98,9 +98,67 @@ def progressive_need(world: str, suffix: str) -> int:
     return table[suffix]
 
 
-def progressive_count(world: str) -> int:
-    """How many copies of this world's unlock the pool ships."""
-    return max(progressive_need(world, s) for s in stretch_suffixes(world))
+# The three goal_type values, repeated here as literals. constants.py cannot
+# import options.py -- options.py imports THIS module for SELECTABLE_WORLDS, so
+# the other direction is a cycle. gen_test asserts these three agree with
+# GoalType, which is the only thing keeping the copy honest.
+GOAL_WORLD_KEY  = 0
+GOAL_ZOMBOSS    = 1
+GOAL_COMPLETION = 2
+
+# How many of a world's stretches survive each goal type. The goal cut lands
+# exactly on a stretch boundary, which is not a coincidence: world_stretches
+# cuts on the world's OWN milestones, stretch 0 ending at its World Key level
+# and stretch 1 at its Zomboss, and those are the same two locations the goal
+# types measure (see locations.world_stretches and goal_locations_for).
+#
+# So "nothing past the World Key" is "keep stretch 0", and no new geometry is
+# needed. Indexes are into stretch_suffixes(world), so Ancient Egypt's extra
+# " Early" opening is counted for free: its key level egypt8 ends " Early", not
+# "", which is why this is a count of SUFFIXES and not a fixed number.
+#
+# Two worlds have no milestone to cut on and take the fallback cuts
+# world_stretches computes (Kongfu Temple has no Zomboss, so its second cut is
+# the midpoint of the remainder; Aerial Fortress has neither and keeps equal
+# thirds). A zomboss cut on those two is therefore arbitrary rather than
+# meaningful -- they are trimmed consistently with everyone else because an
+# inconsistent exception is worse, and neither can satisfy that goal anyway.
+_GOAL_STRETCHES_KEPT = {
+    GOAL_WORLD_KEY:   1,   # up to and including the World Key level
+    GOAL_ZOMBOSS:     2,   # ...and the Zomboss
+    GOAL_COMPLETION:  None,  # the whole world; no cut
+}
+
+
+def stretches_kept(world: str, goal_type, past_goal: bool = False):
+    """The suffixes of `world` this slot builds, in order.
+
+    past_goal is the include_levels_past_goal option: True keeps every stretch,
+    which is how every seed behaved before the trim existed.
+    """
+    suffixes = stretch_suffixes(world)
+    if past_goal or goal_type is None:
+        return list(suffixes)
+    keep = _GOAL_STRETCHES_KEPT.get(int(goal_type))
+    if keep is None:
+        return list(suffixes)
+    # Ancient Egypt's opening is cut in two and BOTH halves are the opening as
+    # far as the milestones go, so a keep of 1 has to take "" and " Early".
+    extra = 1 if world == "Ancient Egypt" else 0
+    return list(suffixes[:keep + extra])
+
+
+def progressive_count(world: str, goal_type=None, past_goal: bool = False) -> int:
+    """How many copies of this world's unlock the pool ships.
+
+    Sized to the stretches this slot actually BUILDS. Under the world_key goal
+    a world is one stretch long, so its later unlocks would gate nothing and
+    ship as dead items -- 24 of them in a 12-world seed. Ancient Egypt needs
+    none at all there, which falls out of PROGRESSIVE_NEED rather than being a
+    special case: its opening and its " Early" checkpoint both need 0.
+    """
+    return max(progressive_need(world, s)
+               for s in stretches_kept(world, goal_type, past_goal))
 
 # Ancient Egypt's own stretches. It is cut by the same code as every other
 # world, but its gates are different: it has no key, so its later stretches ask
@@ -245,7 +303,27 @@ SUN_PRODUCER_PLANTS = [
 #
 # 10 is Kurt's number (2026-08-23). Drawn per slot from the slot's own RNG, so
 # a seed is stable and two slots differ.
+# The most of a seed the permanent upgrades may take, as a percentage of the
+# locations it builds.
+#
+# All 14 of them are mandatory and gate nothing, so in a small seed they crowd
+# out the plants that make the seed worth playing: Ancient Egypt alone under the
+# world_key goal is 12 locations, and 14 upgrades left room for none at all.
+# A percentage is self-limiting -- 20% of a 531-location seed is 106, well past
+# the 14 that exist, so this only ever bites where it was needed.
+#
+# Applied on top of the "give before the plants do" rule below it: the cap
+# decides how many upgrades a seed WANTS, and the pool floor can still take more
+# away if even that does not fit.
+UPGRADE_POOL_SHARE = 20
+
 LOGIC_ATTACKER_COUNT = 10
+
+# How many Jester counters each slot's Dark Ages entrance names. ONE: the
+# rule only ever needed one to be findable, and naming all 36 would promote
+# all 36 to progression, which is the exact cost LOGIC_ATTACKER_COUNT exists
+# to avoid. Drawn per slot, so each seed asks for a different plant.
+JESTER_DRAW_COUNT = 1
 
 CHEAP_ATTACKER_PLANTS = [
     "Blooming Heart", "Bonk Choy", "Buttercup", "Cabbage-pult",
@@ -329,6 +407,7 @@ SINGLE_USE_PLANTS = [
 # Intensive Carrot caused before.
 NON_DAMAGING_PLANTS = [
     "Chard Guard",      # punts zombies back; the 60 is knockback, not damage
+    "Sap-fling",        # slows and puddles; no damage stat, no Damage anywhere
     "E.M. Peach",       # stuns and disarms, Damage 0
     "Explode-O-Nut",    # a wall; only hurts what is already eating it
     "Hypno-shroom",     # converts a zombie, Damage 0
@@ -380,14 +459,114 @@ if _unknown_excluded:
 # all, which he also has nothing to reverse. Most are melee, one-shots or
 # utility rather than something to hold a Dark Ages lane with, and folding
 # them in would make this requirement nearly free.
+#
+# SAP-FLING WAS REMOVED 2026-08-25 (Kurt: "sapfling does 0 damage full support
+# plant"), and it is the reason the flag alone is not enough. Its projectile is
+# genuinely unreversible, so the derivation admitted it -- but an unreversible
+# shot that deals no damage does not ANSWER the Jester, it only declines to arm
+# him. He walks through it.
+#
+# The data agrees, and Sap-fling is the only one of the six where it did:
+#   - no `damage` almanac PlantStat, where the other five have damage3/5/6
+#   - no damage field of any kind in the live PlantProperties table
+#   - its `sapfling` ProjectileProperties entry carries CannotBeReversedByJester
+#     and NO Damage key at all, where `cabbage` has 40 and `pea` has 20
+#   - Sapfling.ts never contains the substring "amage"
+#
+# It slows and it puddles; the Slow Family is the honest reading of it. Same
+# shape as the Chard Guard mistake in NON_DAMAGING_PLANTS above: the derivation
+# tested the special property and never tested for damage.
+#
+# So the rule is TWO conditions, not one: the damage must REACH him, and it must
+# BE damage.
+#
+# WIDENED 2026-08-25 at Kurt's request, from 5 curated plants to every plant
+# that can damage him, with one drawn per slot (JESTER_DRAW_COUNT). That makes
+# each seed ask for a different plant instead of the same five every time, and
+# it is why the list can be this big without making the gate free: only the ONE
+# drawn plant is progression, the other 35 are ordinary useful plants.
+#
+# A plant qualifies if it deals damage the Jester cannot confiscate:
+#   - a projectile the game flags CannotBeReversedByJester (it pops normally),
+#     OR
+#   - damage that is not a projectile at all -- melee, contact, explosion,
+#     beam, spikes. There is nothing for him to catch.
+# A plant whose only damage is a reversible projectile is excluded, and is worse
+# than useless: the caught shot comes back with damageScale multiplied by his
+# ProjectileDamageMult.
+#
+# THE SIGNALS ARE DELIBERATELY NARROW, because two false positives shipped from
+# this file already (Chard Guard, Sap-fling). A plant is in only on an explicit
+# damage FIELD (Damage, ChewDamage, ContactDamage, ExplodeDamage, StabDamage,
+# SmashDamage, ButterDamage, SpikeDamage...), a `damage` almanac PlantStat while
+# having no projectile action, or a flagged projectile carrying a damage number.
+#
+# NOT a signal: "its behaviour module mentions damage". That admits Moonflower,
+# Intensive Carrot, Hypno-shroom and Shrinking Violet, every one of which is in
+# NON_DAMAGING_PLANTS -- they RECEIVE damage or name a resistance constant.
+#
+# 62 of the 135 AP plants are UNKNOWN under those signals: no projectile, no
+# damage field, no damage stat. Some certainly do damage (Ice-shroom,
+# Gloom-shroom, Meteor Flower, Fire Gourd, Grimrose, Vamporcini) and are
+# excluded anyway, because the alternative is to admit Sunflower with them.
+# Excluding a real counter costs variety; including a fake one hands a player a
+# Dark Ages "answer" that cannot fight. See the open list in
+# [[attacker-list-false-positives]].
+#
+# TWO PLANTS WERE DROPPED that used to be listed, both worth knowing:
+#   - Magnifying Grass. Its ONLY projectile is MagnifyingGrassPoweredShot and
+#     it is NOT flagged, so he catches it. It should never have been here.
+#   - Strawburst. Its six projectile actions all resolve to unflagged entries,
+#     though separate `strawburst0/1/2` entries in the projectile table ARE
+#     flagged. The projectile table is sparse and evidently inherits, so which
+#     entry a Strawburst shot really uses is unresolved. Left out until it is.
+# 36 plants, one of which each slot draws (see JESTER_DRAW_COUNT). Derived,
+# not curated: see the two-condition rule above.
 JESTER_COUNTER_PLANTS = [
+    "Bamboo Shoot",
     "Banana Launcher",
+    "Bonk Choy",
+    "Buttercup",
+    "Cactus",
+    "Celery Stalker",
+    "Cherry Bomb",
+    "Chili Bean",
+    "Chomper",
+    "Cold Snapdragon",
+    "Doom-shroom",
+    "Electric Currant",
     "Electric Peashooter",
-    "Magnifying Grass",
+    "Endurian",
+    "Escape Root",
+    "Fume-Shroom",
+    "Ghost Pepper",
+    "Gloom Vine",
+    "Grapeshot",
+    "Iceweed",
+    "Jalapeno",
+    "Laser Bean",
+    "Lava Guava",
+    "Lightning Reed",
     "Missile Toe",
-    "Sap-fling",
-    "Strawburst",
+    "Parsnip",
+    "Phat Beet",
+    "Potato Mine",
+    "Primal Potato Mine",
+    "Primal Wall-nut",
+    "Shadow-shroom",
+    "Snap Dragon",
+    "Spikerock",
+    "Spikeweed",
+    "Squash",
+    "Torchwood",
 ]
+
+# Every one of these must actually DEAL DAMAGE, or it is not an answer. See the
+# Sap-fling note above; this is the check that was missing when it was listed.
+_no_damage_counters = set(JESTER_COUNTER_PLANTS) & set(NON_DAMAGING_PLANTS)
+if _no_damage_counters:
+    raise ValueError("plants that deal no damage are being counted as Jester "
+                     f"counters: {sorted(_no_damage_counters)}")
 
 # Plants that give off heat, for Frostbite Caves. Its ice blocks freeze plants
 # solid and its winds blow them off the lawn, and only a standing source of
@@ -476,16 +655,84 @@ WORLD_ENTRY_PLANTS = {
 # the whole list, so which of the 46 are progression is a property of the seed
 # and cannot live in a module-level set. PvZ2GardendlessWorld.create_item folds
 # `world.logic_attackers` in on top of this.
+# Plants a particular STRETCH of a world wants, on top of whatever its world
+# entrance already asks for. WORLD_ENTRY_PLANTS gates a world; this gates the
+# back half of one.
+#
+# Grave Buster digs up the tombstones that Ancient Egypt and Dark Ages build
+# their later levels around -- graves that keep spawning zombies until they are
+# removed, and that block the tiles they sit on. Both worlds are cut at their
+# own milestones, so " Mid" is exactly World Key level -> Zomboss and " Late" is
+# Zomboss -> final level: everything past the World Key, which is where the
+# graves get thick.
+#
+# LOGIC ONLY, like every other plant requirement. It never reaches slot_data's
+# world_gates, so the client still lets those levels start -- the same footing
+# as Ancient Egypt's egypt6 checkpoint and the world entry plants. What it
+# changes is where fill may hide things and what a tracker calls reachable.
+#
+# A list of GROUPS per stretch, matching WORLD_ENTRY_PLANTS, so a stretch can
+# ask for more than one thing later and so a requirement can be "any of these"
+# rather than one named plant. Grave Buster is alone in its group because it is
+# the only grave-removal plant in the Archipelago range.
+GRAVE_CLEAR_PLANTS = ["Grave Buster"]
+
+STRETCH_ENTRY_PLANTS = {
+    "Ancient Egypt": {" Mid": [GRAVE_CLEAR_PLANTS], " Late": [GRAVE_CLEAR_PLANTS]},
+    "Dark Ages":     {" Mid": [GRAVE_CLEAR_PLANTS], " Late": [GRAVE_CLEAR_PLANTS]},
+}
+
+
 LOGIC_PLANTS = (
     set(SUN_PRODUCER_PLANTS)
     | {plant for groups in WORLD_ENTRY_PLANTS.values()
+       for group in groups for plant in group}
+    | {plant for per_world in STRETCH_ENTRY_PLANTS.values()
+       for groups in per_world.values()
        for group in groups for plant in group}
 )
 
 # Everything any rule could EVER name, whichever way the per-slot draw falls.
 # Only used to check that every such plant has an item -- a rule naming a plant
 # with no item can never pass, and would fail silently.
-ALL_LOGIC_PLANTS = LOGIC_PLANTS | set(CHEAP_ATTACKER_PLANTS)
+ALL_LOGIC_PLANTS = (LOGIC_PLANTS | set(CHEAP_ATTACKER_PLANTS)
+                    | set(JESTER_COUNTER_PLANTS))
+
+
+
+
+def slot_stretch_groups(world, world_name, suffix):
+    """This slot's plant requirements for one stretch of one world.
+
+    Empty for a stretch this slot does not build: under the world_key goal a
+    world ends at its World Key level, so its " Mid" and " Late" never exist and
+    gating them would promote a plant to progression for a rule nothing built.
+    """
+    if suffix not in world.kept_stretches(world_name):
+        return []
+    return STRETCH_ENTRY_PLANTS.get(world_name, {}).get(suffix, [])
+
+
+def slot_entry_groups(world, world_name):
+    """This slot's entry-plant requirements for `world_name`.
+
+    Identical to WORLD_ENTRY_PLANTS except that the Jester group is narrowed to
+    the ONE counter this slot drew. Everything downstream -- the access rule,
+    the progression classification and the item-pool floor -- has to agree on
+    that single plant, so they all come through here rather than reading the
+    table directly.
+
+    Matched by identity against JESTER_COUNTER_PLANTS, which is the same list
+    object the table holds, so a group that merely has the same contents is
+    left alone.
+    """
+    groups = []
+    for group in WORLD_ENTRY_PLANTS.get(world_name, []):
+        if group is JESTER_COUNTER_PLANTS:
+            groups.append(list(world.logic_jesters))
+        else:
+            groups.append(group)
+    return groups
 
 # Shop commodities, taken verbatim from the game's store data. Only the
 # one-time purchases are usable as checks -- the Gem/Coin/Zen bundles in the

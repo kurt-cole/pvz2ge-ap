@@ -13,6 +13,11 @@ let failed = 0;
 const fail = m => { failed++; console.log('  FAIL  ' + m); };
 const ok = m => console.log('  ok    ' + m);
 const statuses = () => G.sent.filter(p => p.cmd === 'StatusUpdate');
+// What actually happens in game: the level is beaten, and THAT is what
+// fires the check. Kept as one helper so a test cannot advance the goal
+// by accident with a check alone -- see the 'checked but not played'
+// cases at the end of this file, which rely on the two being separable.
+const beat = loc => { G.play(loc); G.check(loc); };
 
 const GOALS = ['egypt8', 'pirate8', 'cowboy8', 'dark10', 'modern16'];
 // A keyed seed. worldGates is what a seed generated on or after 2026-08-23
@@ -49,7 +54,7 @@ else ok('a Modern Day Key still opens it, for a seed that shipped one');
 // The goal count must have nothing to do with access any more, or a player who
 // completed the required worlds walks into Modern Day without its key.
 G.reset(keyed({ receivedKeys: [] }));
-for (const g of GOALS) G.check(g);
+for (const g of GOALS) beat(g);
 if (G.canAccessModernDay()) fail('completing every world opened Modern Day without the key');
 else ok('keyed seed: completing worlds does not substitute for the key');
 
@@ -59,10 +64,10 @@ if (G.canAccessModernDay()) fail('older seed opened Modern Day with nothing done
 else ok('older seed: shut until the goal count is met');
 
 G.reset(legacy());
-G.check('egypt8'); G.check('pirate8');
+beat('egypt8'); beat('pirate8');
 if (G.canAccessModernDay()) fail('opened one world short of the requirement');
 else ok('older seed: one world short is still shut');
-G.check('cowboy8');
+beat('cowboy8');
 if (!G.canAccessModernDay()) fail('did not open once the count was met');
 else ok('older seed: the count opens it');
 
@@ -84,13 +89,13 @@ if (G.goalMet()) fail('the goal was met with nothing checked');
 else ok('nothing checked is not a win');
 
 G.reset(keyed());
-G.check('egypt8'); G.check('pirate8');
+beat('egypt8'); beat('pirate8');
 if (G.goalMet()) fail('2 worlds met a requirement of 3');
 else if (G.maybeSendGoal()) fail('sent the goal one world short');
 else if (statuses().length) fail('a StatusUpdate went out one world short');
 else ok('one world short sends nothing');
 
-G.check('dark10');
+beat('dark10');
 if (!G.goalMet()) fail('3 worlds did not meet a requirement of 3');
 else if (!G.maybeSendGoal()) fail('the goal was not reported');
 else if (statuses().length !== 1) fail('expected one StatusUpdate, got ' + statuses().length);
@@ -99,7 +104,7 @@ else ok('the third world completes the run and reports status 30');
 
 // Any worlds, in any order -- Modern Day is not special among them.
 G.reset(keyed());
-G.check('modern16'); G.check('dark10'); G.check('cowboy8');
+beat('modern16'); beat('dark10'); beat('cowboy8');
 if (!G.goalMet()) fail('a win that included Modern Day was not recognised');
 else ok('Modern Day counts toward the requirement like any other world');
 
@@ -120,13 +125,13 @@ else ok('a zero requirement is not a win either');
 // on the strength of levels the goal never asked for.
 G.reset(keyed());
 for (const l of ['egypt1', 'egypt2', 'pirate3', 'dark4', 'modern1', 'kongfu8'])
-  G.check(l);
+  beat(l);
 if (G.goalMet()) fail('ordinary levels counted toward the goal');
 else ok('only the seed\'s own goal locations count');
 
 // Once is once: a repeated check must not re-announce the goal.
 G.reset(keyed());
-for (const g of GOALS) G.check(g);
+for (const g of GOALS) beat(g);
 G.maybeSendGoal();
 G.maybeSendGoal();
 G.maybeSendGoal();
@@ -137,7 +142,7 @@ else ok('the goal is announced exactly once per session');
 // The threshold is crossed while the socket is down. st.checked survives, the
 // StatusUpdate does not, so the next poll after reconnecting has to send it.
 G.reset(keyed(), { conn: false });
-for (const g of GOALS) G.check(g);
+for (const g of GOALS) beat(g);
 if (G.maybeSendGoal()) fail('sent a StatusUpdate with no socket');
 else if (statuses().length) fail('a packet went out while disconnected');
 else ok('offline: the goal is not sent');
@@ -149,13 +154,13 @@ else ok('reconnecting sends the goal that was missed');
 // Connected but not through the handshake yet: sessionActive gates it, the
 // same way it gates location sends.
 G.reset(keyed(), { sessionActive: false });
-for (const g of GOALS) G.check(g);
+for (const g of GOALS) beat(g);
 if (G.maybeSendGoal()) fail('sent the goal before the session was active');
 else ok('a socket without a session sends nothing');
 
 // ── the older seed wins on its one victory location ──────────────────────────
 G.reset(legacy());
-for (const g of GOALS.slice(0, 4)) G.check(g);
+for (const g of GOALS.slice(0, 4)) beat(g);
 if (G.maybeSendGoal()) fail('an older seed won on the goal count alone');
 else ok('older seed: completing worlds is not the win');
 G.check('modern_zomboss_01_egypt');
@@ -172,6 +177,123 @@ else ok('a seed with no victory location falls back to the Zomboss');
 G.check('modern_zomboss_01_egypt');
 if (!G.maybeSendGoal()) fail('the fallback victory location did not end the run');
 else ok('older seed: the fallback location ends the run too');
+
+
+// ── the goal must be PLAYED, not merely checked ──────────────────────────────
+//
+// A location can go checked without anyone playing it: !collect at the end of a
+// run, a release, or a co-op partner sending it. Counting those would let a run
+// claim the goal for levels nobody sat down and won, so goalPlayed() reads the
+// game's own level progress instead of st.checked.
+
+G.reset(keyed());
+for (const g of GOALS) G.check(g);   // checked, never played
+if (G.goalMet()) fail('the goal was met by checks alone, with nothing played');
+else if (G.goalProgress().done !== 0)
+  fail('checked-but-unplayed goals counted: ' + G.goalProgress().done);
+else ok('collecting every goal check without playing does not win the run');
+
+// ...and maybeSendGoal must not report it either, which is the packet that
+// actually ends someone's run.
+if (G.maybeSendGoal()) fail('the goal was REPORTED off checks alone');
+else if (statuses().length) fail('a StatusUpdate went out for an unplayed goal');
+else ok('nothing is reported to the multiworld for an unplayed goal');
+
+// Playing them, without the checks ever arriving, IS the goal. This is the
+// other half: the two conditions are genuinely independent, so neither test
+// above passes for the wrong reason.
+G.reset(keyed());
+for (const g of GOALS) G.play(g);
+if (!G.goalMet()) fail('playing every goal level did not meet the goal');
+else ok('beating the levels is what counts, with or without the checks');
+
+// The count moves one world at a time, and only for worlds played.
+G.reset(keyed());
+beat('egypt8');
+if (G.goalProgress().done !== 1) fail('one world played read as ' + G.goalProgress().done);
+G.check('pirate8');                  // checked only
+if (G.goalProgress().done !== 1)
+  fail('a checked-but-unplayed world moved the count to ' + G.goalProgress().done);
+G.play('pirate8');                   // now actually beaten
+if (G.goalProgress().done !== 2)
+  fail('beating the checked world did not move the count');
+else ok('the tracker counts worlds beaten, and a bare check does not move it');
+
+// Modern Day access uses the same count on a legacy seed, for the same reason:
+// it decides whether a world OPENS, not just whether the run ends.
+G.reset(legacy());
+for (const g of GOALS) G.check(g);
+if (G.canAccessModernDay())
+  fail('Modern Day opened on checks alone in a legacy seed');
+else ok('legacy Modern Day access also requires the levels to be played');
+
+// ── the overlay tracker ──────────────────────────────────────────────────────
+// It reads the same goalProgress() the win check does, so the number a player
+// sees is exactly the one that ends the run.
+G.reset(keyed());
+let pr = G.goalProgress();
+if (pr.need !== 3) fail('tracker need is ' + pr.need + ', want the seed requirement');
+if (pr.total !== GOALS.length)
+  fail('tracker total is ' + pr.total + ', want ' + GOALS.length + ' goal locations');
+if (pr.done !== 0) fail('a fresh seed reads as ' + pr.done + ' done');
+beat('egypt8'); beat('pirate8');
+pr = G.goalProgress();
+if (pr.done !== 2) fail('after two worlds the tracker reads ' + pr.done);
+else ok('tracker reads done/need/total off the same source as the win check');
+
+// Before slot_data lands there is nothing to show, and nothing may be claimed.
+G.reset({ modernKeyed: true });
+pr = G.goalProgress();
+if (pr.need || pr.total) fail('the tracker showed a goal before slot_data arrived');
+else if (G.goalMet()) fail('the goal was met before slot_data arrived');
+else ok('no tracker and no goal until slot_data lands');
+
+// The rendered line, not just the numbers behind it. "3/7 World Keys" is the
+// interface Kurt asked for, so the string itself is asserted -- goalProgress()
+// being right does not prove the panel shows it.
+G.reset(keyed({ goalType: 'world_key' }));
+beat('egypt8');
+G.updateGoalTracker();
+let html = G.goalEl().innerHTML;
+if (!/<b>1\/3<\/b> World Keys/.test(html))
+  fail('tracker line is ' + JSON.stringify(html));
+else if (G.goalEl().style.display !== 'block') fail('tracker stayed hidden');
+else ok('the panel shows "1/3 World Keys" after one world');
+
+// The label follows goal_type, which slot_data sends as a STRING -- so the
+// option renumbering cannot reach it.
+G.reset(keyed({ goalType: 'zomboss' }));
+G.updateGoalTracker();
+if (!/Zomboss Fights/.test(G.goalEl().innerHTML)) fail('zomboss label missing');
+G.reset(keyed({ goalType: 'completion' }));
+G.updateGoalTracker();
+if (!/Worlds Cleared/.test(G.goalEl().innerHTML)) fail('completion label missing');
+// An unknown or absent goal_type falls back rather than rendering blank.
+G.reset(keyed());
+G.updateGoalTracker();
+if (!/World Keys/.test(G.goalEl().innerHTML)) fail('no fallback label');
+else ok('the label follows goal_type, and falls back when absent');
+
+// Done is marked, and a bare check does not mark it.
+G.reset(keyed());
+for (const g of GOALS.slice(0, 3)) beat(g);
+G.updateGoalTracker();
+if (G.goalEl().className !== 'ap-goal-done') fail('a met goal was not marked done');
+else if (!/goal complete/.test(G.goalEl().innerHTML)) fail('no completion text');
+else ok('the tracker marks the goal complete once it is met');
+
+G.reset(keyed());
+for (const g of GOALS) G.check(g);
+G.updateGoalTracker();
+if (!/<b>0\/3<\/b>/.test(G.goalEl().innerHTML))
+  fail('checks alone moved the tracker: ' + G.goalEl().innerHTML);
+else ok('the tracker ignores checks that were never played');
+
+// Hidden until slot_data lands, rather than showing 0/0.
+G.reset({ modernKeyed: true });
+G.updateGoalTracker();
+if (G.goalEl().style.display !== 'none') fail('tracker shown before slot_data');
+else ok('the tracker stays hidden until slot_data lands');
 
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nGOAL OK');
 process.exit(failed ? 1 : 0);

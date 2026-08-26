@@ -180,6 +180,15 @@ def add_rule(spot, rule, combine="and"):
     spot.access_rule = lambda state: old(state) and rule(state)
 
 
+def add_item_rule(location, rule):
+    """Stack an item rule, the way worlds.generic.Rules.add_item_rule does.
+
+    Confirmed present in the installed AP 0.6.7 (worlds/generic/Rules.pyc).
+    """
+    old = location.item_rule
+    location.item_rule = lambda item: old(item) and rule(item)
+
+
 def forbid_items_for_player(location, items, player):
     """AP ANDs onto any existing item_rule rather than replacing it."""
     old = location.item_rule
@@ -188,7 +197,8 @@ def forbid_items_for_player(location, items, player):
 
 
 mod("worlds.generic.Rules", set_rule=set_rule, add_rule=add_rule,
-    forbid_items_for_player=forbid_items_for_player)
+    forbid_items_for_player=forbid_items_for_player,
+    add_item_rule=add_item_rule)
 mod("worlds.LauncherComponents")  # no components attr -> ImportError path
 
 

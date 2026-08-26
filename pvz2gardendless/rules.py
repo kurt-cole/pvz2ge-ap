@@ -8,9 +8,11 @@ compose predictably and stay consistent with the rest of Archipelago.
 
 from typing import TYPE_CHECKING
 
-from worlds.generic.Rules import add_rule, forbid_items_for_player, set_rule
+from worlds.generic.Rules import add_item_rule, add_rule, forbid_items_for_player, set_rule
 
 from .constants import (
+    slot_entry_groups, slot_stretch_groups,
+    STRETCH_ENTRY_PLANTS, stretch_suffixes,
     CHEAP_ATTACKER_PLANTS, DANGER_ROOM_UNLOCK, EGYPT_STRETCH_PLANTS,
     KEYED_WORLDS, SIDE_PATH_REGIONS, STRETCH_PLANTS, SUN_PRODUCER_PLANTS,
     WORLD_ENTRY_PLANTS, WORLD_REGIONS, gem_grant_regions, is_early_region,
@@ -41,22 +43,34 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # progressive unlock alone. The other worlds' entrances carry the same
     # requirement (below); between them, nothing in any seed opens without a
     # sun producer.
-    # The attacker half names this slot's OWN draw of LOGIC_ATTACKER_COUNT
-    # plants, not all 46 that qualify. Naming all of them forced every one to
-    # progression for no gain, and in a small seed the progression block is what
-    # squeezes out every useful plant, filler and trap.
+    # A SUN PRODUCER, AND NOTHING ELSE. The attacker half was dropped on
+    # 2026-08-25 because it was provably vacuous AND actively harmful.
     #
-    # Note this half is currently satisfied for free in every seed:
-    # generate_early precollects a STARTER_PLANT, which is drawn from the same
-    # 46 and, since 2026-08-23, from the draw itself. That is deliberate -- the
-    # guarantee exists so a player always has something to place -- but it does
-    # mean egypt6-8 effectively asks for a sun producer alone. See
-    # sphere_test's "egypt6-8 need a sun producer, and want nothing else".
-    _attackers = list(world.logic_attackers)
+    # Vacuous: generate_early precollects a STARTER_PLANT, that list is a subset
+    # of the cheap attackers, and the starter is forced into the slot's drawn
+    # ten. So has_any(attackers) was true from sphere 0 in every seed ever
+    # generated. It never gated anything for a player.
+    #
+    # Harmful: a precollected item is invisible to anything that models only
+    # RECEIVED items, which is what a tracker does. Universal Tracker therefore
+    # read the attacker half as unmet and went looking for another member of the
+    # drawn ten -- and in 11 of 40 measured Egypt-only world_key seeds the pool
+    # contains no cheap attacker at all, so it named an item the seed cannot
+    # contain, showed egypt6-8 out of logic while the player held the plant that
+    # opens them, and never entered GO mode. Kurt hit exactly that.
+    #
+    # STARTER_PLANTS keeps its own job unchanged: the client blocks every
+    # AP-managed plant until it arrives, so the guarantee is what stops a run
+    # beginning with nothing placeable. That is a gameplay guarantee, not a
+    # logic requirement, and it should not be written as one.
+    #
+    # world.logic_attackers is still DRAWN in generate_early and is deliberately
+    # left unread here rather than deleted -- removing the draw would consume a
+    # different number of values from the slot RNG and shift every later draw,
+    # changing the starter and the Jester counter for a given seed.
 
     def has_sun_and_attacker(state):
-        return (state.has_any(SUN_PRODUCER_PLANTS, player) and
-                state.has_any(_attackers, player))
+        return state.has_any(SUN_PRODUCER_PLANTS, player)
 
     for suffix in EGYPT_STRETCH_PLANTS:
         name = f"Enter Ancient Egypt{suffix}"
@@ -138,9 +152,41 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # what came back is the per-world plant, not the per-stretch plant COUNT
     # that made a tracker show dino1-16 shut while the player held Progressive
     # Jurassic Marsh.
-    for w, requirements in WORLD_ENTRY_PLANTS.items():
+    # A stretch of a world can ask for a plant of its own, on top of whatever
+    # its world entrance already wants. Ancient Egypt and Dark Ages want Grave
+    # Buster for everything past their World Key level -- " Mid" is key ->
+    # Zomboss and " Late" is Zomboss -> final level, which is where the
+    # tombstones get thick.
+    #
+    # On the STRETCH entrance, not the world's: regions.py chains the stretches,
+    # so a rule on "Enter <W> Mid" is inherited by " Late" for free and one on
+    # the world entrance would gate the opening too.
+    #
+    # add_rule, so it stacks onto the unlock requirement rather than replacing
+    # it. Scoped twice over: to worlds this seed enabled, and to stretches it
+    # actually built -- under the world_key goal a world ends at its World Key
+    # level, so " Mid" does not exist and there is nothing to hang this on.
+    for w in STRETCH_ENTRY_PLANTS:
+        if w not in world.enabled_worlds:
+            continue
+        for suffix in stretch_suffixes(w):
+            for group in slot_stretch_groups(world, w, suffix):
+                try:
+                    entrance = multiworld.get_entrance(f"Enter {w}{suffix}", player)
+                except KeyError:
+                    # The stretch was not built -- too few locations to cut, or
+                    # trimmed away by the goal. Nothing to gate.
+                    continue
+                add_rule(entrance,
+                         lambda state, g=group: state.has_any(g, player))
+
+    for w in WORLD_ENTRY_PLANTS:
         if w not in world.enabled_worlds:
             continue  # not in this seed: no entrance to rule on
+        # Not WORLD_ENTRY_PLANTS[w] directly: the Jester group is 36 plants and
+        # this slot named only the one it drew. items.py and the pool floor call
+        # the same helper, so all three agree on that plant.
+        requirements = slot_entry_groups(world, w)
         try:
             entrance = multiworld.get_entrance(f"Enter {w}", player)
         except KeyError:
@@ -332,6 +378,33 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # this same count used to be what unlocked it.
     goal_locs = goal_locations_for(world.options.goal_type.value,
                                    world.enabled_regions)
+
+    # EVERY GOAL LEVEL HOLDS ONE OF THIS SLOT'S OWN ITEMS.
+    #
+    # The client already refuses to count a goal world until its level has been
+    # BEATEN rather than merely checked, which is the real guard. This is the
+    # generation-side half, and it exists because the two failure modes are
+    # different: the client protects the run, this protects the seed.
+    #
+    # A goal location holding another player's item is a location this slot has
+    # every incentive to hand over without playing -- release it, and someone
+    # else gets their item while the level is never touched. Holding a LOCAL
+    # item means the only person who benefits from that level is the player who
+    # has to beat it.
+    #
+    # It does NOT make release impossible, and is not meant to: releasing is how
+    # you end a run you are giving up on, and the client's played-not-checked
+    # rule is what keeps an ordinary run honest. What this removes is the
+    # incentive to skip a goal level in a multiworld, and the case where someone
+    # ELSE's progression sits behind a level you have no reason to play.
+    #
+    # Solo seeds are entirely local already, so this constrains nothing there.
+    for _goal_name in goal_locs:
+        try:
+            _goal_loc = multiworld.get_location(_goal_name, player)
+        except KeyError:
+            continue  # a world this seed left out; goal_locations_for filters
+        add_item_rule(_goal_loc, lambda item, p=player: item.player == p)
     # Clamp: the goal list shrinks with the seed. The zomboss goal has only 11
     # eligible locations to begin with (Kongfu Temple has no Zomboss level),
     # and world_count / enabled_worlds cut it down further, so the option's

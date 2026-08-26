@@ -22,6 +22,19 @@ function isChecked(loc){
 
 function victoryLoc(){ return st.victoryLoc || 'modern_zomboss_01_egypt'; }
 
+// ── stubs, not copies ────────────────────────────────────────────────────────
+// The live client maps AP location names to game level ids and reads level
+// progress off the save. Here both are driven by the harness: st.levels is the
+// set of level ids the player has actually beaten, which is the whole point of
+// the distinction goalPlayed() draws.
+const LOC_LEVELS = new Proxy({}, { get: (_, k) => 'lvl:' + String(k) });
+function isFinished(levelId){ return (st.levels || []).indexOf(levelId) >= 0; }
+
+// The #ap-goal div. Only what updateGoalTracker writes.
+let goalEl = { innerHTML: '', className: '', style: { display: '' } };
+
+
+
 const MODERN_DAY_KEY_ITEM = 'Modern Day Key';
 
 function unlocksHeld(item){
@@ -40,8 +53,21 @@ function canAccessModernDay(){
   const goalLocs  = st.goalLocs || [];
   const worldsReq = st.worldsReq || 7;
   if(!goalLocs.length) return false; // slot_data not in yet; don't open early
-  const completed = goalLocs.filter(l=>isChecked(l)).length;
+  const completed = goalLocs.filter(goalPlayed).length;
   return completed >= worldsReq;
+}
+
+function goalPlayed(loc){
+  const levelId = LOC_LEVELS[loc];
+  return levelId ? isFinished(levelId) : isChecked(loc);
+}
+
+function goalProgress(){
+  const goalLocs  = st.goalLocs || [];
+  const worldsReq = st.worldsReq || 0;
+  let done = 0;
+  for(const l of goalLocs) if(goalPlayed(l)) done++;
+  return { done: done, need: worldsReq, total: goalLocs.length };
 }
 
 function goalMet(){
@@ -50,9 +76,26 @@ function goalMet(){
   // Nothing to compare against until slot_data lands. Claiming the goal off
   // a default would end someone else's run for them.
   if(!goalLocs.length || !worldsReq) return false;
-  let done = 0;
-  for(const l of goalLocs) if(isChecked(l)) done++;
-  return done >= worldsReq;
+  return goalProgress().done >= worldsReq;
+}
+
+const GOAL_LABEL = {
+  world_key:  'World Keys',
+  zomboss:    'Zomboss Fights',
+  completion: 'Worlds Cleared',
+};
+
+function updateGoalTracker(){
+  if(!goalEl) return;
+  const g = goalProgress();
+  if(!g.total || !g.need){ goalEl.style.display='none'; return; }
+  const label = GOAL_LABEL[st.goalType] || GOAL_LABEL.world_key;
+  goalEl.style.display='block';
+  goalEl.className = g.done >= g.need ? 'ap-goal-done' : '';
+  goalEl.innerHTML = '<b>' + g.done + '/' + g.need + '</b> ' + label +
+    '<span class="ap-goal-sub">' +
+    (g.done >= g.need ? 'goal complete — ' : '') +
+    g.total + ' available</span>';
 }
 
 function maybeSendGoal(){
@@ -69,7 +112,7 @@ function maybeSendGoal(){
 // left on st; omitting modernKeyed models a seed rolled before that flag.
 function reset(state, opts){
   const o = opts || {};
-  st = Object.assign({ checked: [] }, state || {});
+  st = Object.assign({ checked: [], levels: [] }, state || {});
   conn = o.conn !== false;
   sessionActive = o.sessionActive !== false;
   goalSent = false;
@@ -77,14 +120,20 @@ function reset(state, opts){
   // has to be dropped with the state it was built from.
   _checkedSet = null; _checkedSrc = null; _checkedLen = -1;
   sent.length = 0; logs.length = 0;
+  goalEl = { innerHTML: '', className: '', style: { display: '' } };
 }
 
 // Records a check the way fireCheck does, so the cache invalidation is
 // exercised rather than bypassed.
 function check(loc){ st.checked.push(loc); }
 
-module.exports = { canAccessModernDay, goalMet, maybeSendGoal, victoryLoc,
-                   isChecked, reset, check, sent, logs,
+// Beating a level in game, which is what goalPlayed() actually asks about.
+function play(loc){ (st.levels = st.levels || []).push(LOC_LEVELS[loc]); }
+
+module.exports = { canAccessModernDay, goalMet, goalProgress, goalPlayed,
+                   updateGoalTracker, goalEl: () => goalEl,
+                   maybeSendGoal, victoryLoc,
+                   isChecked, reset, check, play, sent, logs,
                    state: () => st,
                    disconnect: () => { conn = false; },
                    reconnect: () => { conn = true; },

@@ -35,6 +35,16 @@ def ok(m):
 
 
 def build(**kw):
+    """A seed for the sphere checks.
+
+    include_levels_past_goal defaults ON here, unlike generation, because these
+    tests reason about the WHOLE logic structure -- egypt9 opening on one unlock,
+    egypt26 on two, every world's Mid and Late stretches. The default goal trims
+    each world at its World Key level, so those stretches would simply not exist
+    and the checks would pass vacuously. The trim gets its own checks at the end
+    of this file; pass include_levels_past_goal=0 to reach it.
+    """
+    kw.setdefault("include_levels_past_goal", 1)
     mw = MultiWorld()
     w = W.PvZ2GardendlessWorld(mw, 1)
     w.options = gen_test.Opts(**kw)
@@ -407,7 +417,7 @@ def _entry_plants(world_name):
     """One plant from each of this world's requirement lists, or [] for a world
     that asks for none. First member rather than a random one: build() is the
     default seed, so every plant is in the pool and the choice is arbitrary."""
-    return [g[0] for g in C.WORLD_ENTRY_PLANTS.get(world_name, [])]
+    return [g[0] for g in C.slot_entry_groups(w, world_name)]
 
 
 def _open(world_name, items):
@@ -481,7 +491,11 @@ _named = []
 for _wn, _plant, _wants in (("Big Wave Beach",  "Lily Pad",       True),
                             ("Far Future",      "Blover",         True),
                             ("Jurassic Marsh",  "Perfume-shroom", True),
-                            ("Dark Ages",       "Sap-fling",      True),
+                            # Whatever this slot drew of the 36 that can hurt
+                            # the Jester. Read from the slot, not pinned: the
+                            # draw is the feature. The literal checks are the
+                            # two below the loop.
+                            ("Dark Ages",  sorted(w.logic_jesters)[0], True),
                             ("Frostbite Caves", "Torchwood",      True),
                             ("Pirate Seas",     "Peashooter",     False)):
     if _wn not in w.enabled_worlds:
@@ -495,6 +509,31 @@ for _wn, _plant, _wants in (("Big Wave Beach",  "Lily Pad",       True),
         _named.append(f"{_wn} does not open with {_plant}")
     elif not _wants and not _bare:
         _named.append(f"{_wn} wants a plant it should not")
+# Sap-fling was a Jester counter until 2026-08-25 and must not be one again: its
+# projectile really is unreversible, but it deals no damage, so it declines to
+# arm the Jester rather than answering him. Asserted as its own case because the
+# positive checks above would all still pass with it back in the group.
+if "Dark Ages" in w.enabled_worlds:
+    _da = C.progressive_item_name("Dark Ages")
+    if _open("Dark Ages", [_da, _SUN1, "Sap-fling"]):
+        _named.append("Dark Ages opens on Sap-fling, which deals no damage")
+
+    # EXACTLY ONE of the 36 is named. The whole point of the draw is that the
+    # other 35 are ordinary useful plants, so holding one must NOT open the
+    # world -- if it did, the group would be back to being free.
+    assert len(w.logic_jesters) == 1, sorted(w.logic_jesters)
+    _undrawn = sorted(set(C.JESTER_COUNTER_PLANTS) - set(w.logic_jesters))
+    assert len(_undrawn) == 35, len(_undrawn)
+    _wrongly_open = [p for p in _undrawn if _open("Dark Ages", [_da, _SUN1, p])]
+    if _wrongly_open:
+        _named.append(f"Dark Ages opens on {len(_wrongly_open)} counters it did "
+                      f"not draw, e.g. {_wrongly_open[:3]}")
+
+    # ...and Magnifying Grass, dropped 2026-08-25: its only projectile is not
+    # flagged, so the Jester catches it.
+    if _open("Dark Ages", [_da, _SUN1, "Magnifying Grass"]):
+        _named.append("Dark Ages opens on Magnifying Grass, whose shot he catches")
+
 if _named:
     fail(f"world entry plants wrong: {_named}")
 else:
@@ -546,8 +585,14 @@ _pre = [i.name for i in _mw.precollected]
 # probes honest -- non-sun on purpose, since drawing from the front of
 # PROG_PLANTS would sometimes hand over a sun producer and make those states
 # pass for the wrong reason.
-_nosun_plants = [p for p in PROG_PLANTS if p not in SUN_PRODUCER_PLANTS]
+_nosun_plants = [p for p in PROG_PLANTS
+                 if p not in SUN_PRODUCER_PLANTS and p not in C.GRAVE_CLEAR_PLANTS]
 _p3, _p6 = _nosun_plants[:3], _nosun_plants[:6]
+# Ancient Egypt and Dark Ages want Grave Buster for everything past their World
+# Key level -- " Mid" is key -> Zomboss and " Late" is Zomboss -> final level.
+# Held here as its own name so the probes below can add or withhold it
+# deliberately; _nosun_plants excludes it so the "no grave" states stay honest.
+_GRAVE = C.GRAVE_CLEAR_PLANTS[0]
 _open_egypt = ['egypt1', 'egypt2', 'egypt3', 'egypt4', 'egypt5']
 # Behind the egypt6 checkpoint: a sun producer and an attacker, no unlock.
 _sun_egypt = ['egypt6', 'egypt7', 'egypt8']
@@ -556,7 +601,8 @@ _gated_egypt = ['egypt9', 'egypt10', 'egypt25']
 
 _no_sun = {l.name for l in state_with(_mw, _pre).reachable_locations()}
 _with_sun = {l.name for l in
-             state_with(_mw, _pre + ['Sunflower', _PROG_EGYPT] + _p3).reachable_locations()}
+             state_with(_mw, _pre + ['Sunflower', _PROG_EGYPT, _GRAVE] + _p3
+                        ).reachable_locations()}
 
 _missing = [n for n in _open_egypt if n not in _no_sun]
 if _missing:
@@ -588,10 +634,13 @@ else:
 # The unlock alone is not enough, and neither is the sun producer alone. Both
 # halves are checked because either one going missing leaves a gate that still
 # looks gated from the outside.
+# Grave Buster is in BOTH of these: the point of each is that ONE of the unlock
+# and the sun producer is missing. Leaving the grave plant out as well would let
+# them pass because of the new rule instead of the one under test.
 _only_prog = {l.name for l in
-              state_with(_mw, _pre + [_PROG_EGYPT] + _p3).reachable_locations()}
+              state_with(_mw, _pre + [_PROG_EGYPT, _GRAVE] + _p3).reachable_locations()}
 _only_sun = {l.name for l in
-             state_with(_mw, _pre + ['Sunflower'] + _p3).reachable_locations()}
+             state_with(_mw, _pre + ['Sunflower', _GRAVE] + _p3).reachable_locations()}
 if any(n in _only_prog for n in _gated_egypt):
     fail('the unlock alone opened egypt9+, so the sun rule is gone')
 elif any(n in _only_sun for n in _gated_egypt):
@@ -610,9 +659,10 @@ else:
 # The second unlock, and only the second, opens the last stretch.
 _late = 'egypt26'
 _one = {l.name for l in
-        state_with(_mw, _pre + ['Sunflower', _PROG_EGYPT] + _p6).reachable_locations()}
+        state_with(_mw, _pre + ['Sunflower', _PROG_EGYPT, _GRAVE] + _p6
+                   ).reachable_locations()}
 _two = {l.name for l in
-        state_with(_mw, _pre + ['Sunflower', _PROG_EGYPT, _PROG_EGYPT] + _p6
+        state_with(_mw, _pre + ['Sunflower', _PROG_EGYPT, _PROG_EGYPT, _GRAVE] + _p6
                    ).reachable_locations()}
 if _late in _one:
     fail(f'{_late} opened on one unlock; it is the third stretch')
@@ -625,7 +675,7 @@ else:
 # a seed may only ever offer one of the five.
 for _p in SUN_PRODUCER_PLANTS:
     _r = {l.name for l in
-          state_with(_mw, _pre + [_p, _PROG_EGYPT] + _p3).reachable_locations()}
+          state_with(_mw, _pre + [_p, _PROG_EGYPT, _GRAVE] + _p3).reachable_locations()}
     if any(n not in _r for n in _gated_egypt):
         fail(f'{_p} does not satisfy the Egypt sun gate')
         break
@@ -754,6 +804,62 @@ else:
     ok('every sun producer is in the pool')
 
 print()
+
+
+# ── Grave Buster gates the back half of two worlds ───────────────────────────
+#
+# Ancient Egypt and Dark Ages want it for everything past their World Key level.
+# Both worlds are cut on their own milestones, so " Mid" is exactly
+# key -> Zomboss and " Late" is Zomboss -> final level.
+#
+# Checked in BOTH directions. Asserting only that holding it opens the stretch
+# would pass with the rule deleted, since dropping a requirement only makes a
+# region easier to reach.
+_grave_cases = [
+    ("Ancient Egypt", ['egypt9', 'egypt25'], ['egypt26', 'egypt35'],
+     ['egypt1', 'egypt8'], ['Sunflower', _PROG_EGYPT, _PROG_EGYPT]),
+    ("Dark Ages", ['dark11', 'dark20'], ['dark21', 'dark30'],
+     ['dark1', 'dark10'], ['Sunflower', C.progressive_item_name("Dark Ages"),
+                           C.progressive_item_name("Dark Ages"),
+                           C.progressive_item_name("Dark Ages"),
+                           sorted(w.logic_jesters)[0]]),
+]
+_grave_bad = []
+for _wn, _mid, _late, _early, _base in _grave_cases:
+    if _wn not in w.enabled_worlds:
+        continue
+    _without = {l.name for l in
+                state_with(_mw, _pre + _base + _p6).reachable_locations()}
+    _withg = {l.name for l in
+              state_with(_mw, _pre + _base + [_GRAVE] + _p6).reachable_locations()}
+    # The opening is NOT gated on it: this is the back half only.
+    for _n in _early:
+        if _n not in _without:
+            _grave_bad.append(f"{_wn}: {_n} is in the opening but wants {_GRAVE}")
+    # Mid and Late are shut without it...
+    for _n in _mid + _late:
+        if _n in _without:
+            _grave_bad.append(f"{_wn}: {_n} opened without {_GRAVE}")
+    # ...and open with it.
+    for _n in _mid + _late:
+        if _n not in _withg:
+            _grave_bad.append(f"{_wn}: {_n} stayed shut with {_GRAVE} held")
+if _grave_bad:
+    fail(f"Grave Buster gating wrong: {_grave_bad[:4]}")
+else:
+    ok(f'{_GRAVE} gates Mid and Late of Ancient Egypt and Dark Ages, '
+       f'and neither opening')
+
+# No OTHER world picked the rule up. Far Future's middle must not want it.
+_ff = C.progressive_item_name("Far Future")
+if "Far Future" in w.enabled_worlds:
+    _ff_open = {l.name for l in
+                state_with(_mw, _pre + ['Sunflower', _ff, _ff, 'Blover'] + _p6
+                           ).reachable_locations()}
+    if 'future9' not in _ff_open:
+        fail('Far Future Mid wants Grave Buster; only two worlds should')
+    else:
+        ok('no other world gained the requirement')
 print(f"progression plants available: {len(PROG_PLANTS)}")
 print("\n" + (f"{failed} FAILURE(S)" if failed else "SPHERE LOGIC OK"))
 sys.exit(1 if failed else 0)

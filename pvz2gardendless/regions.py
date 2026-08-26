@@ -12,11 +12,12 @@ from BaseClasses import Region, ItemClassification
 
 from .constants import (
     ALL_WORLD_REGIONS, EGYPT_SUN_CUT, KEYED_WORLDS, SHOP_REGION,
+    UNREACHABLE_LOCATIONS,
     SIDE_PATH_CHAIN, SIDE_PATH_REGIONS, SIDE_PATH_UNLOCK, SIDE_PATH_WORLD,
     WORLD_REGIONS, WORLD_STRETCHES, stretch_suffixes,
 )
 from .items import PvZ2Item
-from .locations import ALL_REGIONS, PvZ2Location, world_stretches
+from .locations import ALL_LOCATIONS, ALL_REGIONS, PvZ2Location, world_stretches
 
 if TYPE_CHECKING:
     from . import PvZ2GardendlessWorld
@@ -83,18 +84,42 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
         # nothing, and nothing in the game is that small today.
         if len(w_locs) < len(WORLD_STRETCHES) * 2:
             continue
-        suffixes = stretch_suffixes(w)
+        # Only the stretches this slot builds. Under the world_key goal a world
+        # is one stretch long, so building three would leave two empty regions
+        # behind unlocks the pool no longer ships.
+        suffixes = world.kept_stretches(w)
         prev = regions[w]
         for suffix in suffixes[1:]:
             name = w + suffix
             regions[name] = Region(name, player, multiworld)
             prev.connect(regions[name], f"Enter {name}")
             prev = regions[name]
-        parts = world_stretches((l.name for l in w_locs),
-                                EGYPT_SUN_CUT if w == "Ancient Egypt" else None)
+        # Cut from the world's FULL level list, not from w_locs. With a goal
+        # trim w_locs stops at the World Key level, and world_stretches infers
+        # its cuts by finding the Key and Zomboss levels among the names it is
+        # given -- so a trimmed list loses the Zomboss, falls into the Kongfu
+        # fallback and re-splits the surviving opening into thirds, gating those
+        # levels behind unlocks this seed does not ship. Locations that were
+        # trimmed simply never appear in w_names.
+        #
+        # As it happens the two agree TODAY, because the cut lands exactly ON
+        # the goal level, so a trimmed list still ends there and still yields
+        # the same cuts (verified for both goals, every world). Mutating this
+        # back to w_locs is an equivalent mutant and no test catches it. It is
+        # written this way anyway: the agreement is a coincidence of where the
+        # cut falls, not a property, and it would stop holding the moment a
+        # world's goal stopped being the last level its trim keeps.
+        w_names = {l.name for l in w_locs}
+        parts = world_stretches(
+            [l.name for l in ALL_LOCATIONS
+             if l.region in WORLD_REGIONS[w] and l.name not in UNREACHABLE_LOCATIONS],
+            EGYPT_SUN_CUT if w == "Ancient Egypt" else None)
         for idx, part in enumerate(parts):
+            if idx >= len(suffixes):
+                break  # past this slot's goal cut; those locations are not built
             for loc_name in part:
-                stretch_of[loc_name] = regions[w + suffixes[idx]]
+                if loc_name in w_names:
+                    stretch_of[loc_name] = regions[w + suffixes[idx]]
 
     # Shop — the store button does not exist until egypt6 is cleared. That is
     # the game's own rule, in index.js's feature-unlock chain:

@@ -13,8 +13,8 @@ from .constants import (
     GAME_NAME,
     SHOP_CHECK_COMMODITIES, SHOP_COMMODITIES, SHOP_EXTRA_COMMODITIES,
     SHOP_LEGACY_COMMODITIES, SHOP_REGION, SHOP_UNLOCK, SIDE_PATH_REGIONS,
-    SIDE_PATH_WORLD, UNREACHABLE_LOCATIONS, WORLD_REGIONS,
-    shop_location_name,
+    SIDE_PATH_UNLOCK, SIDE_PATH_WORLD, UNREACHABLE_LOCATIONS, WORLD_REGIONS,
+    EGYPT_SUN_CUT, shop_location_name, stretches_kept,
 )
 from .options import GoalType
 
@@ -945,10 +945,42 @@ if _missing_unlocks:
                      f"{_missing_unlocks}")
 
 
+def past_goal_names(goal_type, past_goal: bool = False) -> Set[str]:
+    """World-level names that sit past this seed's goal cut.
+
+    Empty when nothing is trimmed, which is include_levels_past_goal on, the
+    completion goal, or a caller that passes no goal at all.
+
+    Cut per world from that world's FULL level list, never from a filtered one.
+    world_stretches infers each cut by finding the World Key and Zomboss levels
+    among the names it is handed, so feeding it an already-trimmed list would
+    lose the Zomboss, drop into the Kongfu fallback and re-split the surviving
+    opening into thirds -- gating those levels behind unlocks the seed no longer
+    ships. The option filters are safe to apply afterwards because a Danger Room
+    and a shop card have no play order and so never move a cut.
+    """
+    if past_goal or goal_type is None:
+        return set()
+    drop: Set[str] = set()
+    for world_name, world_regions in WORLD_REGIONS.items():
+        kept = stretches_kept(world_name, goal_type, past_goal)
+        names = [l.name for l in ALL_LOCATIONS
+                 if l.region in world_regions and l.name not in UNREACHABLE_LOCATIONS]
+        if not names:
+            continue
+        parts = world_stretches(
+            names, EGYPT_SUN_CUT if world_name == "Ancient Egypt" else None)
+        for part in parts[len(kept):]:
+            drop.update(part)
+    return drop
+
+
 def active_locations(shopsanity: bool,
                      enabled_regions: Set[str],
                      side_paths: bool = True,
-                     danger_rooms: bool = True) -> List[PvZ2LocationData]:
+                     danger_rooms: bool = True,
+                     goal_type=None,
+                     past_goal: bool = False) -> List[PvZ2LocationData]:
     """Locations actually built for a slot with these settings.
 
     Shop and disabled-world locations stay in the static location_name_to_id
@@ -975,8 +1007,18 @@ def active_locations(shopsanity: bool,
     them keeps the old behaviour.
     """
     side_path_regions = set(SIDE_PATH_REGIONS)
+    # Levels past the goal, and with them anything that can only be reached
+    # THROUGH one: a quest revealed at Ancient Egypt 29 and a store card stocked
+    # by Modern Day 14 are both unreachable in a seed that ends at level 8, in
+    # exactly the way a disabled world's content is.
+    dropped = past_goal_names(goal_type, past_goal)
+    dropped_paths = {sp for sp, lvl in SIDE_PATH_UNLOCK.items() if lvl in dropped}
 
     def keep(loc: PvZ2LocationData) -> bool:
+        if loc.name in dropped:
+            return False
+        if loc.region in dropped_paths:
+            return False
         # Never built, under any options: the game has no way to launch these
         # levels, so their checks cannot fire. Not an option, because an
         # unreachable check is not a preference.
@@ -995,6 +1037,8 @@ def active_locations(shopsanity: bool,
         unlock = SHOP_LOC_UNLOCK.get(loc.name)
         if unlock is not None and _REGION_OF[unlock] not in enabled_regions:
             return False
+        if unlock is not None and unlock in dropped:
+            return False  # its level is past the goal, so it never reaches the shelf
         # Checked before the region tests: a Danger Room lives in a world
         # region (or, for the Mixed one, a side path), so it would otherwise be
         # kept by whichever branch owns it.

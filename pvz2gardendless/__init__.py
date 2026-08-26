@@ -17,6 +17,7 @@ import settings
 
 from .constants import (
     ALWAYS_ENABLED_WORLDS, CHEAP_ATTACKER_PLANTS, EGYPT_SUN_CUT, GAME_NAME,
+    JESTER_COUNTER_PLANTS, JESTER_DRAW_COUNT, UNREACHABLE_LOCATIONS, stretches_kept,
     LOGIC_ATTACKER_COUNT, LOGIC_PLANTS, OPTIONAL_WORLDS,
     SELECTABLE_WORLDS, STARTER_PLANTS, SUN_PRODUCER_PLANTS, WORLD_REGIONS,
     WORLD_STRETCHES,
@@ -30,6 +31,7 @@ from .items import (
 )
 from .locations import (
     LOC_NAME_GROUPS, LOC_NAME_TO_ID, MODERN_DAY_VICTORY_LOCS, PvZ2LocationData,
+    ALL_LOCATIONS,
     VICTORY_LOC_NAMES, active_locations as compute_active_locations, goal_locations_for,
     world_stretches,
 )
@@ -215,12 +217,34 @@ class PvZ2GardendlessWorld(World):
     enabled_worlds:  Set[str]
     enabled_regions: Set[str]
 
+    # WHICH WORLDS THIS SLOT BUILT, filled in by generate_early. Declared with a
+    # default for the same reason as the draws below, and this one bit for real:
+    # create_item -> slot_progression_plants -> enabled_worlds, so calling
+    # create_item on a world that has not been through generate_early raised
+    # AttributeError rather than returning an item.
+    #
+    # That is not a generation path -- generate_early always runs first there --
+    # but it IS what a TRACKER does. Universal Tracker resolves items against a
+    # world it rebuilds itself, and an exception in create_item leaves it with
+    # no item to reason about, which shows up as "I am holding the plant and
+    # nothing opened".
+    #
+    # Empty means "no world named a plant", so classification falls back to the
+    # static table. Wrong if it ever happened during real generation, but it
+    # cannot: create_regions and create_items both run after generate_early.
+    enabled_worlds: Set[str] = frozenset()
+
     # This slot's cheap-attacker draw, filled in by generate_early. Declared
     # here so create_item has something to read if it is ever called before
     # generate_early: an empty set would silently leave every attacker useful,
     # which reads as a working seed right up until the Egypt 6 gate cannot be
     # satisfied by anything in the pool.
     logic_attackers: frozenset = frozenset()
+
+    # This slot's Jester counter, one of the 36 that can damage him. Same
+    # reasoning, same hazard: slot_entry_groups reads it through
+    # slot_progression_plants.
+    logic_jesters: frozenset = frozenset()
 
     # What generate_early handed the player. Declared here for the same reason:
     # create_item_pool reads it to keep those plants out of the pool, and an
@@ -268,6 +292,18 @@ class PvZ2GardendlessWorld(World):
         self.logic_attackers = frozenset(
             [starter] + self.random.sample(_rest, LOGIC_ATTACKER_COUNT - 1))
 
+        # This slot's Jester counter, on the same principle: 36 plants can hurt
+        # him, the Dark Ages entrance names JESTER_DRAW_COUNT of them, and only
+        # those are progression. Naming all 36 would promote all 36 and squeeze
+        # a small seed exactly as naming all 46 attackers did.
+        #
+        # Drawn for EVERY slot, not just seeds with Dark Ages: create_item and
+        # the pool floor both consult it, and a world-conditional draw would
+        # take a different number of values off world.random and shift every
+        # later draw in the seed. Cheap, and it keeps the RNG stream stable.
+        self.logic_jesters = frozenset(
+            self.random.sample(JESTER_COUNTER_PLANTS, JESTER_DRAW_COUNT))
+
         # Extra starting plants, when the option asks for them. The cheap
         # attacker above is always the first, so the guarantee it exists for
         # holds at every setting.
@@ -299,11 +335,19 @@ class PvZ2GardendlessWorld(World):
         #
         # The slot's own drawn cheap attackers are NOT excluded: the starter
         # already satisfies that gate, so granting another changes nothing.
+        #
+        # The Jester group is NOT excluded wholesale: 36 plants can hurt him and
+        # only the one this slot drew is named by any rule, so excluding all of
+        # them would take a quarter of the roster out of the draw to protect a
+        # gate that asks for one plant. The drawn one is excluded, like any
+        # other rule-named plant.
+        _no_grant = (LOGIC_PLANTS - set(JESTER_COUNTER_PLANTS)) | self.logic_jesters
         extras = []
         want = self.options.starting_plants.value - 1
         if want:
             pool = [p.name for p in PLANT_ITEMS
-                    if p.name != starter and p.name not in LOGIC_PLANTS]
+                    if p.name != starter
+                    and p.name not in _no_grant]
             extras = self.random.sample(pool, min(want, len(pool)))
 
         # Read by create_item_pool, which drops these from the pool. Sorted so
@@ -400,12 +444,24 @@ class PvZ2GardendlessWorld(World):
         # short and causing "more locations than items" fill failures.
         return self.random.choice(FILLER_POOL).name
 
+    def kept_stretches(self, world_name: str):
+        """The stretch suffixes this slot builds for `world_name`.
+
+        One place, because regions.py, world_gates and the unlock count must
+        agree: a region built for a stretch the pool ships no unlock for is a
+        region nothing can open.
+        """
+        return stretches_kept(world_name, self.options.goal_type.value,
+                              bool(self.options.include_levels_past_goal))
+
     def active_locations(self) -> List[PvZ2LocationData]:
         """Locations actually built for this slot's options."""
         return compute_active_locations(bool(self.options.shopsanity),
                                         self.enabled_regions,
                                         bool(self.options.include_side_paths),
-                                        bool(self.options.include_danger_rooms))
+                                        bool(self.options.include_danger_rooms),
+                                        self.options.goal_type.value,
+                                        bool(self.options.include_levels_past_goal))
 
     def create_items(self) -> None:
         pool = create_item_pool(self, len(self.active_locations()))
@@ -444,18 +500,39 @@ class PvZ2GardendlessWorld(World):
                      if l.region in WORLD_REGIONS[world_name]]
             if len(names) < len(WORLD_STRETCHES) * 2:
                 continue  # too small to cut, same test regions.py makes
+            # Cut from the world's FULL level list and keep only this slot's
+            # stretches -- exactly what regions.py does, and for the same
+            # reason. Cutting from the trimmed `names` instead re-derives the
+            # milestones from whatever survived, which for the two worlds with
+            # no milestone to cut on (Aerial Fortress has neither marker,
+            # Kongfu Temple has no Zomboss) lands the fallback cuts somewhere
+            # else entirely: 7 to 10 of their levels end up in a different
+            # stretch here than regions.py put them in.
+            #
+            # THAT DISAGREEMENT IS AN UNWINNABLE SEED, not a cosmetic one. This
+            # table is what the client refuses level starts on; regions.py is
+            # what fill reasons about. If they differ, fill places progression
+            # in a level the player cannot start. gen_test cross-checks the two
+            # on a TRIMMED seed for precisely this.
             parts = world_stretches(
-                names, EGYPT_SUN_CUT if world_name == "Ancient Egypt" else None)
-            suffixes = stretch_suffixes(world_name)
+                [l.name for l in ALL_LOCATIONS
+                 if l.region in WORLD_REGIONS[world_name]
+                 and l.name not in UNREACHABLE_LOCATIONS],
+                EGYPT_SUN_CUT if world_name == "Ancient Egypt" else None)
+            suffixes = self.kept_stretches(world_name)
+            built = {l.name for l in active}
             # Keyed by how many unlocks the stretch needs, so a stretch that
             # needs none is simply absent. Ancient Egypt's " Early" (egypt6-8)
             # is the case that matters: it is gated on a sun producer, which is
             # logic only, and the client must not refuse to start those levels.
             locked = {}
             for idx, part in enumerate(parts):
+                if idx >= len(suffixes):
+                    break  # past this slot's goal cut; not built, so not gated
                 need = progressive_need(world_name, suffixes[idx])
                 if need:
-                    locked.setdefault(need, []).extend(part)
+                    locked.setdefault(need, []).extend(
+                        [n for n in part if n in built])
             if not locked:
                 continue
             gates[world_name] = {

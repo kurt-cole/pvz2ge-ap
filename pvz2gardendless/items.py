@@ -8,6 +8,7 @@ from typing import Dict, List, TYPE_CHECKING
 from BaseClasses import Item, ItemClassification
 
 from .constants import (
+    slot_entry_groups, UPGRADE_POOL_SHARE, slot_stretch_groups, stretch_suffixes,
     ALL_LOGIC_PLANTS, BASE_ID, CHEAP_ATTACKER_PLANTS, GAME_NAME,
     KEY_NAME_TO_WORLD, KEYED_WORLDS, LOGIC_PLANTS, SUN_PRODUCER_PLANTS,
     WORLD_ENTRY_PLANTS, WORLD_REGIONS,
@@ -202,6 +203,60 @@ for i, (name, cls) in enumerate(_plants):
 PLANT_NAMES = {plant.name for plant in PLANT_ITEMS}
 
 
+def _trim_upgrades(world, upgrades, keep_n):
+    """`keep_n` of `upgrades`, drawn from the slot's own RNG.
+
+    Drawn rather than truncated so a small seed does not always ship the same
+    front slice of UPGRADE_GROUPS, and re-sorted afterwards so the pool is built
+    in a fixed order regardless of how the draw fell.
+    """
+    keep_n = max(0, min(keep_n, len(upgrades)))
+    keep = set(world.random.sample(range(len(upgrades)), keep_n))
+    return [u for i, u in enumerate(upgrades) if i in keep]
+
+
+def _pool_floor_groups(world):
+    """The plant groups a rule this slot BUILT names, one plant of each needed.
+
+    Shared by the upgrade trim and the progression-plant trim so the two cannot
+    disagree about how much room logic actually requires.
+    """
+    # No attacker group: no rule names one, so the floor has nothing to protect
+    # for them. The starter covers the gameplay side and is precollected.
+    groups = [list(SUN_PRODUCER_PLANTS)]
+    for w in sorted(world.enabled_worlds):
+        # Narrowed, same as the rule: the floor must protect the ONE Jester
+        # counter this slot named, not any of the 36 that can hurt him.
+        groups.extend(slot_entry_groups(world, w))
+        # Per-stretch requirements too, or a small seed can trim away the only
+        # plant that opens the back half of a world it built.
+        for suffix in stretch_suffixes(w):
+            groups.extend(slot_stretch_groups(world, w, suffix))
+    return groups
+
+
+def _pool_floor_names(world) -> set:
+    """One plant per floor group that is not already granted.
+
+    A granted plant needs no slot: the rule naming it is already satisfied.
+    """
+    granted = set(getattr(world, "starting_plants", ()))
+    names = set()
+    for group in _pool_floor_groups(world):
+        # A group with a granted member needs NOTHING reserved: the rule naming
+        # it is already satisfied by a plant the player holds before the seed
+        # starts. The cheap-attacker group is always in this case, because the
+        # starter is drawn from it and precollected in every seed -- which is
+        # why Ancient Egypt alone needs exactly one progression item, a sun
+        # producer, and not two.
+        if granted & set(group):
+            continue
+        eligible = sorted(n for n in group if n not in granted)
+        if eligible:
+            names.add(eligible[0])
+    return names
+
+
 def slot_progression_plants(world) -> set:
     """Plant names that are progression FOR THIS SLOT.
 
@@ -221,10 +276,19 @@ def slot_progression_plants(world) -> set:
         Egypt-only run
       - this slot's own cheap-attacker draw
     """
-    plants = set(SUN_PRODUCER_PLANTS) | set(world.logic_attackers)
+    # NOT the cheap attackers. Nothing has named them since 2026-08-25, when the
+    # attacker half of Ancient Egypt's egypt6 checkpoint was dropped for being
+    # vacuous -- the precollected starter always satisfied it. Promoting a plant
+    # no rule names costs a progression slot for nothing, which in a small seed
+    # is a slot taken from the useful plants, the filler and the traps.
+    plants = set(SUN_PRODUCER_PLANTS)
     for w in world.enabled_worlds:
-        for group in WORLD_ENTRY_PLANTS.get(w, []):
+        for group in slot_entry_groups(world, w):
             plants.update(group)
+        # ...and whatever this slot's BUILT stretches of that world ask for.
+        for suffix in stretch_suffixes(w):
+            for group in slot_stretch_groups(world, w, suffix):
+                plants.update(group)
     return plants
 
 
@@ -582,7 +646,12 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
     # game as well as in logic, so they are the least negotiable thing in the
     # pool.
     for w in sorted(world.enabled_worlds):
-        for _ in range(progressive_count(w)):
+        # Sized to the stretches this slot BUILDS. Under the world_key goal a
+        # world is one stretch long, so its second and third unlocks would gate
+        # nothing and ship as dead items -- 24 of them in a 12-world seed.
+        for _ in range(progressive_count(
+                w, world.options.goal_type.value,
+                bool(world.options.include_levels_past_goal))):
             pool.append(world.create_item(progressive_item_name(w)))
 
     # Permanent upgrades, when the option has the game withhold them. With it
@@ -595,9 +664,38 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
         # One copy per level the group covers: three Progressive Sun Shovels,
         # one Sky Shield. Sized off the codename list so adding a level to a
         # group is a constants.py edit alone.
-        for name, codenames in UPGRADE_GROUPS:
-            for _ in codenames:
-                pool.append(world.create_item(name))
+        upgrades = [name for name, codenames in UPGRADE_GROUPS for _ in codenames]
+
+        # THE PROPORTIONAL SHARE. Upgrades gate nothing, so a seed too small to
+        # carry all 14 should carry a share of them and spend the rest on
+        # plants. 20% of a full seed is 106, far past the 14 that exist, so this
+        # is a no-op everywhere except the small seeds it exists for.
+        share = pool_size * UPGRADE_POOL_SHARE // 100
+        if share < len(upgrades):
+            upgrades = _trim_upgrades(world, upgrades, share)
+
+        # THE UPGRADES GIVE BEFORE THE PLANTS DO. No access rule anywhere reads
+        # an upgrade item -- they raise starting sun, plant food capacity, seed
+        # slots and mowers, and gate nothing -- so an upgrade that does not fit
+        # costs the player convenience, where a progression plant that does not
+        # fit costs the seed its logic.
+        #
+        # This only bites where the seed is smaller than the mandatory block,
+        # which the goal trim made reachable: Ancient Egypt alone under the
+        # world_key goal is the tutorial plus egypt1-8, twelve locations against
+        # fourteen upgrades. Before this it failed to generate outright.
+        #
+        # Reserve is the plant floor -- one plant per group some rule this seed
+        # built names -- computed the same way as the trim further down, plus
+        # whatever is already in the pool. Egypt-only under world_key needs
+        # exactly one: a sun producer, since the egypt6 checkpoint's other half
+        # is a cheap attacker and the starter is always one, precollected.
+        reserve = len(pool) + len(_pool_floor_names(world))
+        room = max(0, pool_size - reserve)
+        if room < len(upgrades):
+            upgrades = _trim_upgrades(world, upgrades, room)
+        for name in upgrades:
+            pool.append(world.create_item(name))
 
     # The guaranteed gems, before the plants for the same reason the upgrades
     # are: not negotiable, and the trim below has to see the room they take.
@@ -654,12 +752,15 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
         # The attacker group is the slot's OWN draw, not all 46: those are the
         # only names rules.py put in the Egypt 6 rule, so keeping one of the
         # other 36 would not satisfy it.
-        groups = [SUN_PRODUCER_PLANTS, list(world.logic_attackers)]
-        for w in sorted(world.enabled_worlds):
-            groups.extend(WORLD_ENTRY_PLANTS.get(w, []))
+        groups = _pool_floor_groups(world)
         prog_names = {p.name for p in prog_plants}
         floor_names = set()
         for group in groups:
+            # Already satisfied by a granted plant: reserve nothing. See
+            # _pool_floor_names, which has to agree with this exactly or the
+            # upgrade trim reserves a different amount than the plant trim uses.
+            if _granted & set(group):
+                continue
             eligible = sorted(n for n in group if n in prog_names)
             if eligible:
                 floor_names.add(world.random.choice(eligible))

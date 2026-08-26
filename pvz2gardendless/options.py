@@ -315,6 +315,38 @@ class EarlyWorldKeys(Toggle):
     display_name = "Early World Keys"
 
 
+class IncludeLevelsPastGoal(Toggle):
+    """
+    Keep every level in the seed, even the ones past the goal.
+
+    Off (the default) trims each world at whatever Goal Type measures: with the
+    world_key goal a world ends at its World Key level, with zomboss it ends at
+    its Zomboss, and with completion nothing is trimmed because the goal is the
+    last level anyway. So a world_key run is a run through twelve short worlds
+    rather than twelve whole ones.
+
+    The cut lands on the world's own milestone, which is the same place the
+    progressive unlocks are cut, so it takes whole stretches: a trimmed world
+    ships only the unlocks it can still use. Under world_key that is one per
+    world and none at all for Ancient Egypt, rather than three and two.
+
+    Side paths, Danger Rooms and store cards go with the levels that reveal
+    them. A quest opening at Ancient Egypt 29 cannot be reached in a seed that
+    ends at Ancient Egypt 8, so it is dropped the same way a disabled world's
+    content is.
+
+    Two worlds have no milestone to cut on -- Kongfu Temple has no Zomboss
+    level and Aerial Fortress has neither -- so under those goals they are cut
+    at the fallback the rest of the logic already uses (the midpoint of what is
+    left, and equal thirds). Neither can satisfy those goals anyway.
+
+    On restores the whole game, which is how every seed behaved before this
+    option existed. Turn it on if you want the trimmed worlds' later levels to
+    still hold checks.
+    """
+    display_name = "Include Levels Past Goal"
+
+
 class TrapPercentage(Range):
     """
     Percentage of the filler item pool (coins and gems) to replace with traps.
@@ -429,6 +461,7 @@ class PvZ2Options(PerGameCommonOptions):
     randomize_conveyor_plants: RandomizeConveyorPlants
     shuffle_zombies:  ShuffleZombies
     early_world_keys: EarlyWorldKeys
+    include_levels_past_goal: IncludeLevelsPastGoal
     trap_percentage:  TrapPercentage
     trap_weight_lawn_mower:       TrapWeightLawnMower
     trap_weight_costume_shuffle:  TrapWeightCostumeShuffle
@@ -438,7 +471,8 @@ class PvZ2Options(PerGameCommonOptions):
 OPTION_GROUPS = [
     OptionGroup("Goal Settings",[GoalType, WorldsRequired, EnabledWorlds]),
     OptionGroup("AP Settings", [DeathLink]),
-    OptionGroup("Level Access",[WorldCount, IncludeSidePaths]),
+    OptionGroup("Level Access",[WorldCount, IncludeSidePaths,
+                               IncludeLevelsPastGoal]),
     OptionGroup("Extra Locations",[Shopsanity]),
     OptionGroup("Traps",[TrapPercentage, TrapWeightLawnMower,
                          TrapWeightCostumeShuffle, TrapWeightCoins,

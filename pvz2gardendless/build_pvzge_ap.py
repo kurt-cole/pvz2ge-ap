@@ -3035,6 +3035,10 @@ window.electron = electron;
         if(pkt.slot_data){
           st.goalLocs  = pkt.slot_data.goal_locations  || [];
           st.worldsReq = pkt.slot_data.worlds_required || 7;
+          // What completing a world means, for the overlay tracker. A seed
+          // rolled before this was sent reads as the default rather than as
+          // blank, which is what the goal tables themselves default to.
+          st.goalType  = pkt.slot_data.goal_type || 'world_key';
           st.shopsanity = !!pkt.slot_data.shopsanity;
           st.victoryLoc = pkt.slot_data.modern_day_victory || 'modern_zomboss_01_egypt';
           skipTutorial = !!pkt.slot_data.skip_tutorial;
@@ -3912,7 +3916,7 @@ window.electron = electron;
     const goalLocs  = st.goalLocs || [];
     const worldsReq = st.worldsReq || 7;
     if(!goalLocs.length) return false; // slot_data not in yet; don't open early
-    const completed = goalLocs.filter(l=>isChecked(l)).length;
+    const completed = goalLocs.filter(goalPlayed).length;
     return completed >= worldsReq;
   }
 
@@ -3970,15 +3974,38 @@ window.electron = electron;
   // How many of this seed's worlds are complete, and whether that is the win.
   // One goal location per world; which level it is comes from the goal_type
   // option, and generation has already dropped the worlds this seed left out.
+  // A goal world counts only once its goal level has actually been BEATEN on
+  // this save. isChecked() is not enough: a location can go checked without
+  // ever being played -- !collect at the end of a run, a release, or a co-op
+  // partner sending it -- and the run would then claim the goal for levels
+  // nobody sat down and won. isFinished() reads the game's own levelProps, so
+  // it answers "did you play this", which is what the goal is meant to mean.
+  //
+  // A level with no LOC_LEVELS entry falls back to isChecked. That cannot
+  // happen for a goal location today (every one is an ordinary level), and
+  // failing closed there would strand the run instead of just being lax.
+  function goalPlayed(loc){
+    const levelId = LOC_LEVELS[loc];
+    return levelId ? isFinished(levelId) : isChecked(loc);
+  }
+
+  // {done, need} for the overlay tracker as well as the win check, so the
+  // number a player reads and the number that ends the run are the same one.
+  function goalProgress(){
+    const goalLocs  = st.goalLocs || [];
+    const worldsReq = st.worldsReq || 0;
+    let done = 0;
+    for(const l of goalLocs) if(goalPlayed(l)) done++;
+    return { done: done, need: worldsReq, total: goalLocs.length };
+  }
+
   function goalMet(){
     const goalLocs  = st.goalLocs || [];
     const worldsReq = st.worldsReq || 0;
     // Nothing to compare against until slot_data lands. Claiming the goal off
     // a default would end someone else's run for them.
     if(!goalLocs.length || !worldsReq) return false;
-    let done = 0;
-    for(const l of goalLocs) if(isChecked(l)) done++;
-    return done >= worldsReq;
+    return goalProgress().done >= worldsReq;
   }
 
   // Sends the goal at most once a session. Called from fireCheck when a check
@@ -4019,6 +4046,9 @@ window.electron = electron;
       // covers both goal models and drops a string compare against every
       // LOC_LEVELS entry.
       maybeSendGoal();
+      // Tracker refresh rides the same tick: beating a goal level is the
+      // only thing that moves it, and that is what the poll is watching for.
+      updateGoalTracker();
     }
     rebuildAPSave();
     // The level-start hook, retried until it takes: KeyListener.goToLevel is
@@ -4066,7 +4096,7 @@ window.electron = electron;
   }
 
   // ── UI ────────────────────────────────────────────────────────────────────
-  let statusEl=null, logEl=null, panel=null, logs=[];
+  let statusEl=null, logEl=null, goalEl=null, panel=null, logs=[];
 
   function buildUI(){
     const s=document.createElement('style');
@@ -4094,6 +4124,11 @@ window.electron = electron;
       #ap-reset{background:#1e1b4b!important;color:#a5b4fc!important;border-color:#6366f1!important;margin-left:6px}
       #ap-reset:hover{background:#312e81!important}
       #ap-status{margin-top:10px;font-weight:bold;font-size:12px}
+      #ap-goal{margin-top:8px;padding:6px 8px;background:#020617;border-radius:5px;
+        border:1px solid #1e293b;font-size:12px;color:#e2e8f0;display:none}
+      #ap-goal b{color:#6ee7b7;font-size:13px}
+      #ap-goal .ap-goal-sub{display:block;margin-top:2px;color:#64748b;font-size:10px}
+      #ap-goal.ap-goal-done{border-color:#059669;background:#052e1a}
       #ap-log{margin-top:8px;max-height:100px;overflow-y:auto;background:#020617;
         border-radius:5px;padding:6px;font-size:10px;color:#64748b;line-height:1.5}
       #ap-toast{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);
@@ -4116,10 +4151,12 @@ window.electron = electron;
       <label class=ap-check><input id=ap-dl type=checkbox>DeathLink</label>
       <button id=ap-go>Connect</button><button id=ap-disc>Disconnect</button><button id=ap-reset>Reset</button>
       <div id=ap-status style="color:#64748b">Not connected</div>
+      <div id=ap-goal></div>
       <div id=ap-log></div>`;
     document.body.appendChild(panel);
 
     statusEl=document.getElementById('ap-status');
+    goalEl=document.getElementById('ap-goal');
     logEl=document.getElementById('ap-log');
     document.getElementById('ap-srv').value=cfg.server||'';
     document.getElementById('ap-slt').value=cfg.slot||'';
@@ -4179,6 +4216,32 @@ window.electron = electron;
   // creation path never reached its reload, and the catch in
   // findOrCreateAPSlot() threw again before it could return -1.
   function log(msg){ pushLog(msg); }
+
+  // What "completing a world" means, for the tracker label. Keyed by the
+  // goal_type slot_data sends, which is GoalType.current_key -- a STRING, so
+  // the option renumbering on 2026-08-24 cannot reach this.
+  const GOAL_LABEL = {
+    world_key:  'World Keys',
+    zomboss:    'Zomboss Fights',
+    completion: 'Worlds Cleared',
+  };
+
+  // "3/7 World Keys" in the AP panel. Counts the same goalProgress() the win
+  // check uses, so what a player reads is exactly what ends the run -- and it
+  // counts levels PLAYED, not locations checked, so collecting a goal check
+  // from elsewhere does not move it.
+  function updateGoalTracker(){
+    if(!goalEl) return;
+    const g = goalProgress();
+    if(!g.total || !g.need){ goalEl.style.display='none'; return; }
+    const label = GOAL_LABEL[st.goalType] || GOAL_LABEL.world_key;
+    goalEl.style.display='block';
+    goalEl.className = g.done >= g.need ? 'ap-goal-done' : '';
+    goalEl.innerHTML = '<b>' + g.done + '/' + g.need + '</b> ' + label +
+      '<span class="ap-goal-sub">' +
+      (g.done >= g.need ? 'goal complete — ' : '') +
+      g.total + ' available</span>';
+  }
 
   function toast(msg,color){
     pushLog(msg);

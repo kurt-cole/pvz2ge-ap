@@ -37,6 +37,13 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          "connect_fn.js:findOrCreateAPSlot", "connect_fn.js:svCfg",
          "connect_fn.js:setTimeout", "connect_fn.js:reset",
          "connect_fn.js:runNextTimer",
+         # goal_fn.js harness. isFinished IS a real client function, so it is
+         # qualified: copying it would drag in the tutorial chain and the whole
+         # save shape, where all goalPlayed() needs is "has this level been
+         # beaten". play() is its counterpart to check() -- the two being
+         # separable is the entire point of counting levels played rather than
+         # locations checked.
+         "goal_fn.js:isFinished", "goal_fn.js:play",
          # store_fn.js harness: stand-ins for the client's socket and module
          # scope, plus applyLocationInfo, which mirrors a switch arm rather
          # than a function and so has nothing to match verbatim.

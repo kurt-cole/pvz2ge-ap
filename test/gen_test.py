@@ -17,7 +17,7 @@ from pvz2gardendless.options import (
     IncludeDangerRooms,
     StartingPlants,
     TrapWeightLawnMower, TrapWeightCostumeShuffle, TrapWeightCoins,
-    TrapWeightGems,
+    TrapWeightGems, IncludeLevelsPastGoal,
 )
 from apstub import DeathLink
 
@@ -47,6 +47,9 @@ class Opts:
             kw.get("randomize_conveyor_plants", RandomizeConveyorPlants.default))
         self.shuffle_zombies = ShuffleZombies(kw.get("shuffle_zombies", 0))
         self.early_world_keys = EarlyWorldKeys(kw.get("early_world_keys", 0))
+        self.include_levels_past_goal = IncludeLevelsPastGoal(
+            kw.get("include_levels_past_goal",
+                   IncludeLevelsPastGoal.default))
         self.trap_percentage = TrapPercentage(kw.get("trap_percentage", 5))
         for _tw, _cls in (("trap_weight_lawn_mower", TrapWeightLawnMower),
                           ("trap_weight_costume_shuffle", TrapWeightCostumeShuffle),
@@ -59,7 +62,12 @@ class Opts:
 # The default seed is ELEVEN worlds (Kongfu Temple and Aerial Fortress are out
 # by default), so a test that means "every world" has to say so. Both keys
 # are needed: world_count is a hard cap and enabled_worlds is what fills it.
-ALL_WORLDS = {"world_count": 13, "enabled_worlds": list(C.SELECTABLE_WORLDS)}
+# "the whole game": every world AND every level. include_levels_past_goal is
+# part of it as of 2026-08-25 -- the default goal trims each world at its World
+# Key level, so a test that walks all 31 side paths or all 34 shop cards has to
+# ask for the untrimmed game explicitly.
+_EVERY_WORLD = {"world_count": 13, "enabled_worlds": list(C.SELECTABLE_WORLDS)}
+ALL_WORLDS = dict(_EVERY_WORLD, include_levels_past_goal=1)
 
 
 def run(label, **kw):
@@ -102,15 +110,27 @@ def run(label, **kw):
     # wrong number cannot be hidden by another shipping one too many.
     from collections import Counter
     _by_world = Counter(u[len("Progressive "):] for u in unlocks)
-    assert set(_by_world) == set(w.enabled_worlds), (
-        f"unlocks for worlds not in the seed: {sorted(set(_by_world) - w.enabled_worlds)}, "
-        f"missing: {sorted(w.enabled_worlds - set(_by_world))}")
+    _gt = w.options.goal_type.value
+    _pg = bool(w.options.include_levels_past_goal)
+    # A world whose count is 0 ships nothing and so does not appear at all.
+    # Ancient Egypt under the world_key goal is exactly that: its opening and
+    # its egypt6 checkpoint both need no unlock, so a seed ending at egypt8
+    # ships none for it.
+    _want_worlds = {_wn for _wn in w.enabled_worlds
+                    if C.progressive_count(_wn, _gt, _pg)}
+    assert set(_by_world) == _want_worlds, (
+        f"unlocks for worlds not in the seed: {sorted(set(_by_world) - _want_worlds)}, "
+        f"missing: {sorted(_want_worlds - set(_by_world))}")
     for _wn, _n in _by_world.items():
-        assert _n == C.progressive_count(_wn), \
-            f"{_wn} ships {_n} unlocks, expected {C.progressive_count(_wn)}"
-    assert _by_world["Ancient Egypt"] == 2, "Ancient Egypt needs no unlock to enter"
-    if "Wild West" in w.enabled_worlds:
-        assert _by_world["Wild West"] == 3, "a keyed world ships three unlocks"
+        assert _n == C.progressive_count(_wn, _gt, _pg), (
+            f"{_wn} ships {_n} unlocks, "
+            f"expected {C.progressive_count(_wn, _gt, _pg)}")
+    # The untrimmed shape, pinned as literals: two for Ancient Egypt because it
+    # needs none to enter, three for a keyed world.
+    if _pg or _gt == C.GOAL_COMPLETION:
+        assert _by_world["Ancient Egypt"] == 2, "Ancient Egypt needs no unlock to enter"
+        if "Wild West" in w.enabled_worlds:
+            assert _by_world["Wild West"] == 3, "a keyed world ships three unlocks"
     # goal locations all exist and are reachable-by-name
     for name in sd["goal_locations"]:
         mw.get_location(name, 1)
@@ -212,9 +232,18 @@ def run(label, **kw):
     from pvz2gardendless.constants import UPGRADE_GROUPS, UPGRADE_ITEM_COUNT
     upnames = {u.name for u in UPGRADE_ITEMS}
     ups = [i.name for i in mw.itempool if i.name in upnames]
+    # All 14 whenever they fit. A seed smaller than its mandatory block trims
+    # them -- upgrades gate nothing, so they give before a progression plant
+    # does -- which the goal trim made reachable: Egypt alone under the
+    # world_key goal is 12 locations against 14 upgrades.
     want = UPGRADE_ITEM_COUNT if w.options.shuffle_upgrades else 0
-    assert len(ups) == want, f"upgrade copies in pool {len(ups)} != {want}"
-    if w.options.shuffle_upgrades:
+    if want and len(ups) < want:
+        assert len(mw.itempool) == len(w.active_locations()),             "upgrades were trimmed in a seed that was not full"
+        assert len(ups) == len(mw.itempool) - sum(
+            1 for i in mw.itempool if i.name not in upnames), None
+    else:
+        assert len(ups) == want, f"upgrade copies in pool {len(ups)} != {want}"
+    if w.options.shuffle_upgrades and len(ups) == want:
         got = collections.Counter(ups)
         for name, cns in UPGRADE_GROUPS:
             assert got[name] == len(cns), f"{name}: {got[name]} copies != {len(cns)}"
@@ -669,8 +698,11 @@ for _c, _lvl in C.SHOP_UNLOCK.items():
 # bought, so it must not be built. Egypt-only is the sharp case: the game sells
 # 39 cards, but only the ten ungated ones plus the two Egypt ones can ever
 # appear. Counted rather than named, so adding a card does not break the test.
+# include_levels_past_goal, because this is about which WORLD a card belongs to.
+# The default goal also trims Egypt at egypt8, which drops the two cards stocked
+# later in the world -- correct, and tested separately below.
 _e1w, _ = run("shop cards drop with their world", world_count=1, shopsanity=1,
-              worlds_required=11)
+              worlds_required=11, include_levels_past_goal=1)
 _e1shop = {l.name for l in _e1w.active_locations() if l.is_shop}
 _egypt_cards = {C.shop_location_name(_c) for _c, _l in C.SHOP_UNLOCK.items()
                 if _lnames[_l] in C.WORLD_REGIONS["Ancient Egypt"]}
@@ -807,7 +839,11 @@ assert {COIN_TRAP, GEM_TRAP} <= {t.name for t in TRAP_POOL},     "currency traps
 assert not ({COIN_TRAP, GEM_TRAP} & {f.name for f in FILLER_POOL}),     "a currency trap leaked into the filler pool"
 
 # A seed with traps on actually contains them, and one with traps off does not.
-_wt, _ = run("currency traps at 100%", trap_percentage=100)
+# ALL_WORLDS: traps come out of filler, and filler is what is left after the
+# plants. The default goal trims each world at its World Key level, which
+# leaves a seed too small to have any -- the same reason a 3-world seed has
+# never had traps. See the pool-block sizing note.
+_wt, _ = run("currency traps at 100%", trap_percentage=100, **ALL_WORLDS)
 _names = [i.name for i in _wt.multiworld.itempool]
 assert COIN_TRAP in _names and GEM_TRAP in _names, "traps on: no currency traps dealt"
 _wn, _ = run("traps off", trap_percentage=0)
@@ -900,7 +936,11 @@ for _r in _mw.regions:
                 f"Modern Day location {_loc.name} accepts a world unlock"
 
 # The rule must not touch anything that is not a key.
-_plant = next(i for i in _mw.itempool if i.name == "Peashooter")
+# Any plant this seed actually shipped. Not a named one: since the attacker
+# half of the egypt6 gate went, plants are ordinary useful items and a
+# small seed can trim any particular one away.
+_plant_names = {p.name for p in PLANT_ITEMS}
+_plant = next(i for i in _mw.itempool if i.name in _plant_names)
 _blocked = [l for r in _mw.regions for l in r.locations if not l.item_rule(_plant)]
 assert not _blocked, f"non-key items were forbidden too: {_blocked[:3]}"
 
@@ -1260,17 +1300,30 @@ for _label, _kw in (("1 world", dict(world_count=1)),
         for _grp in C.WORLD_ENTRY_PLANTS.get(_ew, []):
             _floor_groups.append((_grp, f"{_ew} entry plants"))
     for _group, _gname in _floor_groups:
+        # A group with a granted member is already satisfied and reserves
+        # nothing, so the pool need not carry one. The cheap attackers are
+        # always in that case: the starter is drawn from them and precollected.
+        if set(_group) & set(_w.starting_plants):
+            continue
         assert set(_group) & _nameset, f"{_label}: no {_gname} left in the pool"
 
-    # Unlocks and upgrades are never trimmed.
-    _want_unlocks = sum(C.progressive_count(_x) for _x in _w.enabled_worlds)
+    # Unlocks are never trimmed -- but the COUNT is sized to the stretches this
+    # slot builds, so a goal trim legitimately ships fewer.
+    _gt2 = _w.options.goal_type.value
+    _pg2 = bool(_w.options.include_levels_past_goal)
+    _want_unlocks = sum(C.progressive_count(_x, _gt2, _pg2)
+                        for _x in _w.enabled_worlds)
     _got_unlocks = sum(1 for n in _names if n in _unlock_names)
-    assert _got_unlocks == _want_unlocks, \
-        f"{_label}: {_got_unlocks} unlocks, expected {_want_unlocks}"
+    assert _got_unlocks == _want_unlocks, (
+        f"{_label}: {_got_unlocks} unlocks, expected {_want_unlocks}")
+    # Upgrades give ONLY when the seed cannot hold them, which needs the pool to
+    # be completely full -- they gate nothing, so they yield before a plant does.
     if _w.options.shuffle_upgrades:
         _ups = {u.name for u in W.items.UPGRADE_ITEMS}
-        assert sum(1 for n in _names if n in _ups) == C.UPGRADE_ITEM_COUNT, \
-            f"{_label}: upgrades were trimmed"
+        _n_ups = sum(1 for n in _names if n in _ups)
+        if _n_ups != C.UPGRADE_ITEM_COUNT:
+            assert len(_names) == len(_w.active_locations()), (
+                f"{_label}: upgrades trimmed in a seed with room to spare")
 
     # A seed with room keeps every progression plant; only a seed short of
     # room may drop any, and then only after every useful plant has gone.
@@ -1343,19 +1396,23 @@ assert set(C.CHEAP_ATTACKER_PLANTS) & _names_E, "squeezed pool has no attacker"
 # WORLD_ENTRY_PLANTS wholesale.
 _wEgypt, _ = run("entry-plant floor: Egypt only", world_count=1)
 assert _wEgypt.enabled_worlds == {"Ancient Egypt"}, _wEgypt.enabled_worlds
-_egypt_room = (C.progressive_count("Ancient Egypt")
-               + (C.UPGRADE_ITEM_COUNT if _wEgypt.options.shuffle_upgrades else 0)
-               + (GEM_GRANT_COUNT if _wEgypt.options.shopsanity else 0))
-# Squeezed to EXACTLY the floor -- one sun producer and one cheap attacker --
-# so the kept plants ARE the floor. With any slack the trim tops it up at
-# random and a plant appearing proves nothing about what was forced. An earlier
-# version left four spare slots and failed the day the pool shrank enough for
-# the random top-up to reach Lily Pad.
-_egypt_pool = {i.name for i in W.items.create_item_pool(_wEgypt, _egypt_room + 2)}
+# Squeezed to ONE slot, which is the whole floor. At that size the mandatory
+# blocks are empty -- Egypt under the world_key goal ships no unlock, shopsanity
+# is off so there is no gem grant, and the upgrades take 20% of one location,
+# which is none -- so whatever plant survives IS what the floor forced.
+#
+# ONE plant, not two, since 2026-08-25. Egypt's egypt6 checkpoint used to want a
+# sun producer AND a cheap attacker, but the attacker half was dropped: the
+# precollected starter always satisfied it, and naming it made trackers demand
+# an attacker the seed need not contain.
+_egypt_pool = {i.name for i in W.items.create_item_pool(_wEgypt, 1)}
 _egypt_plants = _egypt_pool & {p.name for p in W.items.PLANT_ITEMS}
-assert len(_egypt_plants) == 2, f"floor is {sorted(_egypt_plants)}, expected 2 plants"
-assert set(C.SUN_PRODUCER_PLANTS) & _egypt_plants, "floor has no sun producer"
-assert set(C.CHEAP_ATTACKER_PLANTS) & _egypt_plants, "floor has no cheap attacker"
+assert len(_egypt_plants) == 1, f"floor is {sorted(_egypt_plants)}, expected 1 plant"
+assert set(C.SUN_PRODUCER_PLANTS) & _egypt_plants, \
+    f"the one forced plant is not a sun producer: {sorted(_egypt_plants)}"
+# The attacker half is covered by the precollected starter, not by the pool.
+assert set(C.CHEAP_ATTACKER_PLANTS) & set(_wEgypt.starting_plants), \
+    "the starter is not a cheap attacker, so a run could begin with nothing placeable"
 _forced = {"Lily Pad", "Blover", "Perfume-shroom"} & _egypt_pool
 assert not _forced, \
     f"an Egypt-only seed was forced to carry entry plants for absent worlds: {sorted(_forced)}"
@@ -1417,40 +1474,75 @@ for _label, _kw in (("default", {}), ("Egypt only", dict(world_count=1)),
         f"{_label}: {len(_leaked)} undrawn attackers are still progression: {sorted(_leaked)[:5]}"
     _draws[_label] = _drawn
 
-# THE RULE NAMES THE DRAW. Without this the classification could be right and
-# the gate still ask for all 47 -- which would work, and silently make the 37
-# useful attackers satisfy a gate AP cannot see them satisfying.
-_wR, _ = run("attackers: rule membership", world_count=1)
-_drawn = set(_wR.logic_attackers)
+from apstub import ItemClassification as _IC_j
+
+# NO ATTACKER IS REQUIRED AT ALL. Dropped 2026-08-25.
+#
+# The attacker half of the egypt6 checkpoint was provably vacuous: the starter
+# is drawn from STARTER_PLANTS (a subset of the cheap attackers), forced into
+# the slot's drawn ten, and PRECOLLECTED -- so has_any(attackers) was true from
+# sphere 0 in every seed ever generated.
+#
+# It was also actively harmful, which is why it went rather than staying as
+# harmless decoration. A precollected item is invisible to anything modelling
+# only RECEIVED items, so Universal Tracker read the half as unmet and named an
+# attacker to go find -- and in 11 of 40 measured Egypt-only world_key seeds the
+# pool contains no cheap attacker at all, so it named an item the seed could not
+# contain and never entered GO mode.
+_wR, _ = run("attackers: no longer required", world_count=1)
 _pre = [i.name for i in _wR.multiworld.precollected]
 _entrance = _wR.multiworld.get_entrance("Enter Ancient Egypt Early", _wR.player)
 _sun = C.SUN_PRODUCER_PLANTS[0]
-# Probed WITHOUT the precollected starter, which would satisfy the gate on its
-# own and make every probe pass.
+# Everything precollected EXCEPT the starter attacker, so the probe cannot pass
+# for the old reason.
 _bare = [n for n in _pre if n not in set(C.CHEAP_ATTACKER_PLANTS)]
-
 
 from apstub import CollectionState as _CS
 
 
 def _opens(extra):
     _st = _CS(_wR.multiworld, W.items.ITEM_NAME_GROUPS)
-    for _n in _bare + [_sun] + extra:
+    for _n in _bare + extra:
         _st.collect(_n)
     _st.sweep()
     return _entrance.access_rule(_st)
 
 
-assert not _opens([]), "egypt6-8 opens on a sun producer with no attacker at all"
-_dead = sorted(n for n in _drawn if not _opens([n]))
-assert not _dead, f"drawn attackers that do not satisfy the egypt6 gate: {_dead[:5]}"
-# The probe seed is Egypt-only, so no world entry plants are in play and every
-# undrawn attacker is genuinely outside the rule. Asserted rather than assumed.
-assert not any(C.WORLD_ENTRY_PLANTS.get(_w2) for _w2 in _wR.enabled_worlds), \
-    "the rule-membership probe picked up a world with entry plants; it must be Egypt-only"
-_extra = sorted(n for n in set(C.CHEAP_ATTACKER_PLANTS) - _drawn if _opens([n]))
-assert not _extra, \
-    f"undrawn attackers satisfy the egypt6 gate, so the rule still names all 47: {_extra[:5]}"
+assert _opens([_sun]), \
+    "egypt6-8 does not open on a sun producer alone, with no attacker held"
+# ...and the sun producer is still genuinely required, or the gate is gone
+# entirely rather than halved.
+assert not _opens([]), "egypt6-8 opens with nothing held; the sun rule is gone"
+# No attacker opens it on its own, drawn or otherwise -- the gate is one
+# requirement now, not two.
+_still = sorted(n for n in C.CHEAP_ATTACKER_PLANTS if _opens([n]))
+assert not _still, \
+    f"{len(_still)} attacker(s) still open egypt6-8 without a sun producer: {_still[:5]}"
+
+# THE CLASSIFICATION FOLLOWS. Nothing names the attackers, so none of them may
+# be progression -- except where another rule names one for its own reason.
+# Lava Guava is the live example: it is a cheap attacker AND a Frostbite Caves
+# warming plant, so it stays progression in any seed with that world.
+for _label2, _kw2 in (("Egypt only", dict(world_count=1)),
+                      ("13 worlds", ALL_WORLDS)):
+    _wC, _ = run(f"attackers not progression: {_label2}", **_kw2)
+    _entry_here2 = {n for _w3 in _wC.enabled_worlds
+                    for _g3 in C.WORLD_ENTRY_PLANTS.get(_w3, []) for n in _g3}
+    _stretch_here = {n for _w3 in _wC.enabled_worlds
+                     for _sfx in C.stretch_suffixes(_w3)
+                     for _g3 in C.slot_stretch_groups(_wC, _w3, _sfx) for n in _g3}
+    _exempt = (_entry_here2 | _stretch_here | set(C.SUN_PRODUCER_PLANTS)
+               | set(_wC.logic_jesters))
+    _prog_atk = [n for n in C.CHEAP_ATTACKER_PLANTS if n not in _exempt
+                 and _wC.create_item(n).classification == _IC_j.progression]
+    assert not _prog_atk, (
+        f"{_label2}: {len(_prog_atk)} cheap attacker(s) are still progression "
+        f"though no rule names them: {_prog_atk[:5]}")
+
+# The draw itself is KEPT, unread, on purpose: removing it would consume a
+# different number of values from the slot RNG and shift every later draw,
+# changing the starter and the Jester counter for a given seed.
+assert len(_wR.logic_attackers) == 10, sorted(_wR.logic_attackers)
 print(f"cheap attackers: 10 of {len(C.CHEAP_ATTACKER_PLANTS)} drawn per slot, "
       f"starter always among them, and only those 10 satisfy the egypt6 gate")
 
@@ -1489,7 +1581,13 @@ for _n in (1, 2, 5, 10):
         # NEVER a plant any rule names, at any setting: not a sun producer and
         # not a world entry plant. Either one would satisfy its gate before the
         # gate is ever checked.
-        _logic_given = set(C.LOGIC_PLANTS) & set(_pre)
+        # LOGIC_PLANTS holds all 36 Jester counters, but a slot NAMES only the
+        # one it drew, so only that one may not be granted. Excluding all 36
+        # would take a quarter of the roster out of the draw for a rule that
+        # asks for one plant.
+        _named = ((set(C.LOGIC_PLANTS) - set(C.JESTER_COUNTER_PLANTS))
+                  | set(_wS.logic_jesters))
+        _logic_given = _named & set(_pre)
         assert not _logic_given, \
             f"start {_n} {_label}: a rule-named plant was granted outright: {sorted(_logic_given)}"
 
@@ -1532,17 +1630,29 @@ for _seed in range(40):
     _wX.generate_early()
     _got = set(_wX.starting_plants)
     assert len(_got) == 10, f"seed {_seed}: {len(_got)} starting plants"
-    _leaked += sorted(set(C.LOGIC_PLANTS) & _got)
+    _named = ((set(C.LOGIC_PLANTS) - set(C.JESTER_COUNTER_PLANTS))
+              | set(_wX.logic_jesters))
+    _leaked += sorted(_named & _got)
     _span |= _got
 assert not _leaked, \
     f"a rule-named plant was granted in {len(_leaked)} of 40 seeds: {_leaked[:5]}"
+
+# The drawn Jester counter is excluded, but the OTHER 35 are drawable -- that is
+# the point of drawing one rather than naming all of them. If none of them ever
+# turns up across 40 maximum-size draws, the exclusion is too wide.
+_others = set(C.JESTER_COUNTER_PLANTS) & _span
+assert _others, ("no undrawn Jester counter was ever granted across 40 seeds; "
+                 "the exclusion is taking the whole group, not the drawn one")
 
 # ...and the sweep has to be capable of seeing a leak, or it proves nothing.
 # The draw should range over everything that is NOT rule-named -- 116 of the 135
 # plants -- so a narrow span means the sweep would miss one.
 assert len(_span) > 60, \
     f"the extras only ever draw {len(_span)} distinct plants; too narrow to catch a leak"
-_ENTRY = {_n2 for _g in C.WORLD_ENTRY_PLANTS.values() for _grp in _g for _n2 in _grp}
+# The FIXED entry plants -- the Jester group is excluded per slot, not as a
+# group, and is checked above instead.
+_ENTRY = ({_n2 for _g in C.WORLD_ENTRY_PLANTS.values() for _grp in _g for _n2 in _grp}
+          - set(C.JESTER_COUNTER_PLANTS))
 assert not (_SUN & _span), f"sun producers reachable by the draw: {sorted(_SUN & _span)}"
 assert not (_ENTRY & _span), f"entry plants reachable by the draw: {sorted(_ENTRY & _span)}"
 
@@ -1587,15 +1697,25 @@ for _name in ("Progressive Ancient Egypt", "Sky Shield", "100 Coins",
 
 # ENTRY PLANTS ARE SCOPED TO THE WORLDS THE SEED BUILT. rules.py skips a world
 # that is not enabled, so Lily Pad gates nothing in an Egypt-only run and must
-# not eat a progression slot there. Stated as an exact set: Egypt names only the
-# sun producers and the slot's own draw, so anything else is waste.
+# not eat a progression slot there. Stated as an exact set, which is what makes
+# it worth asserting: anything beyond it is a slot taken from the useful plants,
+# the filler and the traps in a seed that has few to spare.
+#
+# The default goal trims Egypt at egypt8, so " Mid" is not built and Grave
+# Buster is not named either -- the exact set is the FIVE sun producers and
+# nothing else. That is down from 15 before 2026-08-25, when the attacker half
+# of the egypt6 checkpoint went: it was satisfied by the precollected starter in
+# every seed, so naming ten attackers bought nothing and cost ten slots.
 _wE2, _ = run("classification: Egypt-only progression set", world_count=1)
 assert _wE2.enabled_worlds == {"Ancient Egypt"}, _wE2.enabled_worlds
 _egypt_prog = W.items.slot_progression_plants(_wE2)
-_want_egypt = set(C.SUN_PRODUCER_PLANTS) | set(_wE2.logic_attackers)
+_want_egypt = set(C.SUN_PRODUCER_PLANTS)
 assert _egypt_prog == _want_egypt, (
     f"an Egypt-only seed's progression plants are {sorted(_egypt_prog - _want_egypt)} "
-    f"beyond its sun producers and draw, and missing {sorted(_want_egypt - _egypt_prog)}")
+    f"beyond its sun producers, and missing {sorted(_want_egypt - _egypt_prog)}")
+# Five, as a literal: reading the length off SUN_PRODUCER_PLANTS would agree
+# with whatever that list said.
+assert len(_egypt_prog) == 5, sorted(_egypt_prog)
 assert not ({"Lily Pad", "Blover", "Perfume-shroom", "Torchwood"} & _egypt_prog), \
     "an Egypt-only seed still carries entry plants for worlds it does not have"
 print(f"per-slot classification: {len(_egypt_prog)} progression plants in an "
@@ -1779,12 +1899,12 @@ _og_flat = [o for g in _OG for o in g.options]
 _og_declared = [f.type for f in _dc_og.fields(W.PvZ2Options)]
 
 # Literals, not len(OPTION_GROUPS) / len(fields) -- an expectation read from the
-# thing under test passes whatever that thing says. 20 is every option in
-# PvZ2Options as of 2026-08-24 (16 before the four trap weights); 7 is the
+# thing under test passes whatever that thing says. 21 is every option in
+# PvZ2Options as of 2026-08-25 (20 before include_levels_past_goal); 7 is the
 # groups options.py declares.
 assert len(_OG) == 7, f"expected 7 option groups, got {len(_OG)}"
-assert len(_og_declared) == 20, \
-    f"PvZ2Options declares {len(_og_declared)} options, not 20 -- if that is " \
+assert len(_og_declared) == 21, \
+    f"PvZ2Options declares {len(_og_declared)} options, not 21 -- if that is " \
     "intended, update this literal AND put the new option in a group"
 
 _og_missing = [o.__name__ for o in _og_declared if o not in _og_flat]
@@ -1902,3 +2022,481 @@ _cnt = lambda w: collections.Counter(
 assert _cnt(_dA) == _cnt(_dB), (_cnt(_dA), _cnt(_dB))
 print(f"trap mix at 50%: {dict(_cnt(_tw))}, "
       f"gems zeroed: {dict(_cnt(_zw))}, coins at 90: {dict(_cnt(_dA))}")
+
+
+# ── the Jester counter is drawn per slot ──────────────────────────────────────
+#
+# 36 plants can damage the Dark Ages Jester; the entrance names ONE of them,
+# drawn per slot, so each seed asks for a different plant. The other 35 are
+# ordinary useful plants. Naming all 36 would promote all 36 to progression,
+# which is the exact cost LOGIC_ATTACKER_COUNT was introduced to avoid.
+
+from apstub import ItemClassification as _IC_j
+
+# Literals: 36 is the derived list, 1 is the design decision. Reading either off
+# the constant under test would agree with whatever the constant said.
+assert C.JESTER_DRAW_COUNT == 1, C.JESTER_DRAW_COUNT
+assert len(C.JESTER_COUNTER_PLANTS) == 36, len(C.JESTER_COUNTER_PLANTS)
+assert len(set(C.JESTER_COUNTER_PLANTS)) == 36, "duplicate Jester counters"
+
+# Neither of the two plants removed for dealing no damage may come back, and
+# neither may Magnifying Grass, whose only projectile the Jester catches.
+for _bad in ("Sap-fling", "Chard Guard", "Magnifying Grass"):
+    assert _bad not in C.JESTER_COUNTER_PLANTS, f"{_bad} is not a Jester counter"
+# Nothing in the list may be a known non-damaging plant.
+assert not (set(C.JESTER_COUNTER_PLANTS) & set(C.NON_DAMAGING_PLANTS)), \
+    sorted(set(C.JESTER_COUNTER_PLANTS) & set(C.NON_DAMAGING_PLANTS))
+# Every one must have an item, or the rule naming it could never pass.
+_no_item = sorted(set(C.JESTER_COUNTER_PLANTS) - {p.name for p in PLANT_ITEMS})
+assert not _no_item, f"Jester counters with no item: {_no_item}"
+
+# THE CLASSIFICATION, which is the whole request. Asserted through create_item,
+# because apstub's collect() takes a bare name and ignores classification -- no
+# state-driven test could ever see this being wrong.
+_jw, _ = run("jester: drawn is progression", **ALL_WORLDS)
+# Entry plants of every other world, which stay progression regardless.
+_OTHER_ENTRY = {_n for _w2, _gs in C.WORLD_ENTRY_PLANTS.items()
+                for _g2 in _gs if _g2 is not C.JESTER_COUNTER_PLANTS
+                for _n in _g2}
+_drawn = sorted(_jw.logic_jesters)
+assert len(_drawn) == 1, _drawn
+assert _jw.create_item(_drawn[0]).classification == _IC_j.progression, \
+    f"the drawn counter {_drawn[0]} is not progression"
+for _other in sorted(set(C.JESTER_COUNTER_PLANTS) - set(_drawn)):
+    # Except the ones another rule names anyway, which are progression for
+    # their OWN reason: this slot's drawn cheap attackers, the sun producers,
+    # and the other worlds' entry plants. Lava Guava is the live example -- it
+    # is both a Jester counter and a Frostbite Caves warming plant.
+    if _other in _jw.logic_attackers or _other in C.SUN_PRODUCER_PLANTS             or _other in _OTHER_ENTRY:
+        continue
+    assert _jw.create_item(_other).classification == _IC_j.useful, \
+        f"undrawn counter {_other} is progression; the draw is not narrowing"
+
+# It really is random per slot, not a fixed pick: across 40 seeds the draw must
+# range widely. One seed proves nothing about a random draw.
+_jspan = set()
+for _seed in range(40):
+    _mwJ = MultiWorld(); _mwJ.random.seed(_seed)
+    _wJ = W.PvZ2GardendlessWorld(_mwJ, 1)
+    _wJ.options = Opts()
+    _wJ.random.seed(_seed)
+    _wJ.generate_early()
+    assert len(_wJ.logic_jesters) == 1
+    _jspan |= set(_wJ.logic_jesters)
+    assert set(_wJ.logic_jesters) <= set(C.JESTER_COUNTER_PLANTS), sorted(_wJ.logic_jesters)
+assert len(_jspan) > 12, \
+    f"40 seeds only ever drew {len(_jspan)} distinct counters; the draw is not random"
+print(f"Jester counters: {len(C.JESTER_COUNTER_PLANTS)} can damage him, "
+      f"{C.JESTER_DRAW_COUNT} named per slot, {len(_jspan)} distinct across 40 seeds")
+
+# An Egypt-only seed builds no Dark Ages, so no counter may be progression there
+# -- the same scoping the entry plants already have.
+_je, _ = run("jester: Egypt only", world_count=1)
+_je_prog = [n for n in C.JESTER_COUNTER_PLANTS
+            if n not in _je.logic_attackers and n not in C.SUN_PRODUCER_PLANTS
+            and n not in _OTHER_ENTRY
+            and _je.create_item(n).classification == _IC_j.progression]
+assert not _je_prog, \
+    f"Egypt-only seed marks Jester counters progression for a world it never built: {_je_prog}"
+
+
+# ── the goal trim ─────────────────────────────────────────────────────────────
+#
+# With include_levels_past_goal off (the default) a world ends where the Goal
+# Type measures it: at its World Key level, or at its Zomboss. The cut lands on
+# a stretch boundary because world_stretches cuts on those same two milestones,
+# so it takes whole stretches and the unlock count falls out with it.
+
+# The goal values are copied into constants.py as literals -- it cannot import
+# options.py without a cycle. This is the only thing keeping the copy honest.
+assert C.GOAL_WORLD_KEY == GoalType.option_world_key
+assert C.GOAL_ZOMBOSS == GoalType.option_zomboss
+assert C.GOAL_COMPLETION == GoalType.option_completion
+
+# What each goal keeps, pinned as literals rather than read from the table.
+# Ancient Egypt has a fourth stretch (its egypt6 checkpoint splits the opening),
+# and BOTH halves are the opening as far as the milestones go -- so world_key
+# keeps two of its suffixes and one of everyone else's.
+assert C.stretches_kept("Dark Ages", C.GOAL_WORLD_KEY) == [""]
+assert C.stretches_kept("Dark Ages", C.GOAL_ZOMBOSS) == ["", " Mid"]
+assert C.stretches_kept("Dark Ages", C.GOAL_COMPLETION) == ["", " Mid", " Late"]
+assert C.stretches_kept("Ancient Egypt", C.GOAL_WORLD_KEY) == ["", " Early"]
+assert C.stretches_kept("Ancient Egypt", C.GOAL_ZOMBOSS) == ["", " Early", " Mid"]
+# The option puts the whole game back, whatever the goal.
+assert C.stretches_kept("Dark Ages", C.GOAL_WORLD_KEY, True) == ["", " Mid", " Late"]
+
+# THE CUT IS THE GOAL LOCATION ITSELF. Nothing past it survives, and the goal
+# location does -- a goal you cannot check would put the win out of reach.
+from pvz2gardendless.locations import (WORLD_KEY_LOCS as _WK,
+                                       WORLD_ZOMBOSS_LOCS as _WZ, _play_order)
+for _goal, _table, _lbl in ((C.GOAL_WORLD_KEY, _WK, "world_key"),
+                            (C.GOAL_ZOMBOSS, _WZ, "zomboss")):
+    _gw, _gsd = run(f"goal trim: {_lbl}", goal_type=_goal, **_EVERY_WORLD)
+    _built = {l.name for l in _gw.active_locations()}
+    for _goal_loc in _table:
+        _wn = C._REGION_TO_WORLD.get(_lnames[_goal_loc]) if hasattr(C, "_REGION_TO_WORLD") else None
+        if _goal_loc not in _built:
+            continue  # that world is not in this seed
+        _o = _play_order(_goal_loc)
+        _region = _lnames[_goal_loc]
+        _past = [n for n in _built
+                 if _lnames.get(n) == _region and (_play_order(n) or -1) > _o]
+        assert not _past, (
+            f"{_lbl}: {len(_past)} level(s) past the goal {_goal_loc} survived, "
+            f"e.g. {sorted(_past)[:4]}")
+    # ...and it really did remove something, or the assertion above is vacuous.
+    _all_w, _ = run(f"goal trim: {_lbl} untrimmed", goal_type=_goal,
+                    include_levels_past_goal=1, **_EVERY_WORLD)
+    _n_all = len(_all_w.active_locations())
+    assert len(_built) < _n_all, (
+        f"{_lbl}: the trim removed nothing ({len(_built)} of {_n_all})")
+    print(f"goal trim {_lbl}: {len(_built)} locations against {_n_all} untrimmed")
+
+# completion trims nothing: its goal IS the last level.
+_cw, _ = run("goal trim: completion", goal_type=C.GOAL_COMPLETION, **_EVERY_WORLD)
+_cw_all, _ = run("goal trim: completion untrimmed", goal_type=C.GOAL_COMPLETION,
+                 include_levels_past_goal=1, **_EVERY_WORLD)
+assert len(_cw.active_locations()) == len(_cw_all.active_locations()), \
+    "the completion goal trimmed something; its goal is the final level"
+
+# A side path revealed past the cut goes with it. Appease-mint opens at
+# egypt29, well past egypt8, so a world_key seed cannot build it.
+_sp_w, _ = run("goal trim: side paths", goal_type=C.GOAL_WORLD_KEY,
+               include_side_paths=1, **_EVERY_WORLD)
+_sp_built = {l.region for l in _sp_w.active_locations()}
+assert "Appease-mint Sidepath" not in _sp_built, \
+    "a side path revealed at egypt29 survived a seed that ends at egypt8"
+# ...and one revealed BEFORE the cut stays. Squash opens at egypt6.
+assert "Squash Sidepath" in _sp_built, \
+    "the Squash quest opens at egypt6 and must survive a world_key seed"
+
+# A store card stocked past the cut goes too.
+_sh_w, _ = run("goal trim: shop", goal_type=C.GOAL_WORLD_KEY, shopsanity=1,
+               **_EVERY_WORLD)
+_sh_built = {l.name for l in _sh_w.active_locations() if l.is_shop}
+_late_cards = [C.shop_location_name(_c) for _c, _l in C.SHOP_UNLOCK.items()
+               if _l in W.locations.past_goal_names(C.GOAL_WORLD_KEY)]
+assert _late_cards, "no shop card is stocked past a World Key level; check the data"
+assert not (set(_late_cards) & _sh_built), \
+    f"store cards stocked past the goal survived: {sorted(set(_late_cards) & _sh_built)[:4]}"
+
+# THE UNLOCKS SHRINK WITH THE WORLD. A trimmed world is one stretch long, so
+# shipping three would be two dead items per world.
+_uw, _ = run("goal trim: unlocks", goal_type=C.GOAL_WORLD_KEY, **_EVERY_WORLD)
+_ucount = collections.Counter(
+    i.name[len("Progressive "):] for i in _uw.multiworld.itempool
+    if i.name.startswith("Progressive "))
+assert _ucount["Dark Ages"] == 1, f"Dark Ages ships {_ucount['Dark Ages']} unlocks, want 1"
+assert "Ancient Egypt" not in _ucount, \
+    "Ancient Egypt needs no unlock to reach egypt8, so it must ship none"
+_zw, _ = run("goal trim: unlocks, zomboss", goal_type=C.GOAL_ZOMBOSS, **_EVERY_WORLD)
+_zcount = collections.Counter(
+    i.name[len("Progressive "):] for i in _zw.multiworld.itempool
+    if i.name.startswith("Progressive "))
+assert _zcount["Dark Ages"] == 2, f"Dark Ages ships {_zcount['Dark Ages']} unlocks, want 2"
+assert _zcount["Ancient Egypt"] == 1, "Ancient Egypt wants one unlock to reach egypt25"
+
+# EVERY BUILT LOCATION IS IN A REGION THAT EXISTS. The trap this guards is
+# subtle: world_stretches infers its cuts from the names it is handed, so
+# cutting from the TRIMMED list would lose the Zomboss, fall into the Kongfu
+# fallback and re-split the surviving opening into thirds -- putting egypt6-8
+# behind unlocks the seed no longer ships.
+for _goal in (C.GOAL_WORLD_KEY, C.GOAL_ZOMBOSS):
+    _rw, _ = run(f"goal trim: regions {_goal}", goal_type=_goal,
+                 include_side_paths=1, include_danger_rooms=1, **_EVERY_WORLD)
+    _regions = {r.name for r in _rw.multiworld.regions}
+    for _loc in _rw.active_locations():
+        _rw.multiworld.get_location(_loc.name, 1)
+    _stray = [r for r in _regions
+              if any(r.endswith(sfx) for sfx in (" Mid", " Late"))
+              and not any(l.parent_region.name == r
+                          for reg in _rw.multiworld.regions for l in reg.locations)]
+    assert not _stray, f"goal {_goal}: empty stretch regions were built: {_stray[:4]}"
+
+# THE EDGE CASE KURT NAMED. Ancient Egypt alone under the world_key goal is the
+# tutorial plus egypt1-8: twelve locations. It needs exactly ONE progression
+# item -- a sun producer, because the egypt6 checkpoint's other half is a cheap
+# attacker and the starter is always one, precollected. Everything else is
+# useful. This failed to generate outright before the upgrades were made to
+# give.
+_ew, _esd = run("goal trim: Egypt only, world_key", world_count=1,
+                goal_type=C.GOAL_WORLD_KEY, worlds_required=1)
+_enames = [l.name for l in _ew.active_locations()]
+assert len(_enames) == 12, f"Egypt-only world_key is {len(_enames)} locations, want 12"
+assert "egypt8" in _enames and "egypt9" not in _enames, sorted(_enames)
+assert len(_ew.multiworld.itempool) == 12, len(_ew.multiworld.itempool)
+_eprog = [i.name for i in _ew.multiworld.itempool
+          if i.classification == _IC_j.progression]
+# Every progression item is a sun producer, and there is at least one. Not a
+# fixed COUNT: since the upgrades started taking a 20% share instead of all 14
+# slots, this seed has room for more than one of the five. What matters is that
+# nothing ELSE is progression -- the whole point of the Egypt-only case is that
+# a sun producer is the only thing the run actually requires.
+assert _eprog, "no progression item at all, so egypt8 would be unreachable"
+_enonsun = sorted(set(_eprog) - set(C.SUN_PRODUCER_PLANTS))
+assert not _enonsun, f"progression items that are not sun producers: {_enonsun}"
+assert _esd["goal_locations"] == ["egypt8"], _esd["goal_locations"]
+print(f"Egypt-only world_key: {len(_enames)} locations, {len(_eprog)} progression "
+      f"(all sun producers), {len(_ew.multiworld.itempool) - len(_eprog)} other")
+
+
+# THE CROSS-CHECK, ON A TRIMMED SEED. gen_test already checks that the client's
+# gate for a location agrees with the region it was built into -- if those
+# disagree, fill places progression in a level the player cannot start and
+# nothing else notices. That check ran only on untrimmed seeds, which is how a
+# real bug survived to 2026-08-25: world_gates cut its stretches from the
+# TRIMMED location list while regions.py cut from the full one, so for the two
+# worlds with no milestone to cut on the two disagreed by 7 to 10 levels.
+#
+# Aerial Fortress has neither a World Key level nor a Zomboss and Kongfu Temple
+# has no Zomboss, so world_stretches gives them fallback cuts (equal thirds, and
+# the midpoint of the remainder). Re-deriving a fallback from an already-trimmed
+# list is not the same operation, which is the whole reason both callers must cut
+# from the full list.
+_SUFFIX_SET = ("", " Early", " Mid", " Late")
+for _goal in (C.GOAL_WORLD_KEY, C.GOAL_ZOMBOSS, C.GOAL_COMPLETION):
+    _tw, _tsd = run(f"trim cross-check: goal {_goal}", goal_type=_goal,
+                    include_side_paths=1, include_danger_rooms=1, **_EVERY_WORLD)
+    _gate_need_t = {}
+    for _w2, _g2 in _tsd["world_gates"].items():
+        for _i2, _part2 in enumerate(_g2["stretches"]):
+            for _n2 in _part2:
+                _gate_need_t[_n2] = _i2 + 1
+
+    # No empty stretch. A trimmed world ships fewer unlocks, so a gate table
+    # listing three stretches with the last two empty tells the client this
+    # world needs three unlocks when the pool ships one. It gates nothing
+    # either way, but the shape is the interface.
+    for _w3, _g3 in _tsd["world_gates"].items():
+        assert all(_g3["stretches"]), (
+            f"goal {_goal}: {_w3} ships an empty gate stretch "
+            f"{[len(x) for x in _g3['stretches']]}")
+
+    # Every gated name is a location this seed actually built.
+    _built_t = {l.name for l in _tw.active_locations()}
+    _ghosts = sorted(n for n in _gate_need_t if n not in _built_t)
+    assert not _ghosts, (
+        f"goal {_goal}: world_gates names {len(_ghosts)} location(s) the seed "
+        f"does not build: {_ghosts[:5]}")
+
+    # ...and the gate matches the region it was built into.
+    _mismatch_t = []
+    for _r2 in _tw.multiworld.regions:
+        _owner2 = _suffix2 = None
+        for _wn2 in C.WORLD_REGIONS:
+            if _r2.name == _wn2:
+                _suffix2, _owner2 = "", _wn2
+            elif _r2.name.startswith(_wn2) and _r2.name[len(_wn2):] in _SUFFIX_SET:
+                _suffix2, _owner2 = _r2.name[len(_wn2):], _wn2
+        if _owner2 is None:
+            continue
+        _need2 = C.progressive_need(_owner2, _suffix2)
+        for _loc2 in _r2.locations:
+            if _loc2.name not in _built_t:
+                continue
+            if _gate_need_t.get(_loc2.name, 0) != _need2:
+                _mismatch_t.append(
+                    (_loc2.name, _r2.name, _need2, _gate_need_t.get(_loc2.name, 0)))
+    assert not _mismatch_t, (
+        f"goal {_goal}: {len(_mismatch_t)} location(s) whose client gate and "
+        f"region disagree, so fill can bury progression behind a level that "
+        f"cannot be started: {_mismatch_t[:4]}")
+
+# The check must actually SEE the two fallback worlds, or it proves nothing
+# about the case that broke.
+_fw, _fsd = run("trim cross-check: fallback worlds", goal_type=C.GOAL_ZOMBOSS,
+                **_EVERY_WORLD)
+for _fb in ("Aerial Fortress", "Kongfu Temple"):
+    assert _fb in _fw.enabled_worlds, f"{_fb} is not in the cross-checked seed"
+    _fb_locs = [l.name for l in _fw.active_locations()
+                if l.region in C.WORLD_REGIONS[_fb]]
+    assert len(_fb_locs) > 10, f"{_fb} contributes only {len(_fb_locs)} locations"
+print("goal trim: client gates and regions agree on a trimmed seed, "
+      "Aerial Fortress and Kongfu Temple included")
+
+
+# ── Grave Buster gates the back half of two worlds ───────────────────────────
+#
+# Ancient Egypt and Dark Ages want it for everything past their World Key level.
+# Both are cut on their own milestones, so " Mid" is exactly key -> Zomboss and
+# " Late" is Zomboss -> final level. Logic only, like every plant requirement:
+# it never reaches world_gates, so the client still lets those levels start.
+
+# Literals, not read from the table under test.
+assert C.GRAVE_CLEAR_PLANTS == ["Grave Buster"], C.GRAVE_CLEAR_PLANTS
+assert sorted(C.STRETCH_ENTRY_PLANTS) == ["Ancient Egypt", "Dark Ages"], \
+    sorted(C.STRETCH_ENTRY_PLANTS)
+for _sw in ("Ancient Egypt", "Dark Ages"):
+    assert sorted(C.STRETCH_ENTRY_PLANTS[_sw]) == [" Late", " Mid"], \
+        sorted(C.STRETCH_ENTRY_PLANTS[_sw])
+# It has an item, or the rule could never pass and would fail silently.
+assert "Grave Buster" in {p.name for p in PLANT_ITEMS}
+# ...and it is rule-named, so starting_plants may never hand it over.
+assert "Grave Buster" in C.LOGIC_PLANTS, \
+    "Grave Buster is not in LOGIC_PLANTS, so the starting draw could grant it"
+
+# Progression in a seed that builds those stretches, useful in one that does
+# not. Asserted through create_item: apstub's collect() ignores classification,
+# so no state-driven test could catch this being wrong.
+_gw, _ = run("grave: full seed", **ALL_WORLDS)
+assert _gw.create_item("Grave Buster").classification == _IC_j.progression, \
+    "Grave Buster is not progression in a seed whose Egypt Mid wants it"
+
+# The world_key goal ends Ancient Egypt at egypt8 and Dark Ages at dark10, so
+# neither " Mid" nor " Late" is built and nothing names it.
+_gk, _ = run("grave: world_key goal", goal_type=C.GOAL_WORLD_KEY, **_EVERY_WORLD)
+assert _gk.create_item("Grave Buster").classification == _IC_j.useful, \
+    ("Grave Buster is progression under the world_key goal, which builds no "
+     "stretch that wants it")
+
+# The zomboss goal builds " Mid" but not " Late", so it IS wanted again.
+_gz, _ = run("grave: zomboss goal", goal_type=C.GOAL_ZOMBOSS, **_EVERY_WORLD)
+assert _gz.create_item("Grave Buster").classification == _IC_j.progression, \
+    "the zomboss goal builds Egypt Mid, which wants Grave Buster"
+
+# A seed with neither world does not want it either.
+_gn, _ = run("grave: neither world", world_count=2,
+             enabled_worlds=["Pirate Seas"], include_levels_past_goal=1)
+assert "Ancient Egypt" in _gn.enabled_worlds and "Dark Ages" not in _gn.enabled_worlds
+# Ancient Egypt is always in, so this one still wants it -- the honest check is
+# a seed whose ONLY grave world is Egypt still names it.
+assert _gn.create_item("Grave Buster").classification == _IC_j.progression, \
+    "Ancient Egypt alone still wants Grave Buster past egypt8"
+
+# THE POOL FLOOR keeps it. Squeezed to EXACTLY the floor, the way the
+# entry-plant floor test is: with slack the trim tops the pool up at random and
+# a plant appearing proves nothing about what was forced.
+#
+# Egypt-only with the levels past the goal kept builds egypt9-35, so its floor is
+# TWO plants now -- a sun producer for the egypt6 checkpoint, and Grave Buster
+# for " Mid". The attacker half is free from the precollected starter.
+_gf, _ = run("grave: small seed floor", world_count=1,
+             include_levels_past_goal=1, worlds_required=1)
+# Squeezed to the floor itself: two plants, a sun producer for the egypt6
+# checkpoint and Grave Buster for " Mid". Four slots, because this seed keeps
+# the levels past the goal and so ships Ancient Egypt's two unlocks; 20% of four
+# locations is no upgrade and shopsanity is off, so the other two slots are
+# exactly the floor and whatever survives IS what it forced.
+_gf_pool = {i.name for i in W.items.create_item_pool(_gf, 4)}
+_gf_plants = _gf_pool & {p.name for p in W.items.PLANT_ITEMS}
+assert len(_gf_plants) == 2, f"floor is {sorted(_gf_plants)}, expected 2 plants"
+assert "Grave Buster" in _gf_plants, (
+    f"the floor dropped Grave Buster, which Egypt Mid needs: {sorted(_gf_plants)}")
+assert set(C.SUN_PRODUCER_PLANTS) & _gf_plants, "floor has no sun producer"
+
+# It is LOGIC ONLY: world_gates must never mention a plant, so the client keeps
+# letting those levels start.
+_gg, _gsd2 = run("grave: not client-enforced", **ALL_WORLDS)
+for _w4, _g4 in _gsd2["world_gates"].items():
+    assert _g4["item"].startswith("Progressive "), \
+        f"{_w4} gates on {_g4['item']}, which is not an unlock"
+print("Grave Buster: gates Mid and Late of Ancient Egypt and Dark Ages, "
+      "progression only when those stretches are built")
+
+
+# ── create_item must never raise ─────────────────────────────────────────────
+#
+# Classification is per slot, so create_item reads enabled_worlds, logic_attackers
+# and logic_jesters -- all filled in by generate_early. Generation always runs
+# that first, but a TRACKER does not: Universal Tracker rebuilds the world itself
+# and resolves items against it. An AttributeError there leaves the tracker with
+# no item to reason about, which reads to a player as "I am holding the plant and
+# nothing opened".
+#
+# enabled_worlds had no class-level default and raised for exactly that reason.
+_bare_mw = MultiWorld()
+_bare = W.PvZ2GardendlessWorld(_bare_mw, 1)
+_bare.options = Opts()
+for _attr in ("enabled_worlds", "logic_attackers", "logic_jesters", "starting_plants"):
+    assert hasattr(_bare, _attr), \
+        f"{_attr} has no class-level default, so create_item raises before generate_early"
+# Every item name the game defines, on a world that has not generated.
+for _n in W.items.ITEM_NAME_TO_ID:
+    _bare.create_item(_n)
+# ...and a sun producer still comes back progression, since that is slot
+# independent -- a silent demotion here would make a tracker call the Egypt 6
+# gate unsatisfiable while the player holds the plant that opens it.
+assert _bare.create_item("Sunflower").classification == _IC_j.progression, \
+    "a sun producer is not progression before generate_early"
+print(f"create_item: all {len(W.items.ITEM_NAME_TO_ID)} items resolve on a world "
+      f"that has not run generate_early")
+
+
+# ── goal levels hold this slot's own items ───────────────────────────────────
+#
+# The client refuses to count a goal world until its level has been BEATEN, and
+# that is the real guard. This is the generation-side half: a goal location
+# holding ANOTHER player's item is one this slot has every reason to hand over
+# without playing, and it would put someone else's progression behind a level
+# its owner has no incentive to touch.
+class _Foreign:
+    """An item belonging to a different slot."""
+    def __init__(self, name="Foreign Item", player=2):
+        self.name, self.player, self.advancement = name, player, True
+
+
+for _gt3 in (C.GOAL_WORLD_KEY, C.GOAL_ZOMBOSS, C.GOAL_COMPLETION):
+    _lw, _lsd = run(f"goal locals: goal {_gt3}", goal_type=_gt3, **ALL_WORLDS)
+    _goals3 = _lsd["goal_locations"]
+    assert _goals3, "no goal locations, so this proves nothing"
+    for _gn in _goals3:
+        _gl = _lw.multiworld.get_location(_gn, 1)
+        assert not _gl.item_rule(_Foreign()), \
+            f"goal {_gn} accepts another player's item"
+        # ...and it still accepts this slot's own, or fill has nowhere to put
+        # anything and generation dies.
+        _own = next(i for i in _lw.multiworld.itempool if i.player == 1)
+        assert _gl.item_rule(_own), f"goal {_gn} rejects its own slot's items"
+
+# A NON-goal location is unaffected: this is a rule about the goals, not a
+# blanket local-items setting, which would be a very different seed.
+_open3 = [l for l in _lw.multiworld.get_regions(1)
+          for l in l.locations if l.name not in set(_goals3)]
+assert any(l.item_rule(_Foreign()) for l in _open3), \
+    "every location refuses foreign items; the rule is not scoped to the goals"
+print(f"goal locals: all {len(_goals3)} goal locations take only this slot's items")
+
+
+# ── the upgrades take a proportional share ───────────────────────────────────
+#
+# All 14 upgrades are mandatory and gate nothing, so in a small seed they used
+# to crowd out the plants entirely: Ancient Egypt alone under the world_key goal
+# is 12 locations, and 14 upgrades left room for none. They now take at most
+# UPGRADE_POOL_SHARE percent of the seed.
+#
+# A percentage is self-limiting: 20% of a full seed is far past the 14 that
+# exist, so this only ever bites where it was needed.
+assert C.UPGRADE_POOL_SHARE == 20, C.UPGRADE_POOL_SHARE
+_UPG_NAMES = {u.name for u in W.items.UPGRADE_ITEMS}
+
+# A full seed still ships every upgrade -- the cap must not touch it.
+_ub, _ = run("upgrade share: full seed", **ALL_WORLDS)
+_ub_n = sum(1 for i in _ub.multiworld.itempool if i.name in _UPG_NAMES)
+assert _ub_n == C.UPGRADE_ITEM_COUNT, \
+    f"a full seed ships {_ub_n} upgrades, not all {C.UPGRADE_ITEM_COUNT}"
+
+# The smallest seed there is: 12 locations, so at most 2 upgrades, and the rest
+# goes to plants. Literals, because the point is the SHAPE of a small seed.
+_us, _ = run("upgrade share: Egypt only", world_count=1, worlds_required=1)
+_us_locs = len(_us.active_locations())
+_us_pool = [i.name for i in _us.multiworld.itempool]
+_us_n = sum(1 for n in _us_pool if n in _UPG_NAMES)
+_us_plants = sum(1 for n in _us_pool if n in {p.name for p in PLANT_ITEMS})
+assert _us_locs == 12, f"Egypt-only world_key is {_us_locs} locations, want 12"
+assert _us_n <= _us_locs * C.UPGRADE_POOL_SHARE // 100, \
+    f"{_us_n} upgrades in a {_us_locs}-location seed exceeds the share"
+assert _us_n == 2, f"expected 2 upgrades in a 12-location seed, got {_us_n}"
+# ...and the point of the whole exercise: the seed is mostly plants now.
+assert _us_plants >= 8, \
+    f"only {_us_plants} plants in a 12-location seed; the share bought nothing"
+print(f"upgrade share: {_us_n} upgrades and {_us_plants} plants in a "
+      f"{_us_locs}-location seed, all {_ub_n} upgrades in a full one")
+
+# The share holds across every small size, not just the one measured above.
+for _wc3 in (1, 2, 3, 4):
+    _uw, _ = run(f"upgrade share: {_wc3} worlds", world_count=_wc3,
+                 worlds_required=1)
+    _un = sum(1 for i in _uw.multiworld.itempool if i.name in _UPG_NAMES)
+    _ulocs = len(_uw.active_locations())
+    assert _un <= max(_ulocs * C.UPGRADE_POOL_SHARE // 100, 0), \
+        f"{_wc3} worlds: {_un} upgrades exceeds the share of {_ulocs} locations"
