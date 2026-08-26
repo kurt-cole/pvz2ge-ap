@@ -289,6 +289,24 @@ if (!/<b>0\/3<\/b>/.test(G.goalEl().innerHTML))
   fail('checks alone moved the tracker: ' + G.goalEl().innerHTML);
 else ok('the tracker ignores checks that were never played');
 
+// The seed's total goal count is NOT shown. It is not a number the player is
+// working toward, and next to "2/3" it read as a competing progress figure.
+G.reset(keyed());
+for (const g of GOALS.slice(0, 1)) beat(g);
+G.updateGoalTracker();
+if (/available/.test(G.goalEl().innerHTML))
+  fail('the tracker still shows a total: ' + G.goalEl().innerHTML);
+else ok('the tracker shows only the count that ends the run');
+
+G.reset(keyed());
+for (const g of GOALS) beat(g);
+G.updateGoalTracker();
+if (/available/.test(G.goalEl().innerHTML))
+  fail('the completed tracker still shows a total: ' + G.goalEl().innerHTML);
+else if (!/goal complete/.test(G.goalEl().innerHTML))
+  fail('the completion note went with it');
+else ok('a complete goal says so, and still shows no total');
+
 // Hidden until slot_data lands, rather than showing 0/0.
 G.reset({ modernKeyed: true });
 G.updateGoalTracker();

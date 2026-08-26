@@ -125,10 +125,13 @@ function updateGoalTracker(){
                 GOAL_LABEL[st.goalType] || GOAL_LABEL.world_key;
   goalEl.style.display='block';
   goalEl.className = g.done >= g.need ? 'ap-goal-done' : '';
+  // No "N available" tail: the count of goal levels in the seed is not a
+  // number the player is working toward, and it read as a second progress
+  // figure next to the one that matters. The sub-line is now only there to
+  // say the run is over.
   goalEl.innerHTML = '<b>' + g.done + '/' + g.need + '</b> ' + label +
-    '<span class="ap-goal-sub">' +
-    (g.done >= g.need ? 'goal complete — ' : '') +
-    g.total + ' available</span>';
+    (g.done >= g.need
+      ? '<span class="ap-goal-sub">goal complete</span>' : '');
 }
 
 function maybeSendGoal(){
