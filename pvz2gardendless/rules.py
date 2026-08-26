@@ -394,11 +394,52 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # which would make it unwinnable.
     req = min(world.options.worlds_required.value, len(goal_locs))
 
+    # Resolve the goal Locations once, here, rather than by name inside the
+    # rule. This rule is re-evaluated constantly during fill and sweeping, and
+    # state.can_reach(name, "Location", player) pays a type dispatch plus a
+    # name lookup on every goal on every call before it reaches the actual
+    # reachability test. Location.can_reach() is what that resolves to anyway.
+    goal_locations = [multiworld.get_location(name, player)
+                      for name in goal_locs]
+
+    def goal_rule(state, n=req, it=goal_item, locs=goal_locations):
+        # Holding them is the win.
+        if state.has(it, player, n):
+            return True
+
+        # ...and so is being ABLE to hold them. Every McGuffin is locked onto a
+        # goal level of this same slot, so a reachable goal level is a McGuffin
+        # already earned -- the only step left is walking over and taking it.
+        #
+        # This half is not redundant, and removing it cost a real regression:
+        # a state built from RECEIVED items alone -- which is what an external
+        # tracker computes go mode from -- has to sweep the McGuffin off the
+        # goal level before Victory reads as open, so Victory landed a whole
+        # sphere after the level that grants it. Kurt's Egypt-only seed showed
+        # it plainly: egypt8 in sphere 2, Victory in sphere 3, and the tracker
+        # calling egypt8 in-logic while refusing to call the run go mode.
+        # The old rule counted exactly this and did not lag.
+        completed = 0
+        left = len(locs)
+        for loc in locs:
+            # Stop as soon as the answer is settled: once n are reachable the
+            # rest cannot change it, and once too few are left to total n the
+            # answer is already no.
+            if completed >= n:
+                return True
+            if completed + left < n:
+                return False
+            if loc.can_reach(state):
+                completed += 1
+            left -= 1
+        return completed >= n
+
     # On the Victory event rather than on an entrance, so no region has to be
     # invented to hold the win. A location rule needs no
-    # register_indirect_condition: this one reads only items, so the ordinary
-    # advancement sweep settles it.
-    set_rule(multiworld.get_location("Victory", player),
-             lambda state, n=req, it=goal_item: state.has(it, player, n))
+    # register_indirect_condition: the advancement sweep re-runs until it stops
+    # collecting, so a rule that depends on other regions is picked up on a
+    # later pass. An ENTRANCE rule is what needs the hint, which is why the
+    # Modern Day version of this had a register_indirect_condition loop.
+    set_rule(multiworld.get_location("Victory", player), goal_rule)
 
     multiworld.completion_condition[player] = lambda state: state.has("Victory", player)

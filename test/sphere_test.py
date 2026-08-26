@@ -860,6 +860,69 @@ if "Far Future" in w.enabled_worlds:
         fail('Far Future Mid wants Grave Buster; only two worlds should')
     else:
         ok('no other world gained the requirement')
+# ── go mode: Victory opens WITH the goal levels, not a sphere after ──────────
+#
+# THE REGRESSION, reported 2026-08-25 off Kurt's own seed (Egypt only,
+# world_key, worlds_required 1). Making the win "hold N McGuffins" made Victory
+# depend on those McGuffins being SWEPT off their goal levels first, so the
+# spoiler read egypt1 -> egypt8 -> Victory in three spheres where it used to be
+# two -- and an external tracker, which computes go mode from what a player
+# holds rather than from what a sweep could pick up, called egypt8 in-logic
+# while refusing to call the run go mode.
+#
+# So this is checked WITHOUT collecting placed items: the strictest reading, and
+# the one a tracker actually uses. Victory must be open in the same state that
+# opens the goal levels.
+def _no_sweep_state(mw, names):
+    st = CollectionState(mw, ITEM_NAME_GROUPS)
+    st.collect_placed = False
+    for n in names:
+        st.collect(n)
+    st.sweep()
+    return st
+
+
+_gm_fail = []
+for _gm_label, _gm_kw in (
+        ("Kurt's seed: Egypt only, world_key, 1 required",
+         dict(world_count=1, goal_type=C.GOAL_WORLD_KEY, worlds_required=1,
+              skip_tutorial=1, starting_plants=1)),
+        ("3 worlds, world_key, 2 required",
+         dict(world_count=3, goal_type=C.GOAL_WORLD_KEY, worlds_required=2)),
+        ("3 worlds, zomboss, 2 required",
+         dict(world_count=3, goal_type=C.GOAL_ZOMBOSS, worlds_required=2)),
+        ("full seed, completion, 7 required",
+         dict(world_count=13, goal_type=C.GOAL_COMPLETION, worlds_required=7))):
+    _gmw, _gw = build(**_gm_kw)
+    _gm_goals = W.locations.goal_locations_for(
+        _gw.options.goal_type.value, _gw.enabled_regions)
+    _gm_req = min(_gw.options.worlds_required.value, len(_gm_goals))
+    _gm_all = [i.name for i in _gmw.itempool
+               if i.classification == IC.progression]
+    _gm_all += [i.name for i in _gmw.precollected]
+    _gm_st = _no_sweep_state(_gmw, _gm_all)
+    _gm_reach = {l.name for l in _gm_st.reachable_locations()}
+    _gm_open = sum(1 for n in _gm_goals if n in _gm_reach)
+    if _gm_open < _gm_req:
+        _gm_fail.append(f"{_gm_label}: only {_gm_open}/{_gm_req} goal levels "
+                        f"reachable, so this proves nothing")
+    elif "Victory" not in _gm_reach:
+        _gm_fail.append(f"{_gm_label}: {_gm_open} goal levels are in logic but "
+                        f"Victory is not -- go mode lags by a sphere")
+
+    # ...and it is still a real threshold: too few goal levels, no Victory.
+    # Held McGuffins are what the other half of the rule reads, and neither
+    # half may open the run early.
+    if _gm_req > 1:
+        _gm_none = _no_sweep_state(_gmw, [i.name for i in _gmw.precollected])
+        if "Victory" in {l.name for l in _gm_none.reachable_locations()}:
+            _gm_fail.append(f"{_gm_label}: Victory is open with nothing held")
+
+if _gm_fail:
+    fail(f"go mode: {_gm_fail[:3]}")
+else:
+    ok("Victory opens in the same state as the goal levels, with no sweep")
+
 print(f"progression plants available: {len(PROG_PLANTS)}")
 print("\n" + (f"{failed} FAILURE(S)" if failed else "SPHERE LOGIC OK"))
 sys.exit(1 if failed else 0)

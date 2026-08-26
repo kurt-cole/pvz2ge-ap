@@ -239,6 +239,11 @@ class CollectionState:
         # Locations whose placed item has already been swept in, so a second
         # pass over the same location does not collect it twice.
         self._advanced = set()
+        # Whether the sweep picks items up off reachable locations. True is AP's
+        # behaviour. An external tracker computing "is the goal open right now"
+        # from the items a player HOLDS does not do this, and setting it False
+        # is how a test models that stricter view.
+        self.collect_placed = True
 
     def collect(self, name, count=1):
         self.prog_items[name] = self.prog_items.get(name, 0) + count
@@ -290,7 +295,7 @@ class CollectionState:
             # AP's sweep_for_advancements does. Without this a locked item is
             # invisible to logic -- which is exactly what the goal McGuffins
             # are, so every Victory rule would read as unreachable.
-            for r in list(reach):
+            for r in (list(reach) if self.collect_placed else ()):
                 for l in r.locations:
                     if l in self._advanced or l.item is None:
                         continue

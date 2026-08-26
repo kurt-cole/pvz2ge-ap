@@ -249,6 +249,9 @@ def run(label, **kw):
         """Holds n copies of the goal McGuffin and nothing else."""
         def __init__(self, n, name):
             self.n, self.name = n, name
+            # Nothing is reachable, so the rule's reachability half contributes
+            # nothing and this measures the ITEM half on its own.
+            self._reachable = set()
 
         def has(self, name, player, count=1):
             return name == self.name and self.n >= count
