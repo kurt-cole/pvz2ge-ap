@@ -301,7 +301,7 @@ run("3 worlds, want 4 keys", world_count=3, worlds_required=4)
 run("1 world (Egypt only)", world_count=1, worlds_required=11, include_side_paths=1)
 run("explicit list only", world_count=1, include_side_paths=1,
     enabled_worlds=["Pirate Seas", "Wild West"], worlds_required=11)
-run("explicit + topup", world_count=5, enabled_worlds=["Big Wave Beach"])
+run("whitelist under count", world_count=5, enabled_worlds=["Big Wave Beach"])
 run("zomboss, 3 worlds", world_count=3,
     goal_type=GoalType.option_zomboss, worlds_required=11)
 run("completions, 2 worlds", world_count=2,
@@ -371,17 +371,64 @@ assert WorldCount.default == 11,     f"world_count default is {WorldCount.defaul
 assert set(EnabledWorlds.default) == set(C.SELECTABLE_WORLDS) - {
     "Kongfu Temple", "Aerial Fortress"}, sorted(EnabledWorlds.default)
 
-# The two MUST agree. enabled_worlds names eleven worlds; if world_count were
-# higher the extra slots would be topped up at random from the very two worlds
-# the default means to exclude, and a "default" seed would sometimes contain
-# them. Lower and one of the eleven named worlds would be dropped instead.
+# The two MUST agree, in the one direction that still bites: a world_count
+# BELOW the eleven named worlds drops one of them at random, so a "default"
+# seed would be missing a world it asked for. A count ABOVE eleven is harmless
+# now that enabled_worlds is a whitelist -- there is nothing outside it to top
+# up from -- but keeping them equal is what makes the default self-describing.
 assert WorldCount.default == len(EnabledWorlds.default),     (f"world_count default {WorldCount.default} against "
      f"{len(EnabledWorlds.default)} default enabled worlds -- a default seed "
-     "would top up or drop at random")
+     "would drop one at random")
 _wdef, _ = run("default worlds")
 assert _wdef.enabled_worlds == set(EnabledWorlds.default), sorted(_wdef.enabled_worlds)
-wall, _ = run("every world", world_count=13)
+wall, _ = run("every world", **_EVERY_WORLD)
 assert wall.enabled_worlds == set(C.WORLD_REGIONS), sorted(wall.enabled_worlds)
+
+# -- enabled_worlds is a whitelist: a world is in the seed IFF it is named ----
+#
+# world_count used to top the selection up from worlds the yaml had NOT named,
+# so a short list against a high count handed you worlds you never asked for.
+# Reversed 2026-08-26: the list decides membership outright and the count can
+# only trim. Ancient Egypt sits outside the whitelist and is always in.
+_wl = ["Pirate Seas", "Wild West"]
+_ww, _wsd = run("whitelist beats a higher count", world_count=13,
+                enabled_worlds=_wl, worlds_required=12)
+assert _ww.enabled_worlds == set(_wl) | set(C.ALWAYS_ENABLED_WORLDS),     sorted(_ww.enabled_worlds)
+assert "Ancient Egypt" in _ww.enabled_worlds
+
+# ...and worlds_required comes down with it, rather than demanding McGuffins
+# the seed never built. Three: the two named plus Ancient Egypt.
+assert _wsd["worlds_required"] == len(_wsd["goal_locations"]) == 3,     (_wsd["worlds_required"], _wsd["goal_locations"])
+
+# A one-world whitelist against the highest count is still that world plus
+# Egypt -- the top-up branch must not fire at all when a whitelist is present.
+_w1, _ = run("whitelist of one vs count 13", world_count=13,
+             enabled_worlds=["Dark Ages"])
+assert _w1.enabled_worlds == {"Dark Ages"} | set(C.ALWAYS_ENABLED_WORLDS),     sorted(_w1.enabled_worlds)
+
+# The count still wins downward: a whitelist longer than the count is trimmed
+# to it, and Ancient Egypt is not what gets trimmed.
+_wnarrow, _ = run("count trims the whitelist", world_count=2,
+                  enabled_worlds=["Pirate Seas", "Wild West", "Dark Ages"])
+assert len(_wnarrow.enabled_worlds) == 2, sorted(_wnarrow.enabled_worlds)
+assert "Ancient Egypt" in _wnarrow.enabled_worlds
+assert _wnarrow.enabled_worlds <= ({"Pirate Seas", "Wild West", "Dark Ages"}
+                                   | set(C.ALWAYS_ENABLED_WORLDS))
+
+# An EMPTY list is not a whitelist of nothing -- it waives the whitelist and
+# world_count draws at random, which is what it has always meant and what the
+# option text promises. A yaml written for the old behaviour still generates.
+_wempty, _ = run("empty list waives the whitelist", world_count=4,
+                 enabled_worlds=[])
+assert len(_wempty.enabled_worlds) == 4, sorted(_wempty.enabled_worlds)
+assert "Ancient Egypt" in _wempty.enabled_worlds
+
+# Requiring FEWER worlds than the seed holds is left alone: only the cap
+# direction is enforced.
+_wfew, _sdfew = run("require fewer than enabled", world_count=5,
+                    worlds_required=2)
+assert _sdfew["worlds_required"] == 2
+assert len(_sdfew["goal_locations"]) == 5
 
 # determinism for a given slot seed
 a, _ = run("determinism A", world_count=4)

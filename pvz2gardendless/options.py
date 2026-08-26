@@ -21,11 +21,14 @@ class WorldCount(Range):
     items, so it is where the seed opens. Set this to 1 and Ancient Egypt is
     the entire seed.
 
-    This is a hard cap, not a target. Slots left over after enabled_worlds is
-    honoured are filled at random from the worlds it did not name, and if it
-    named more worlds than this number allows the extras are dropped at random.
-    Ancient Egypt is never one of the ones dropped. Set this to `random` to let
-    the generator pick the number of worlds too.
+    This is a hard cap, not a target, and enabled_worlds outranks it. It can
+    only make the seed SMALLER: name more worlds than this allows and the
+    extras are dropped at random, but name fewer and you get exactly the ones
+    you named -- nothing outside enabled_worlds is ever added to fill the gap.
+    Empty enabled_worlds entirely and there is no whitelist to honour, so this
+    many worlds are drawn at random instead. Ancient Egypt is never one of the
+    ones dropped. Set this to `random` to let the generator pick the number of
+    worlds too.
 
     Locations in worlds that are left out are removed from the seed entirely,
     along with their unlock items, so those worlds stay locked for good.
@@ -56,23 +59,28 @@ class EnabledWorlds(OptionSet):
     Which worlds this seed uses. world_count decides HOW MANY; this decides
     which ones they are.
 
-    Leave it empty to have world_count pick that many worlds at random. Name
-    fewer worlds than world_count and the rest of the slots are filled at
-    random; name more and world_count still wins, so the extras are dropped at
-    random and you get exactly that many worlds. Naming a world asks for it, it
-    does not guarantee it.
+    This is a WHITELIST, and it wins. A world is in the seed if and only if it
+    is named here: nothing outside the list is ever added, whatever
+    world_count says. Name three worlds against a world_count of ten and you
+    get three, not three plus seven at random.
+
+    world_count can still make the seed smaller. Name more worlds than it
+    allows and the count wins, dropping the extras at random -- so naming a
+    world asks for it, and only guarantees it when the count has room.
+
+    Leave the list empty to waive the whitelist: world_count then picks that
+    many worlds at random from the whole roster.
 
     The default names eleven, so lowering world_count is how you get a smaller
     seed -- there is no need to empty this list first.
 
     Kongfu Temple and Aerial Fortress are the two the default leaves out. To
-    play one, name it here AND raise world_count to match, or the list is
-    twelve worlds long against eleven slots and one of the twelve is dropped at
-    random -- sometimes the very world you added. Raising world_count on its
-    own works too: 12 gets one of the two at random and 13 gets both.
+    play one, name it here and make sure world_count leaves room: the list is
+    then twelve worlds long, so a world_count of eleven still drops one of the
+    twelve at random -- sometimes the very world you added.
 
-    Ancient Egypt is included whether or not it is listed, and is never one of
-    the worlds dropped to fit the count.
+    Ancient Egypt sits outside the whitelist. It is included whether or not it
+    is listed, and is never one of the worlds dropped to fit the count.
     """
     display_name = "Enabled Worlds"
     valid_keys   = SELECTABLE_WORLDS
@@ -130,9 +138,12 @@ class WorldsRequired(Range):
     Every world in the seed counts, Modern Day included, so the ceiling is 12
     -- or 11 for the zomboss goal, since Kongfu Temple has no Zomboss level.
 
-    Worlds left out by world_count / enabled_worlds take their goal location
+    Worlds left out by enabled_worlds / world_count take their goal location
     with them, so this is clamped down to what the seed can actually offer --
-    asking for 4 world keys in a 3-world seed requires 3.
+    asking for 4 world keys in a 3-world seed requires 3, and a whitelist of
+    two worlds caps this at three (those two plus Ancient Egypt) however high
+    it is set. Requiring FEWER worlds than the seed contains is fine and is
+    left alone.
     """
     display_name = "Worlds Required"
     range_start  = 1

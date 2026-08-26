@@ -374,32 +374,44 @@ class PvZ2GardendlessWorld(World):
     def _choose_worlds(self) -> Set[str]:
         """Resolve world_count and enabled_worlds into one set of worlds.
 
-        world_count is a HARD CAP: it is exactly how many worlds the seed gets.
-        enabled_worlds picks WHICH ones, and the count tops the selection up at
-        random when it is short or trims it at random when it is over.
+        enabled_worlds is a WHITELIST and it wins. A world appears in the seed
+        if and only if it is named there -- nothing outside the list is ever
+        added, whatever world_count says. Ancient Egypt sits outside the
+        whitelist entirely and is always enabled, because it is the only world
+        playable with no items, so a seed without it opens on nothing.
 
-        Naming more worlds than the count asks for used to give you all of
-        them, on the reasoning that an explicit choice outranks a target. That
-        stopped working once enabled_worlds carried a default naming eleven
-        worlds: every count from 1 to 11 was already satisfied by the default,
-        so world_count did nothing at all unless it was raised to 12 or 13.
-        The count wins now, so a small seed is a small seed whatever the yaml
-        names.
+        world_count is a cap on top of that, never a target: it can only bring
+        the whitelist DOWN. Name three worlds with a count of ten and you get
+        three, not three plus seven at random -- that top-up is what this used
+        to do, and it meant a yaml that named the worlds it wanted still got
+        worlds it had not asked for. Name ten with a count of three and the
+        count still wins, trimming seven at random.
 
-        Ancient Egypt survives the trim whatever happens -- it is the only
-        world playable with no items, so a seed without it opens on nothing.
+        An EMPTY enabled_worlds is not a whitelist of nothing; it means no
+        whitelist at all, so world_count picks that many worlds at random from
+        the full roster. That is what it has always meant and what the option
+        text promises, and Egypt-only is already reachable through
+        `world_count: 1`.
+
+        Ancient Egypt survives the trim whatever happens.
         """
-        chosen = set(self.options.enabled_worlds.value) & set(SELECTABLE_WORLDS)
+        # An empty (or wholly unrecognised) list waives the whitelist rather
+        # than emptying the seed.
+        listed = set(self.options.enabled_worlds.value) & set(SELECTABLE_WORLDS)
+
+        chosen = set(listed)
         chosen.update(ALWAYS_ENABLED_WORLDS)
 
         # Every world counts toward world_count, Ancient Egypt and Modern Day
         # alike: the number is the worlds you get. Modern Day used to be
         # subtracted here because it was forced into every seed on top of the
-        # count, which made `world_count: 1` produce two worlds. Sample from
-        # OPTIONAL_WORLDS, which is list-ordered, so both the top-up and the
-        # trim depend only on the slot's seeded RNG.
+        # count, which made `world_count: 1` produce two worlds.
         short = self.options.world_count.value - len(chosen)
-        if short > 0:
+        if short > 0 and not listed:
+            # No whitelist: top up at random from the worlds not yet chosen.
+            # With a whitelist there is nothing to top up FROM -- a world it
+            # did not name must not appear -- so the seed is simply smaller
+            # than world_count asked for.
             candidates = [w for w in OPTIONAL_WORLDS if w not in chosen]
             chosen.update(self.random.sample(candidates,
                                              min(short, len(candidates))))

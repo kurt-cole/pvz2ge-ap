@@ -891,8 +891,12 @@ for _gm_label, _gm_kw in (
          dict(world_count=3, goal_type=C.GOAL_WORLD_KEY, worlds_required=2)),
         ("3 worlds, zomboss, 2 required",
          dict(world_count=3, goal_type=C.GOAL_ZOMBOSS, worlds_required=2)),
+        # enabled_worlds as well as world_count: the list is a whitelist as of
+        # 2026-08-26, so a bare world_count=13 gets the eleven the default
+        # names rather than all thirteen.
         ("full seed, completion, 7 required",
-         dict(world_count=13, goal_type=C.GOAL_COMPLETION, worlds_required=7))):
+         dict(goal_type=C.GOAL_COMPLETION, worlds_required=7,
+              **gen_test._EVERY_WORLD))):
     _gmw, _gw = build(**_gm_kw)
     _gm_goals = W.locations.goal_locations_for(
         _gw.options.goal_type.value, _gw.enabled_regions)

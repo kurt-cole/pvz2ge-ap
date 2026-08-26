@@ -34,11 +34,19 @@ the Archipelago Launcher's **Generate Template Options** button.
 
 The options worth knowing about:
 
+- **Enabled Worlds** — a whitelist. A world is in the seed if and only if it is named here, and
+  Ancient Egypt is always in whether you name it or not. Leave the list empty to waive the
+  whitelist and let **World Count** pick at random instead.
+- **World Count** — a cap on top of that, never a target. It can only make the seed smaller: name
+  more worlds than it allows and the extras are dropped at random, but name fewer and you get
+  exactly the ones you named. Nothing outside **Enabled Worlds** is added to fill the gap.
 - **Goal Type** — what completing a world means: its **World Key** level, its **Zomboss**, or its
   final level (**Completion**). Note that the zomboss goal cannot be satisfied by Kongfu Temple,
   which has no Zomboss level in the game data.
 - **Worlds Required** — how many worlds must be completed to win. Every world in the seed counts,
-  Modern Day included. Asking for more than the seed contains clamps down to what it has.
+  Modern Day included. Asking for more than the seed contains clamps down to what it has, so a
+  two-world whitelist caps this at three however high you set it. Requiring fewer worlds than the
+  seed holds is fine and is left alone.
 
 Worlds open in three stages, and the currency is one item: **Progressive &lt;World&gt;**, three per
 world. The first opens the world as far as its World Key level, the second carries you to its
