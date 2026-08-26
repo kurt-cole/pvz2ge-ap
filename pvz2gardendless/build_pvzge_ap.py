@@ -16,6 +16,7 @@ Usage: double-click this file, or run:
 
 import os
 import sys
+import json
 import shutil
 import subprocess
 import threading
@@ -4656,12 +4657,44 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
         log("  Enabled F12 devtools in main.js")
 
 
+    # ── 4b. Pin @noble/hashes below its ESM-only line ──────────────────────────
+    # electron-builder's app-builder-lib (blockmap.js) still does a plain
+    # require() of @noble/hashes. Starting at 1.9.0 that package ships
+    # ESM-only, which crashes the build with ERR_REQUIRE_ESM. Pin it via an
+    # npm "overrides" entry in the Electron wrapper's own package.json so
+    # every transitive dependency resolves to a CJS-compatible version.
+    # https://github.com/electron-userland/electron-builder/issues (blockmap ESM require)
+    package_json_path = os.path.join(electron_dir, "package.json")
+    noble_hashes_pin = "1.8.0"
+    overrides_changed = False
+    if os.path.isfile(package_json_path):
+        with open(package_json_path, "r", encoding="utf-8") as f:
+            pkg = json.load(f)
+        overrides = pkg.setdefault("overrides", {})
+        if overrides.get("@noble/hashes") != noble_hashes_pin:
+            overrides["@noble/hashes"] = noble_hashes_pin
+            with open(package_json_path, "w", encoding="utf-8") as f:
+                json.dump(pkg, f, indent=2)
+                f.write("\n")
+            overrides_changed = True
+            log(f"  Pinned @noble/hashes to {noble_hashes_pin} in package.json (avoids ERR_REQUIRE_ESM)")
+
     # ── 5. npm install ────────────────────────────────────────────────────────
     # Skipped on the update path when node_modules is already populated. This
     # is the one step an update genuinely saves: the clones above are
     # incremental once they exist, and electron-builder below is unavoidable.
+    # Still forced, even on the fast path, if the override above just changed
+    # package.json or if an already-installed @noble/hashes is on the
+    # ESM-only line (a node_modules left over from before this pin existed).
     node_modules = os.path.join(electron_dir, "node_modules")
-    if fast and os.path.isdir(node_modules) and os.listdir(node_modules):
+    installed_noble_version = None
+    noble_pkg_json = os.path.join(node_modules, "@noble", "hashes", "package.json")
+    if os.path.isfile(noble_pkg_json):
+        with open(noble_pkg_json, "r", encoding="utf-8") as f:
+            installed_noble_version = json.load(f).get("version")
+    needs_reinstall = overrides_changed or installed_noble_version != noble_hashes_pin
+
+    if fast and not needs_reinstall and os.path.isdir(node_modules) and os.listdir(node_modules):
         step("Node.js dependencies already installed — skipping")
     else:
         step("Installing Node.js dependencies (electron, electron-builder)")
