@@ -2254,7 +2254,7 @@ window.electron = electron;
   // deathLinkActive(). A cfg written before this option has no such key, and
   // undefined reads as on, which is the behaviour that shipped.
   let cfg   = { server:'localhost:38281', slot:'', password:'', deathLink:true };
-  let st    = { checked:[], played:[], lastIdx:0, receivedKeys:[], receivedItems:[],
+  let st    = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
                 upgradeCounts:{}, worldUnlocks:{}, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey:'' };
   let sessionActive = false; // set true only after explicit Connect + server ack
   // Whether this session has told the server the goal is met. Session state,
@@ -2273,63 +2273,6 @@ window.electron = electron;
   // desync -- i.e. a silently dropped or duplicated check -- waiting to
   // happen. Identity plus length catches every mutation this code performs.
   let _checkedSet = null, _checkedSrc = null, _checkedLen = -1;
-
-  // ── played, as distinct from checked ──────────────────────────────────────
-  // st.checked is "the multiworld knows about this location". st.played is
-  // "this save actually beat that level". They used to be the same list, and
-  // that was a hole: rebuildAPSave() restored levelProps from st.checked, so a
-  // check arriving from ANYWHERE -- /send_location, a release, !collect, a
-  // co-op partner -- wrote progress 3 into the save, and isFinished() then
-  // answered yes for a level nobody had played. The goal's played-not-checked
-  // rule was reading a number the check itself had just forged.
-  //
-  // Only the poll's own observation of the game's levelProps writes here, and
-  // it is the ONLY source rebuildAPSave() restores progress from.
-  let _playedSet = null, _playedSrc = null, _playedLen = -1;
-  function playedList(){
-    // Absent means state written by a client from before this ledger existed.
-    // Seed it from st.checked: for a run already in progress those levels were
-    // played, and it keeps the wiped-localStorage recovery in
-    // mergeServerChecks() working exactly as it did. A new run starts [].
-    if(!st.played) st.played = (st.checked || []).slice();
-    return st.played;
-  }
-  function isPlayed(loc){
-    const arr = playedList();
-    if(_playedSrc !== arr || _playedLen !== arr.length){
-      _playedSet = new Set(arr);
-      _playedSrc = arr;
-      _playedLen = arr.length;
-    }
-    return _playedSet.has(loc);
-  }
-  // Records a level this save has genuinely beaten. Called from the poll only,
-  // in the window before rebuildAPSave() overwrites levelProps.
-  function recordPlayed(loc){
-    if(isPlayed(loc)) return false;
-    playedList().push(loc);
-    svSt();
-    return true;
-  }
-
-  // Rewrites every AP-tracked level in the save from the played ledger. Its own
-  // function because it is the one place the checked/played distinction has
-  // teeth, and it has to be testable on its own: as part of rebuildAPSave() it
-  // was 400 lines deep in save surgery and no suite could reach it.
-  //
-  // From st.played, NOT st.checked. A location checked without being played
-  // leaves its level unbeaten in the save, which is the point -- the player
-  // still has to go and play it, and isFinished() keeps answering honestly.
-  function restoreLevelProgress(cp){
-    if(!cp.levelProps) cp.levelProps = {};
-    for(const lvl of new Set(Object.values(LOC_LEVELS))) delete cp.levelProps[lvl];
-    for(const locName of playedList()) {
-      const lvl = LOC_LEVELS[locName];
-      if(lvl) cp.levelProps[lvl] = { progress: 3 };
-    }
-    return cp.levelProps;
-  }
-
   function isChecked(loc){
     const arr = st.checked || [];
     if(_checkedSrc !== arr || _checkedLen !== arr.length){
@@ -2699,8 +2642,13 @@ window.electron = electron;
       } catch(e) {}
     }
 
-    // 3. Reset AP-tracked level progress, then restore what was played.
-    restoreLevelProgress(cp);
+    // 3. Reset AP-tracked level progress, then restore checked locations
+    if(!cp.levelProps) cp.levelProps = {};
+    for(const lvl of new Set(Object.values(LOC_LEVELS))) delete cp.levelProps[lvl];
+    for(const locName of (st.checked||[])) {
+      const lvl = LOC_LEVELS[locName];
+      if(lvl) cp.levelProps[lvl] = { progress: 3 };
+    }
 
     // 3b. Take back the game's own world-key currency. Every poll, not once:
     // the key level can be beaten at any time, and the count is granted the
@@ -3023,23 +2971,13 @@ window.electron = electron;
     // order, so this is called from both and no-ops until the map exists.
     if(!idToLoc || !Object.keys(idToLoc).length) return;
     let added = 0;
-    // A save with NO play history of its own is a run being resumed, not a run
-    // in progress: wiped localStorage, a second machine, an AP state reset. The
-    // server's list is then the only record that those levels were ever played,
-    // so it is taken as one and the map progression comes back as it always
-    // did. Once this save has played anything, server checks stop implying
-    // play -- which is what stops /send_location handing out a goal world.
-    const resuming = playedList().length === 0;
     // Local Set rather than isChecked(): this loop pushes as it goes, which
     // would invalidate the shared mirror on every iteration and rebuild it
     // each time. One Set built up front stays O(n + m).
     const known = new Set(st.checked);
     for(const id of serverCheckedIds){
       const name = idToLoc[id];
-      if(name && !known.has(name)){
-        st.checked.push(name); known.add(name); added++;
-        if(resuming) st.played.push(name);
-      }
+      if(name && !known.has(name)){ st.checked.push(name); known.add(name); added++; }
     }
     serverCheckedIds = [];
     if(added){
@@ -3072,7 +3010,7 @@ window.electron = electron;
           // upgradeCounts is a running tally rather than a deduplicated list,
           // so it has to be cleared here explicitly -- carrying it into a new
           // seed would grant upgrades that seed never sent.
-          st = { checked:[], played:[], lastIdx:0, receivedKeys:[], receivedItems:[],
+          st = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
                  upgradeCounts:{}, worldUnlocks:{}, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey };
           window._AP_grantedPlantIds = new Set();
           window._AP_grantedUpgrades = new Set();
@@ -4043,35 +3981,12 @@ window.electron = electron;
   // nobody sat down and won. isFinished() reads the game's own levelProps, so
   // it answers "did you play this", which is what the goal is meant to mean.
   //
-  // A goal location with no LOC_LEVELS entry FAILS CLOSED -- it does not
-  // count, and isChecked() is never consulted for it. That entry is the only
-  // thing that lets this client ask "was it played", so without one the lax
-  // answer is the exact hole this function exists to close: a released or
-  // !collect'd goal would count as a world beaten.
-  //
-  // It cannot happen for a goal location today (every one is an ordinary
-  // level, and generation only ever picks levels). The realistic way to reach
-  // it is an OLD client on a NEW seed, naming a level it has never heard of.
-  // That strands the run -- which is why it is loud: unknownGoalLocs warns
-  // once per name, and the overlay tracker's total drops below the goal
-  // count, so the run reads as stuck rather than silently unwinnable.
-  const unknownGoalLocs = {};
+  // A level with no LOC_LEVELS entry falls back to isChecked. That cannot
+  // happen for a goal location today (every one is an ordinary level), and
+  // failing closed there would strand the run instead of just being lax.
   function goalPlayed(loc){
     const levelId = LOC_LEVELS[loc];
-    if(!levelId){
-      if(!unknownGoalLocs[loc]){
-        unknownGoalLocs[loc] = 1;
-        log('Goal location "' + loc + '" is not a level this client knows; ' +
-            'it can never count. Rebuild the client against the apworld ' +
-            'this seed was rolled with.');
-      }
-      return false;
-    }
-    // The ledger is the persistent answer; isFinished() is the live one, for a
-    // level beaten in this session before the poll has recorded it. Neither can
-    // be forged by a check any more, now that rebuildAPSave() restores from
-    // st.played.
-    return isPlayed(loc) || isFinished(levelId);
+    return levelId ? isFinished(levelId) : isChecked(loc);
   }
 
   // {done, need} for the overlay tracker as well as the win check, so the
@@ -4123,14 +4038,8 @@ window.electron = electron;
     // levelProps for whichever tutorial step the player is actually on).
     if(conn && sessionActive){
       for(const[loc,levelId] of Object.entries(LOC_LEVELS)){
-        if(!isFinished(levelId)) continue;
-        // Before the isChecked() bail-out, and deliberately so: a level whose
-        // check arrived from the server before it was ever played has to be
-        // creditable when the player does go and play it. Testing isChecked
-        // first would skip it forever and leave that goal world permanently
-        // uncompletable.
-        recordPlayed(loc);
-        if(!isChecked(loc)) fireCheck(loc);
+        if(isChecked(loc)) continue;
+        if(isFinished(levelId)) fireCheck(loc);
       }
       // The goal retry. This used to be done by walking the victory location
       // again on every tick even though it was already checked; one call here
@@ -4277,7 +4186,7 @@ window.electron = electron;
     };
     document.getElementById('ap-reset').onclick=()=>{
       if(!confirm('Reset all AP progress for this slot? This clears checked locations, received items, and run state.')) return;
-      st={checked:[],played:[],lastIdx:0,receivedKeys:[],receivedItems:[],upgradeCounts:{},worldUnlocks:{},costumes:{},wornCostume:{},pendingCostumes:0,runKey:''};
+      st={checked:[],lastIdx:0,receivedKeys:[],receivedItems:[],upgradeCounts:{},worldUnlocks:{},costumes:{},wornCostume:{},pendingCostumes:0,runKey:''};
       // The victory location is no longer checked, so clearing goalSent lets
       // re-earning it send the goal again.
       goalSent=false;
