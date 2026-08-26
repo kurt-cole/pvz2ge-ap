@@ -169,29 +169,6 @@ check("an old seed still reproduces the worlds it did send",
 check("an empty passthrough generates without raising",
       build(seed=6, passthrough={}) is not None)
 
-# ── The client ───────────────────────────────────────────────────────────────
-# It cannot be imported offline (CommonClient needs a full AP checkout), so this
-# is a source check: the parts that make UT work, and the fallback for the many
-# players who do not have UT installed.
-print("\n=== the text client ===")
-_CLIENT = open(os.path.join(os.path.dirname(_HERE), "pvz2gardendless",
-                            "client.py"), encoding="utf-8").read()
-check("it inherits UT's context when it is installed",
-      "from worlds.tracker.TrackerClient import TrackerGameContext as SuperContext"
-      in _CLIENT)
-check("it falls back to CommonContext when it is not",
-      "except ModuleNotFoundError" in _CLIENT
-      and "SuperContext = CommonContext" in _CLIENT)
-check("it builds UT's multiworld before the UI comes up",
-      "ctx.run_generator()" in _CLIENT)
-# UT's context tags the connection as a tracker; this is a game client.
-check("it does not claim to be a tracker to the server",
-      'tags = {"AP"}' in _CLIENT)
-check("make_gui goes through super(), which is what carries the Tracker tab",
-      "ui = super().make_gui()" in _CLIENT)
-check("the world registers it as a Launcher client for this game",
-      "from .client import launch" in _SRC and "game_name=GAME_NAME" in _SRC)
-
 print()
 if FAILURES:
     print(f"FAILED ({len(FAILURES)}):")

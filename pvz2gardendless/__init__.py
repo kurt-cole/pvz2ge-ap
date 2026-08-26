@@ -126,8 +126,7 @@ def _launch_installer(*args) -> None:
 # the previous bare `except Exception: pass` meant any breakage here showed up
 # as the installer silently vanishing from the Launcher with no explanation.
 try:
-    from worlds.LauncherComponents import (components, Component, Type,
-                                           launch_subprocess)
+    from worlds.LauncherComponents import components, Component, Type
 except ImportError:  # pragma: no cover - depends on the host AP version
     logging.warning(
         "PvZ2 Gardendless: worlds.LauncherComponents unavailable, so the "
@@ -137,23 +136,6 @@ else:
     components.append(Component("PvZ2 Gardendless Installer", func=_launch_installer,
         component_type=Type.CLIENT,
         description="Build and install the PvZ2 Gardendless Archipelago mod."))
-
-    def _launch_client(*args) -> None:
-        # Imported inside the function, not at module scope: the client pulls
-        # CommonClient and (when installed) Universal Tracker, and none of that
-        # belongs in a headless generation import.
-        from .client import launch
-        launch_subprocess(launch, name="PvZ2GardendlessClient", args=args)
-
-    # The companion text client. The game itself is played in the injected JS
-    # client, which connects on its own; this window is the chat log, the
-    # server commands and -- with Universal Tracker installed -- the Tracker
-    # tab, which is the only place this seed's logic can be viewed.
-    components.append(Component("PvZ2 Gardendless Client", func=_launch_client,
-        component_type=Type.CLIENT,
-        game_name=GAME_NAME,
-        supports_uri=True,
-        description="Text client and Universal Tracker window for PvZ2 Gardendless."))
 
 
 # ── Settings (persisted to host.yaml) ────────────────────────────────────────
