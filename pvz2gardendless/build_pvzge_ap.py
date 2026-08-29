@@ -89,16 +89,44 @@ window.electron = electron;
     return (stored >= 0 && stored < players.length) ? stored : -1;
   }
 
+  // A settings blob the game will accept as its own. getSettings() is
+  //     JSON.parse(localStorage.getItem(KEY)) || new Settings()
+  // -- no merge onto defaults -- so ANY object we hand back is taken as
+  // complete, and every field we did not put in it reads as undefined. Most
+  // consumers guard with isNaN(), but the splash scene does not:
+  //     onLoad:  this.audioVol = getSettings().MusicVolume
+  //     start:   this.audioSource.volume = this.audioVol
+  // an undefined volume reaches the engine's setGainValue() as NaN, which
+  // throws "The provided float value is non-finite" out of the very first
+  // scene -- a black screen with nothing on it but our AP button. KeyBinds is
+  // read the same way (SettingWindow.onLoad takes e.KeyBinds verbatim).
+  //
+  // So PlayerIndex is only ever injected into settings the GAME wrote. A
+  // missing or half-built blob is left to the game to fill in from its own
+  // defaults; the slot index still lives in AP_SLOT_IDX_KEY and is injected
+  // on the next read, once real settings exist.
+  function isGameSettings(s) {
+    return !!s && typeof s === 'object' && !Array.isArray(s)
+        && typeof s.MusicVolume === 'number' && isFinite(s.MusicVolume);
+  }
+
   Storage.prototype.getItem = function(key) {
     const v = _origGet.call(this, key);
     if (key === SETTINGS_KEY) {
-      const apIdx = resolveApIdx();
-      if (apIdx >= 0) {
-        try {
-          const s = v ? JSON.parse(v) : {};
+      let s = null;
+      try { s = v ? JSON.parse(v) : null; } catch(e) { s = null; }
+      // Self-heal a blob an older build of this patch fabricated: dropping it
+      // makes getSettings() fall through to `new Settings()` again.
+      if (v && !isGameSettings(s)) {
+        try { this.removeItem(SETTINGS_KEY); } catch(e) {}
+        return null;
+      }
+      if (isGameSettings(s)) {
+        const apIdx = resolveApIdx();
+        if (apIdx >= 0) {
           s.PlayerIndex = apIdx;
-          return JSON.stringify(s);
-        } catch(e) {}
+          try { return JSON.stringify(s); } catch(e) {}
+        }
       }
     }
     return v;
@@ -2355,11 +2383,20 @@ window.electron = electron;
         localStorage.setItem(SAVE_KEY, JSON.stringify(allPlayers));
       }
       localStorage.setItem(AP_SLOT_IDX_KEY, String(apIdx));
+      // Only ever edit settings the game itself wrote. Writing a bare
+      // {PlayerIndex} here is what black-screened the game: getSettings() does
+      // not merge onto defaults, so the splash scene read MusicVolume as
+      // undefined and the engine threw on a non-finite gain. Absent settings
+      // are left absent -- AP_SLOT_IDX_KEY carries the index until the game
+      // saves a real blob, and the getItem hook injects into that.
       try {
         const sRaw = localStorage.getItem(SETTINGS_KEY);
-        const s = sRaw ? JSON.parse(sRaw) : {};
-        s.PlayerIndex = apIdx;
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+        const s = sRaw ? JSON.parse(sRaw) : null;
+        if (s && typeof s === 'object' && !Array.isArray(s)
+            && typeof s.MusicVolume === 'number' && isFinite(s.MusicVolume)) {
+          s.PlayerIndex = apIdx;
+          localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+        }
       } catch(e) {}
       return apIdx;
     } catch(e) { log('Error creating AP slot: ' + e); return -1; }
