@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PvZ2 Gardendless - level pressure and logic</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f26; --panel2: #23272f; --line: #2f343e;
+    --fg: #e6e8ec; --dim: #9aa3b2; --dimmer: #6b7381;
+    --accent: #7cc4ff; --good: #6fcf97; --warn: #f2c94c; --bad: #eb5757;
+    --curated: #b085f5;
+    --p0:#2d6a4f; --p1:#40916c; --p2:#95a44a; --p3:#d68c45; --p4:#c0503c; --p5:#8b2f3f;
+    --unmeasured: #333a45;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg:#f4f5f7; --panel:#fff; --panel2:#eceef2; --line:#d8dbe1;
+      --fg:#1b1f27; --dim:#5b6472; --dimmer:#8b93a1; --unmeasured:#dde0e6;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:13px/1.5 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif; }
+  header { display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;
+           padding:12px 18px; border-bottom:1px solid var(--line); background:var(--panel); }
+  h1 { font-size:15px; margin:0; font-weight:650; letter-spacing:.2px; }
+  nav { display:flex; gap:2px; margin-left:auto; }
+  nav button { background:none; border:1px solid transparent; color:var(--dim);
+               padding:5px 12px; border-radius:6px; cursor:pointer; font:inherit; }
+  nav button:hover { color:var(--fg); background:var(--panel2); }
+  nav button.on { color:var(--fg); background:var(--panel2); border-color:var(--line); }
+  #tier { font-size:11px; color:var(--dim); padding:2px 8px; border:1px solid var(--line);
+          border-radius:99px; }
+  #tier.structure { color:var(--warn); border-color:var(--warn); }
+  main { padding:16px 18px 60px; max-width:1500px; }
+  .view { display:none; } .view.on { display:block; }
+  .muted { color:var(--dim); } .tiny { font-size:11px; }
+  .note { color:var(--dim); margin:0 0 14px; max-width:70ch; }
+
+  .worldrow { margin-bottom:14px; }
+  .worldrow h3 { font-size:12px; margin:0 0 5px; font-weight:600; color:var(--dim);
+                 text-transform:uppercase; letter-spacing:.6px; }
+  .cells { display:flex; flex-wrap:wrap; gap:3px; }
+  .cell { width:30px; height:26px; border-radius:4px; background:var(--unmeasured);
+          border:1px solid rgba(0,0,0,.25); cursor:pointer; position:relative;
+          display:flex; align-items:center; justify-content:center;
+          font-size:9px; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.6); }
+  .cell.sel { outline:2px solid var(--accent); outline-offset:1px; }
+  .cell .dot { position:absolute; top:1px; right:2px; width:5px; height:5px;
+               border-radius:50%; background:var(--warn); }
+  .cell.goal { border-color:var(--accent); border-width:2px; }
+  .stretchgap { width:10px; }
+
+  table { border-collapse:collapse; width:100%; font-size:12px; }
+  th,td { text-align:left; padding:5px 9px; border-bottom:1px solid var(--line);
+          vertical-align:top; }
+  th { color:var(--dim); font-weight:600; position:sticky; top:0; background:var(--bg); }
+  tr:hover td { background:var(--panel2); }
+  code { font:11px/1.4 ui-monospace,Consolas,monospace; color:var(--accent); }
+
+  .chip { display:inline-block; padding:1px 7px; border-radius:99px; font-size:10.5px;
+          border:1px solid var(--line); color:var(--dim); margin:1px 3px 1px 0;
+          white-space:nowrap; }
+  .chip.hard { color:var(--bad); border-color:var(--bad); }
+  .chip.soft { color:var(--warn); border-color:var(--warn); }
+  .chip.flavour { color:var(--dimmer); }
+  .chip.ok { color:var(--good); border-color:var(--good); }
+  .chip.curated { color:var(--curated); border-color:var(--curated); }
+
+  #detail { position:fixed; right:0; top:0; bottom:0; width:430px; overflow:auto;
+            background:var(--panel); border-left:1px solid var(--line);
+            padding:16px 18px 40px; transform:translateX(100%);
+            transition:transform .15s ease; z-index:20; }
+  #detail.on { transform:none; box-shadow:-8px 0 30px rgba(0,0,0,.35); }
+  #detail h2 { margin:0 0 2px; font-size:15px; }
+  #detail h4 { margin:16px 0 5px; font-size:11px; text-transform:uppercase;
+               letter-spacing:.6px; color:var(--dim); }
+  #detail .close { position:absolute; right:12px; top:12px; background:none;
+                   border:1px solid var(--line); color:var(--dim); border-radius:5px;
+                   cursor:pointer; padding:2px 8px; }
+
+  .controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  .controls select, .controls input { background:var(--panel); color:var(--fg);
+      border:1px solid var(--line); border-radius:5px; padding:4px 8px; font:inherit; }
+  .legend { display:flex; gap:10px; align-items:center; flex-wrap:wrap; color:var(--dim);
+            font-size:11px; margin-bottom:12px; }
+  .sw { width:14px; height:12px; border-radius:3px; display:inline-block;
+        vertical-align:-2px; margin-right:4px; }
+
+  .matrix { overflow-x:auto; }
+  .matrix td { min-width:110px; }
+  .pname { cursor:pointer; display:block; }
+  .pname:hover { color:var(--accent); }
+
+  svg { max-width:100%; }
+  .edge { stroke:var(--line); fill:none; }
+  .node rect { fill:var(--panel2); stroke:var(--line); rx:5; }
+  .node text { fill:var(--fg); font-size:11px; }
+  .scroll { overflow:auto; max-height:calc(100vh - 220px); }
+</style>
+</head>
+<body>
+<header>
+  <h1>PvZ2 Gardendless &mdash; pressure &amp; logic map</h1>
+  <span id="tier"></span>
+  <nav>
+    <button data-view="levels" class="on">Levels</button>
+    <button data-view="plants">Plants</button>
+    <button data-view="threats">Threats</button>
+    <button data-view="sidepaths">Side paths</button>
+    <button data-view="logic">Logic graph</button>
+    <button data-view="about">About</button>
+  </nav>
+</header>
+<main>
+  <section id="v-levels" class="view on"></section>
+  <section id="v-plants" class="view"></section>
+  <section id="v-threats" class="view"></section>
+  <section id="v-sidepaths" class="view"></section>
+  <section id="v-logic" class="view"></section>
+  <section id="v-about" class="view"></section>
+</main>
+<aside id="detail"><button class="close">close</button><div id="detail-body"></div></aside>
+<script src="bundle.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

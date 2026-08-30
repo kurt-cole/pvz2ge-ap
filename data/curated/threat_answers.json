@@ -1,0 +1,399 @@
+{
+  "_doc": [
+    "What ANSWERS each threat token, as a predicate over a plant record.",
+    "",
+    "Predicate grammar (see model/requirements.py, ~40 lines, no dependencies):",
+    "  {\"any\": [atom, ...]}   at least one must hold",
+    "  {\"all\": [atom, ...]}   every one must hold",
+    "  {\"not\": atom}          negation",
+    "  atoms are strings:",
+    "    \"role:dps_aoe\"        has the role at any band",
+    "    \"role:dps_aoe>=b3\"    has it at that band or better",
+    "    \"element:fire\"        carries the element",
+    "    \"flag:jester_safe\"    carries the flag",
+    "    \"name:Blover\"         is exactly this plant",
+    "    \"list:FIRE_AURA_PLANTS\"  is in that constants.py list -- ALWAYS",
+    "                              prefer this over re-listing plants here,",
+    "                              because constants.py is what generation",
+    "                              actually reads and this file must not",
+    "                              become a second source of truth",
+    "",
+    "`severity` is how a level's difficulty scales when the token is unanswered:",
+    "  hard     the level is unwinnable; requirements.py emits a MUST rule",
+    "  soft     the level is much harder; folds into the pressure multiplier",
+    "  flavour  recorded for display, never gates anything",
+    "",
+    "`answered_by_default` names tokens a normal loadout handles incidentally,",
+    "so the site can grey them out instead of implying a gate."
+  ],
+  "tokens": {
+    "jester": {
+      "severity": "hard",
+      "why": "returns straight-line projectiles at your own lawn; a reversible shot is worse than none",
+      "answer": {
+        "any": [
+          "list:JESTER_COUNTER_PLANTS"
+        ]
+      },
+      "current_rule": "WORLD_ENTRY_PLANTS['Dark Ages']"
+    },
+    "iceblock": {
+      "severity": "hard",
+      "why": "arrives carrying ice blocks that freeze plants solid; only a standing WarmingRadius keeps a lawn workable",
+      "answer": {
+        "any": [
+          "list:FIRE_AURA_PLANTS",
+          "role:warmth>=b3"
+        ]
+      },
+      "current_rule": "WORLD_ENTRY_PLANTS['Frostbite Caves']"
+    },
+    "water": {
+      "severity": "hard",
+      "why": "deep-water lanes hold nothing without a base",
+      "answer": {
+        "any": [
+          "name:Lily Pad",
+          "flag:aquatic_only",
+          "role:terrain>=b3"
+        ]
+      },
+      "current_rule": "WORLD_ENTRY_PLANTS['Big Wave Beach']"
+    },
+    "air": {
+      "severity": "hard",
+      "why": "flies over ground plants; nothing on the lawn reaches it",
+      "answer": {
+        "any": [
+          "role:air_clear>=b2",
+          "role:dps_lob>=b2",
+          "role:dps_pierce>=b3"
+        ]
+      },
+      "current_rule": "WORLD_ENTRY_PLANTS['Far Future'] (Blover, by decision not derivation)"
+    },
+    "garg": {
+      "severity": "soft",
+      "why": "walks past chip damage and smashes a plant per step; needs burst or an instakill, not DPS",
+      "answer": {
+        "any": [
+          "role:burst>=b4",
+          "role:instakill>=b3",
+          "role:freeze>=b4",
+          "role:dps_lob>=b4"
+        ]
+      },
+      "current_rule": null
+    },
+    "blocker": {
+      "severity": "soft",
+      "why": "carries a screen door or shield that eats straight shots",
+      "answer": {
+        "any": [
+          "role:disarm>=b3",
+          "role:dps_lob>=b2",
+          "role:instakill>=b2",
+          "role:dps_aoe>=b3"
+        ]
+      },
+      "current_rule": null
+    },
+    "hurdle": {
+      "severity": "soft",
+      "why": "vaults the first wall it meets, so a wall alone does not hold the lane",
+      "answer": {
+        "any": [
+          "role:instakill>=b2",
+          "role:stun>=b3",
+          "role:freeze>=b3",
+          "role:slow>=b3"
+        ]
+      },
+      "current_rule": null
+    },
+    "burrow": {
+      "severity": "soft",
+      "why": "travels under the lawn and surfaces behind the front line",
+      "answer": {
+        "any": [
+          "role:dps_aoe>=b3",
+          "role:instakill>=b2",
+          "role:wall>=b3"
+        ]
+      },
+      "current_rule": null
+    },
+    "summoner": {
+      "severity": "soft",
+      "why": "adds zombies the wave table never priced, so the pressure curve understates it",
+      "answer": {
+        "any": [
+          "role:dps_aoe>=b3",
+          "role:burst>=b3"
+        ]
+      },
+      "current_rule": null
+    },
+    "camel": {
+      "severity": "flavour",
+      "why": "a structural module, not a walker; the level is a hump-matching puzzle",
+      "answer": {
+        "any": []
+      },
+      "current_rule": "excluded from the zombie shuffle entirely (zombie_data.py)"
+    },
+    "zomboss": {
+      "severity": "soft",
+      "why": "a scripted boss fight with its own HP pool and phases",
+      "answer": {
+        "any": [
+          "role:dps_lob>=b3",
+          "role:burst>=b4",
+          "role:dps_single>=b4"
+        ]
+      },
+      "current_rule": "goal_type ZOMBOSS"
+    },
+    "graves": {
+      "severity": "hard",
+      "why": "tombstones block tiles and keep spawning until removed",
+      "answer": {
+        "any": [
+          "list:GRAVE_CLEAR_PLANTS",
+          "role:grave_clear>=b3"
+        ]
+      },
+      "current_rule": "STRETCH_ENTRY_PLANTS Ancient Egypt / Dark Ages Mid+Late"
+    },
+    "gloom": {
+      "severity": "soft",
+      "why": "a darkened lawn hides zombies until they are on top of you",
+      "answer": {
+        "any": [
+          "role:illuminate>=b3",
+          "name:Plantern"
+        ]
+      },
+      "current_rule": null
+    },
+    "tide": {
+      "severity": "soft",
+      "why": "the water line advances and retreats, so lanes change shape mid-level",
+      "answer": {
+        "any": [
+          "name:Lily Pad",
+          "role:terrain>=b3",
+          "role:dps_lob>=b3"
+        ]
+      },
+      "current_rule": null
+    },
+    "wind": {
+      "severity": "soft",
+      "why": "gusts blow unrooted plants off the lawn",
+      "answer": {
+        "any": [
+          "role:wall>=b3",
+          "role:warmth>=b3",
+          "role:terrain>=b3"
+        ]
+      },
+      "current_rule": null
+    },
+    "ice_terrain": {
+      "severity": "soft",
+      "why": "frozen tiles slide plants and hold zombies",
+      "answer": {
+        "any": [
+          "role:warmth>=b3",
+          "role:thaw>=b3",
+          "element:fire"
+        ]
+      },
+      "current_rule": null
+    },
+    "sandstorm": {
+      "severity": "soft",
+      "why": "carries zombies deep into the lawn past the front line",
+      "answer": {
+        "any": [
+          "role:dps_aoe>=b3",
+          "role:burst>=b3"
+        ]
+      },
+      "current_rule": null
+    },
+    "minecart": {
+      "severity": "flavour",
+      "why": "rails let you move plants; helps rather than threatens",
+      "answer": {
+        "any": []
+      },
+      "current_rule": null
+    },
+    "portals": {
+      "severity": "soft",
+      "why": "zombies arrive behind the front line",
+      "answer": {
+        "any": [
+          "role:dps_aoe>=b3",
+          "role:instakill>=b2"
+        ]
+      },
+      "current_rule": null
+    },
+    "beat": {
+      "severity": "flavour",
+      "why": "tempo changes zombie speed on a cycle",
+      "answer": {
+        "any": []
+      },
+      "current_rule": null
+    },
+    "rain": {
+      "severity": "flavour",
+      "why": "puddles restrict planting on some tiles",
+      "answer": {
+        "any": [
+          "role:terrain>=b3"
+        ]
+      },
+      "current_rule": null
+    },
+    "lava": {
+      "severity": "soft",
+      "why": "burning tiles destroy plants placed on them",
+      "answer": {
+        "any": [
+          "role:terrain>=b3",
+          "role:dps_lob>=b3"
+        ]
+      },
+      "current_rule": null
+    },
+    "raptor": {
+      "severity": "soft",
+      "why": "dinos throw or pull zombies past your defence",
+      "answer": {
+        "any": [
+          "name:Perfume-shroom",
+          "role:hypno>=b3"
+        ]
+      },
+      "current_rule": "WORLD_ENTRY_PLANTS['Jurassic Marsh']"
+    },
+    "conveyor": {
+      "severity": "flavour",
+      "why": "no plant chooser: the belt decides, so NO plant requirement can gate this level",
+      "answer": {
+        "any": []
+      },
+      "current_rule": "randomize_conveyor_plants keeps belt swaps inside a power band"
+    },
+    "locked_slots": {
+      "severity": "flavour",
+      "why": "a forced or restricted seed selection",
+      "answer": {
+        "any": []
+      },
+      "current_rule": null
+    },
+    "small_grid": {
+      "severity": "soft",
+      "why": "fewer usable rows concentrates the same HP into less lawn",
+      "answer": {
+        "any": []
+      },
+      "current_rule": null
+    },
+    "no_sun_drop": {
+      "severity": "hard",
+      "why": "no falling sun at all: every plant must be paid for by a producer",
+      "answer": {
+        "any": [
+          "list:SUN_PRODUCER_PLANTS",
+          "role:sun_econ>=b3"
+        ]
+      },
+      "current_rule": "the sun-producer rule on every world entrance"
+    },
+    "endless": {
+      "severity": "soft",
+      "why": "Danger Room: pressure rises without bound, so a clear is a soft target not a hard one",
+      "answer": {
+        "any": []
+      },
+      "current_rule": "DANGER_ROOM_UNLOCK"
+    },
+    "puzzle": {
+      "severity": "flavour",
+      "why": "not a lane fight; the pressure model does not apply",
+      "answer": {
+        "any": []
+      },
+      "current_rule": null
+    },
+    "objective": {
+      "severity": "flavour",
+      "why": "a non-standard win condition (Last Stand, Protect the Plant, Plants to Die, a time limit) -- clearing it is not 'survive the waves', so the pressure curve is not the test",
+      "answer": {
+        "any": []
+      },
+      "current_rule": null
+    },
+    "power_tiles": {
+      "severity": "flavour",
+      "why": "tiles that boost or link plants; they help rather than threaten, but they make a level's real output higher than its loadout suggests",
+      "answer": {
+        "any": []
+      },
+      "current_rule": null
+    },
+    "trap_tiles": {
+      "severity": "soft",
+      "why": "tiles that destroy what is placed on them, so part of the lawn is unusable until they are dealt with",
+      "answer": {
+        "any": [
+          "role:dps_lob>=b3",
+          "role:terrain>=b3",
+          "role:instakill>=b2"
+        ]
+      },
+      "current_rule": null
+    },
+    "potions": {
+      "severity": "soft",
+      "why": "Dark Ages potions buff zombies mid-wave, so a wave's real HP is above what its table states",
+      "answer": {
+        "any": [
+          "role:dps_aoe>=b3",
+          "role:burst>=b3",
+          "role:freeze>=b3"
+        ]
+      },
+      "current_rule": null
+    },
+    "mold": {
+      "severity": "soft",
+      "why": "mold colonies spread across the lawn and take tiles until they are cleared",
+      "answer": {
+        "any": [
+          "role:dps_aoe>=b3",
+          "role:instakill>=b2",
+          "role:dps_lob>=b3"
+        ]
+      },
+      "current_rule": null
+    }
+  },
+  "answered_by_default": [
+    "minecart",
+    "beat",
+    "rain",
+    "locked_slots",
+    "puzzle",
+    "camel",
+    "objective",
+    "power_tiles"
+  ]
+}

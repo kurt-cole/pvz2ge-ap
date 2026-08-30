@@ -20,6 +20,11 @@ PY_SUITES = [
     ("spheres",    "sphere_test.py", "reachability and sphere depth"),
     ("drift",      "drift_test.py",  "client JS copies match the real client"),
     ("tracker",    "tracker_test.py", "Universal Tracker rebuilds the same seed"),
+    # data/ reads the apworld rather than mirroring it, so its checks are the
+    # ones that catch this layer drifting away from constants.py. Offline like
+    # the rest -- it needs no game checkout.
+    ("data",       os.path.join("..", "data", "test_data.py"),
+                   "the pressure/threat model still agrees with the shipped rules"),
 ]
 JS_SUITES = [
     # First: the others require *_fn.js copies, so none of them ever runs the

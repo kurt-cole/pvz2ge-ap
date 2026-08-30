@@ -1,0 +1,7 @@
+# Build products of data/build.py. Regenerated in a couple of seconds from the
+# apworld (and from a game checkout when one is present), and the bundle is a
+# megabyte of single-line JSON that would churn on every rebuild.
+#
+#   python data/build.py
+generated/
+site/bundle.js
