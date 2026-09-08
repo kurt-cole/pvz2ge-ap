@@ -4420,10 +4420,73 @@ STEPS = [
 ]
 
 
+# Environment variables that make a bundled runtime's libraries win over the
+# host's. Archipelago's Linux release runs from an AppImage (or a PyInstaller
+# one-file build), and both point the dynamic loader at their own bundled
+# copies of libcrypto/libssl/libstdc++. A host `git` spawned with that
+# environment loads the bundle's older libcrypto and then dies on the host
+# libcurl that needs a newer one -- "OPENSSL_3.3.0 not found required by
+# /usr/lib/libcurl". Every tool we spawn here is a host tool, so it must be
+# spawned with the environment the host would have given it.
+_BUNDLE_ENV_VARS = (
+    "LD_LIBRARY_PATH", "LD_PRELOAD", "GTK_PATH", "GDK_PIXBUF_MODULE_FILE",
+    "GIO_MODULE_DIR", "GCONV_PATH", "GSETTINGS_SCHEMA_DIR", "PYTHONHOME",
+    "QT_PLUGIN_PATH", "PERLLIB", "PERL5LIB", "SSL_CERT_FILE", "SSL_CERT_DIR",
+)
+
+
+def _bundle_prefixes():
+    """Path prefixes that belong to the bundle we are running inside, if any."""
+    out = []
+    for var in ("APPDIR", "_MEIPASS2", "APPIMAGE"):
+        val = os.environ.get(var)
+        if val:
+            out.append(os.path.dirname(val) if var == "APPIMAGE" else val)
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        out.append(meipass)
+    # AppImages mount here even when APPDIR was not exported to children.
+    out.append("/tmp/.mount_")
+    return [p for p in out if p]
+
+
+def host_env():
+    """A copy of os.environ safe to hand to a host tool.
+
+    AppRun scripts conventionally stash what they overwrote in `<VAR>_ORIG`, so
+    prefer restoring that; otherwise drop the bundle's own directories out of
+    the variable and keep whatever the host had. A variable that is nothing but
+    bundle paths is removed entirely.
+    """
+    env = os.environ.copy()
+    prefixes = tuple(_bundle_prefixes())
+    for var in _BUNDLE_ENV_VARS:
+        orig = env.pop(var + "_ORIG", None)
+        if orig is None:
+            orig = env.pop(var + "_OLD", None)
+        if orig is not None:
+            if orig:
+                env[var] = orig
+            else:
+                env.pop(var, None)
+            continue
+        val = env.get(var)
+        if not val:
+            continue
+        kept = [c for c in val.split(os.pathsep)
+                if c and not c.startswith(prefixes)]
+        if kept:
+            env[var] = os.pathsep.join(kept)
+        else:
+            env.pop(var, None)
+    # find_tool's PATH additions live in os.environ, so they come along.
+    return env
+
+
 def run_cmd(cmd, cwd, log):
     """Run a shell command, streaming output to log callback. Returns returncode."""
     proc = subprocess.Popen(
-        cmd, cwd=cwd, shell=True,
+        cmd, cwd=cwd, shell=True, env=host_env(),
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1
     )
@@ -4476,7 +4539,7 @@ def _login_shell_path():
         try:
             proc = subprocess.run(
                 [shell, "-lic", "printf %s \"$PATH\""],
-                capture_output=True, text=True, timeout=20,
+                capture_output=True, text=True, timeout=20, env=host_env(),
             )
             # -i can make a chatty rc file print banners; the PATH is the last
             # non-empty line that actually looks like one.
@@ -4529,7 +4592,7 @@ def git_capture(args, cwd):
     try:
         proc = subprocess.run(
             ["git"] + args, cwd=cwd, capture_output=True, text=True,
-            timeout=120,
+            timeout=120, env=host_env(),
         )
     except (OSError, subprocess.SubprocessError) as e:
         return 1, str(e)
@@ -4820,7 +4883,8 @@ def _write_linux_launcher(build_dir, unpacked_dir, log, package_json_path=None):
     # Preflight: name any missing shared library now, in the build log, rather
     # than letting the app die at launch with nothing written down anywhere.
     try:
-        ldd = subprocess.run(["ldd", binary], capture_output=True, text=True, timeout=30)
+        ldd = subprocess.run(["ldd", binary], capture_output=True, text=True,
+                             timeout=30, env=host_env())
         missing_libs = sorted({
             line.split("=>")[0].strip()
             for line in ldd.stdout.splitlines() if "not found" in line
@@ -4961,9 +5025,10 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
         )
         return
 
-    node_ver = subprocess.check_output("node --version", shell=True, text=True).strip()
-    npm_ver  = subprocess.check_output("npm --version",  shell=True, text=True).strip()
-    git_ver  = subprocess.check_output("git --version",  shell=True, text=True).strip()
+    _venv = host_env()
+    node_ver = subprocess.check_output("node --version", shell=True, text=True, env=_venv).strip()
+    npm_ver  = subprocess.check_output("npm --version",  shell=True, text=True, env=_venv).strip()
+    git_ver  = subprocess.check_output("git --version",  shell=True, text=True, env=_venv).strip()
     log(f"  node {node_ver}  |  npm {npm_ver}  |  {git_ver}")
 
     # ── 2. Clone Electron wrapper ─────────────────────────────────────────────
