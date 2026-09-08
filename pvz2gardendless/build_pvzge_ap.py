@@ -4570,6 +4570,115 @@ def check_for_updates(build_dir, log):
 _ELECTRON_HELPERS = ("chrome-sandbox", "chrome_crashpad_handler")
 
 
+def _electron_cache_dirs():
+    """Where @electron/get keeps downloaded Electron zips, per platform."""
+    override = os.environ.get("electron_config_cache")
+    if override:
+        return [override]
+    if _sys_platform.system() == "Windows":
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        return [os.path.join(base, "electron", "Cache")]
+    if _sys_platform.system() == "Darwin":
+        return [os.path.expanduser("~/Library/Caches/electron")]
+    return [os.path.expanduser("~/.cache/electron")]
+
+
+def _electron_is_installed(electron_pkg_dir, version):
+    """True when node_modules/electron holds a usable binary for `version`."""
+    dist = os.path.join(electron_pkg_dir, "dist")
+    try:
+        with open(os.path.join(dist, "version"), "r", encoding="utf-8") as f:
+            if f.read().strip().lstrip("v") != version:
+                return False
+    except OSError:
+        return False
+    if not os.path.isfile(os.path.join(electron_pkg_dir, "path.txt")):
+        return False
+    exe = "electron.exe" if _sys_platform.system() == "Windows" else "electron"
+    return os.path.isfile(os.path.join(dist, exe))
+
+
+def _extract_electron_zip(zip_path, dist_dir, log):
+    """Extract an Electron release zip, preserving the executable bits.
+
+    Used in place of the package's own postinstall, whose extract-zip
+    dependency silently truncates the archive to its first entry on newer
+    Node versions: it writes one file, resolves successfully and exits 0.
+    zipfile has no such problem, but it does drop permissions, so the mode
+    bits are restored from the archive afterwards.
+    """
+    import zipfile
+    with zipfile.ZipFile(zip_path) as zf:
+        zf.extractall(dist_dir)
+        for info in zf.infolist():
+            mode = info.external_attr >> 16
+            if mode:
+                try:
+                    os.chmod(os.path.join(dist_dir, info.filename), mode)
+                except OSError:
+                    pass
+    log(f"  Extracted {os.path.basename(zip_path)} ({len(os.listdir(dist_dir))} entries)")
+
+
+def _ensure_electron_binary(electron_dir, log):
+    """Make `npm start` work by repairing node_modules/electron if needed.
+
+    Only devrun.py depends on this. electron-builder downloads its own copy of
+    Electron, so the packaged app builds and runs either way, which is why a
+    failure here is logged rather than fatal.
+    """
+    pkg_dir = os.path.join(electron_dir, "node_modules", "electron")
+    if not os.path.isdir(pkg_dir):
+        return  # npm install did not run or failed; nothing to repair
+
+    try:
+        with open(os.path.join(pkg_dir, "package.json"), "r", encoding="utf-8") as f:
+            version = json.load(f)["version"]
+    except (OSError, ValueError, KeyError):
+        return
+
+    if _electron_is_installed(pkg_dir, version):
+        return
+
+    log("  node_modules/electron has no usable binary; repairing...")
+
+    # electron-builder has already downloaded and verified this zip during the
+    # build, so prefer the cache over hitting the network again.
+    zip_name = None
+    dist_dir = os.path.join(pkg_dir, "dist")
+    for cache in _electron_cache_dirs():
+        if not os.path.isdir(cache):
+            continue
+        for root, _dirs, files in os.walk(cache):
+            for f in files:
+                if f.startswith(f"electron-v{version}-") and f.endswith(".zip"):
+                    zip_name = os.path.join(root, f)
+                    break
+            if zip_name:
+                break
+        if zip_name:
+            break
+
+    if zip_name is None:
+        log("  Warning: no cached Electron download found, so it could not be repaired.")
+        log("  The packaged app is unaffected; only `python devrun.py` needs this.")
+        return
+
+    try:
+        shutil.rmtree(dist_dir, ignore_errors=True)
+        os.makedirs(dist_dir, exist_ok=True)
+        _extract_electron_zip(zip_name, dist_dir, log)
+        exe = "electron.exe" if _sys_platform.system() == "Windows" else "electron"
+        with open(os.path.join(pkg_dir, "path.txt"), "w", encoding="utf-8") as f:
+            f.write(exe)
+        if _electron_is_installed(pkg_dir, version):
+            log(f"  Repaired node_modules/electron ({version}) — `npm start` will work")
+        else:
+            log("  Warning: repair did not produce a usable Electron binary.")
+    except (OSError, ValueError) as e:
+        log(f"  Warning: could not repair node_modules/electron: {e}")
+
+
 def _find_unpacked_binary(unpacked_dir, package_json_path=None):
     """The app executable inside electron-builder's unpacked output.
 
@@ -4853,18 +4962,38 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
     # https://github.com/electron-userland/electron-builder/issues (blockmap ESM require)
     package_json_path = os.path.join(electron_dir, "package.json")
     noble_hashes_pin = "1.8.0"
-    overrides_changed = False
+    overrides_changed = False   # dependency change: forces an npm reinstall
+    pkg_changed = False         # any change: forces a package.json write
     if os.path.isfile(package_json_path):
         with open(package_json_path, "r", encoding="utf-8") as f:
             pkg = json.load(f)
+        # npm 10.9+ blocks dependency install scripts unless package.json
+        # lists them. Upstream declares this for pnpm (pnpm-workspace.yaml's
+        # allowBuilds) but not for npm, so Electron's postinstall -- the step
+        # that downloads the Electron binary into node_modules -- is skipped
+        # and `npm start` cannot run. electron-builder downloads its own copy,
+        # so the packaged app is unaffected and only devrun.py notices.
+        # Left unpinned so it survives an Electron version bump, and applied
+        # without forcing a reinstall: _ensure_electron_binary() below repairs
+        # a tree that was already installed with the scripts blocked.
+        allow = pkg.setdefault("allowScripts", {})
+        for dep in ("electron", "electron-winstaller"):
+            if dep not in allow:
+                allow[dep] = True
+                pkg_changed = True
+                log(f"  Allowed {dep} install scripts in package.json (npm blocks them by default)")
+
         overrides = pkg.setdefault("overrides", {})
         if overrides.get("@noble/hashes") != noble_hashes_pin:
             overrides["@noble/hashes"] = noble_hashes_pin
+            overrides_changed = True
+            pkg_changed = True
+            log(f"  Pinned @noble/hashes to {noble_hashes_pin} in package.json (avoids ERR_REQUIRE_ESM)")
+
+        if pkg_changed:
             with open(package_json_path, "w", encoding="utf-8") as f:
                 json.dump(pkg, f, indent=2)
                 f.write("\n")
-            overrides_changed = True
-            log(f"  Pinned @noble/hashes to {noble_hashes_pin} in package.json (avoids ERR_REQUIRE_ESM)")
 
     # ── 5. npm install ────────────────────────────────────────────────────────
     # Skipped on the update path when node_modules is already populated. This
@@ -4910,6 +5039,11 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
     if rc != 0:
         error_cb("Build failed. See log above for details.")
         return
+
+    # ── 6b. Repair node_modules/electron if npm skipped its postinstall ───────
+    # Runs after the build on purpose: electron-builder populates the download
+    # cache this reads from, so by now the zip is present even on a first run.
+    _ensure_electron_binary(electron_dir, log)
 
     # ── 7. Find and copy output ───────────────────────────────────────────────
     step("Locating output file")
