@@ -61,3 +61,22 @@ logic.
 The mapping from commodity to gating level lives in the game's own
 `json/Features/StoreCommodityFeatures` asset, and every tracked commodity's `UnlockLevel` resolves to
 a level already present in the client's `LOC_LEVELS` map apart from those two.
+
+### Closed: npm blocks Electron's postinstall, and Node 26 breaks its extraction
+
+Two separate faults that both end at the same symptom -- `npm start` (and therefore
+[devrun.py](devrun.py)) dying with "Electron failed to install correctly" while the packaged app
+builds and runs perfectly.
+
+1. npm 10.9+ does not run dependency install scripts unless package.json lists them. Upstream
+   declares this for pnpm only (`pnpm-workspace.yaml`'s `allowBuilds`), so under npm the Electron
+   postinstall that downloads the binary is skipped. The installer now writes an `allowScripts`
+   entry for `electron` and `electron-winstaller`, unpinned so it survives a version bump.
+2. Even when that postinstall does run, `extract-zip` truncates the Electron archive to its first
+   entry on Node 26: it writes one file, resolves successfully, and `install.js` exits 0 having
+   produced a `dist/` with a single `snapshot_blob.bin` and no `path.txt`. The zip itself is intact.
+
+`_ensure_electron_binary` in [build_pvzge_ap.py](pvz2gardendless/build_pvzge_ap.py) covers both. It
+runs after the build, where electron-builder has already populated `~/.cache/electron`, and
+re-extracts that zip with Python's `zipfile`, restoring the mode bits `zipfile` drops. It is
+non-fatal by design: electron-builder downloads its own Electron, so only devrun needs this.
