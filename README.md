@@ -9,7 +9,7 @@ its World Key level, whichever the goal type picks.
 
 ## Installation
 
-### Full build (packages the game client as an .exe)
+### Full build (packages the game client as a native app)
 
 This produces the actual game — an Electron app with the Archipelago client injected — via a Tk GUI
 installer, not a CLI build. Launch it either:
@@ -26,11 +26,20 @@ Pick a build directory in the GUI, then it will:
    location/item sync, etc.).
 4. Patch `main.js` to enable F12 devtools.
 5. Run `npm install`.
-6. Run `npm run build:win` (or `:mac` / `:linux`), producing `PvZ Gardendless AP.exe`.
+6. Run `npm run build:win` (or `:mac` / `:linux`), producing `PvZ Gardendless AP.exe`,
+   `PvZ Gardendless AP.dmg`, or `PvZ Gardendless AP.AppImage` respectively.
+
+On Linux the installer also writes `PvZ Gardendless AP.sh`, a launcher for the unpacked build that
+electron-builder leaves in `PVZGE-Electron/release/linux-unpacked/`. It is the fallback for systems
+with no FUSE runtime, where an AppImage cannot mount itself, which covers atomic distros such as
+Bazzite and SteamOS. It also passes `--no-sandbox` when the kernel has unprivileged user namespaces
+disabled.
 
 This takes several minutes the first time (clone + `npm install` + packaging).
 
 **Requirements:** Python 3.8+, Node.js 18+, Git, and an internet connection for the initial clone.
+`git`, `node` and `npm` must all be on your PATH; on many Linux distributions `npm` ships as a
+separate package from `node`. Nothing else is required, and nothing needs root.
 
 ### Fast iteration on the client JS (Primarily for development)
 

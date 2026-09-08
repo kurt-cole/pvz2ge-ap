@@ -17,7 +17,11 @@ that build directory (node_modules, cloned game source, patched main.js).
 Usage:
   python devrun.py                    # patch + launch
   python devrun.py --patch-only       # patch, don't launch
-  python devrun.py "D:\\path\\PVZGE-Electron"   # override build dir
+  python devrun.py /path/to/PVZGE-Electron   # override build dir
+
+Without an argument the build directory is resolved from host.yaml's
+pvz2gardendless.build_directory, then from the installer's default
+(~/pvzge_ap_build).
 """
 
 import importlib.util
@@ -25,11 +29,52 @@ import os
 import subprocess
 import sys
 
-# Matches host.yaml's pvz2gardendless.build_directory + the installer's subdir.
-DEFAULT_ELECTRON_DIR = r"C:\Games (C)\pvz 2\Archipelago PVZ2\PVZGE-Electron"
-
 HERE   = os.path.dirname(os.path.abspath(__file__))
 SOURCE = os.path.join(HERE, "pvz2gardendless", "build_pvzge_ap.py")
+
+# The installer's own default, and the fallback here when nothing else says
+# otherwise. Kept in sync with build_pvzge_ap.py's BuilderApp default.
+DEFAULT_BUILD_DIR = os.path.normpath(os.path.expanduser("~/pvzge_ap_build"))
+
+# Retained so an existing Windows checkout keeps working without arguments.
+# Only used when it is actually on disk, so it costs other platforms nothing.
+LEGACY_ELECTRON_DIR = r"C:\Games (C)\pvz 2\Archipelago PVZ2\PVZGE-Electron"
+
+
+def host_yaml_build_dir():
+    """pvz2gardendless.build_directory from host.yaml, if Archipelago is importable.
+
+    devrun runs outside Archipelago as often as not, so a failure to import it
+    is expected and not worth reporting.
+    """
+    try:
+        from settings import get_settings
+        value = get_settings().pvz2gardendless.build_directory
+    except Exception:
+        return None
+    return os.path.normpath(os.path.expanduser(value)) if value else None
+
+
+def resolve_electron_dir(args):
+    """First candidate that exists: CLI argument, host.yaml, the default.
+
+    Falls through to the default even when it is absent so the error message
+    names the path the installer would have used.
+    """
+    if args:
+        return os.path.normpath(os.path.expanduser(args[0]))
+
+    candidates = []
+    from_yaml = host_yaml_build_dir()
+    if from_yaml:
+        candidates.append(os.path.join(from_yaml, "PVZGE-Electron"))
+    candidates.append(os.path.join(DEFAULT_BUILD_DIR, "PVZGE-Electron"))
+    candidates.append(LEGACY_ELECTRON_DIR)
+
+    for path in candidates:
+        if os.path.isdir(os.path.join(path, "pvzge_web", "docs")):
+            return path
+    return candidates[0]
 
 
 def load_patch_content() -> str:
@@ -41,7 +86,7 @@ def load_patch_content() -> str:
 
 def main() -> None:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    electron_dir = args[0] if args else DEFAULT_ELECTRON_DIR
+    electron_dir = resolve_electron_dir(args)
 
     docs = os.path.join(electron_dir, "pvzge_web", "docs")
     if not os.path.isdir(docs):

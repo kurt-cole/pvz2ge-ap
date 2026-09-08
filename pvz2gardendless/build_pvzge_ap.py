@@ -20,6 +20,7 @@ import json
 import shutil
 import subprocess
 import threading
+import platform as _sys_platform
 import tkinter as tk
 from tkinter import filedialog
 import queue
@@ -4541,8 +4542,10 @@ def check_for_updates(build_dir, log):
     # patch: electron-builder bakes the client into the executable, so editing
     # tmpPatch.js alone changes nothing the player runs.
     exe = None
+    # "PvZ Gardendless AP.sh" is the Linux unpacked-build launcher, checked
+    # last: it is the fallback for machines that cannot mount an AppImage.
     for name in ("PvZ Gardendless AP.exe", "PvZ Gardendless AP.dmg",
-                 "PvZ Gardendless AP.AppImage"):
+                 "PvZ Gardendless AP.AppImage", "PvZ Gardendless AP.sh"):
         p = os.path.join(build_dir, name)
         if os.path.isfile(p):
             exe = p
@@ -4561,6 +4564,113 @@ def check_for_updates(build_dir, log):
     return stale, lines
 
 
+# Electron ships its own helper executables next to the app binary. They are
+# ELF and they sort before most app names, so an unqualified scan finds
+# chrome-sandbox rather than the game.
+_ELECTRON_HELPERS = ("chrome-sandbox", "chrome_crashpad_handler")
+
+
+def _find_unpacked_binary(unpacked_dir, package_json_path=None):
+    """The app executable inside electron-builder's unpacked output.
+
+    electron-builder names it after package.json's "name" (or "productName"
+    when set), so read that first and only fall back to scanning.
+    """
+    if package_json_path and os.path.isfile(package_json_path):
+        try:
+            with open(package_json_path, "r", encoding="utf-8") as f:
+                pkg = json.load(f)
+            for key in ("productName", "name"):
+                named = pkg.get(key)
+                if named:
+                    p = os.path.join(unpacked_dir, named)
+                    if os.path.isfile(p) and os.access(p, os.X_OK):
+                        return p
+        except (OSError, ValueError):
+            pass
+
+    try:
+        entries = sorted(os.listdir(unpacked_dir))
+    except OSError:
+        return None
+    for entry in entries:
+        p = os.path.join(unpacked_dir, entry)
+        if not os.path.isfile(p) or not os.access(p, os.X_OK):
+            continue
+        if entry in _ELECTRON_HELPERS:
+            continue
+        if entry.endswith((".so", ".bin", ".pak", ".dat", ".json", ".sh", ".txt", ".html")):
+            continue
+        if ".so." in entry:  # libvulkan.so.1 and friends
+            continue
+        try:
+            with open(p, "rb") as f:
+                if f.read(4) == b"\x7fELF":
+                    return p
+        except OSError:
+            continue
+    return None
+
+
+def _write_linux_launcher(build_dir, unpacked_dir, log, package_json_path=None):
+    """Write a launcher for the unpacked Linux build, and preflight it.
+
+    The unpacked build is the fallback for machines with no FUSE runtime,
+    where the AppImage cannot self-mount. It is left in place rather than
+    copied: it is roughly a quarter of a gigabyte, and it is rebuilt from
+    scratch on every run anyway.
+    """
+    binary = _find_unpacked_binary(unpacked_dir, package_json_path)
+    if binary is None:
+        log(f"  Warning: no executable found in {unpacked_dir}")
+        return None
+
+    # Preflight: name any missing shared library now, in the build log, rather
+    # than letting the app die at launch with nothing written down anywhere.
+    try:
+        ldd = subprocess.run(["ldd", binary], capture_output=True, text=True, timeout=30)
+        missing_libs = sorted({
+            line.split("=>")[0].strip()
+            for line in ldd.stdout.splitlines() if "not found" in line
+        })
+        if missing_libs:
+            log("  Warning: the built app is missing shared libraries:")
+            for lib in missing_libs:
+                log(f"    {lib}")
+            log("  It will not start until these are present.")
+    except (OSError, subprocess.SubprocessError):
+        pass  # ldd is absent or unhappy; not worth failing the build over
+
+    # Electron's sandbox needs either a SUID chrome-sandbox helper or
+    # unprivileged user namespaces. An unpacked build extracted by a normal
+    # user has neither guaranteed, so fall back to --no-sandbox when the
+    # kernel says namespaces are off. Kept as a runtime check rather than a
+    # build-time one: the build machine and the play machine can differ.
+    launcher = os.path.join(build_dir, "PvZ Gardendless AP.sh")
+    script = (
+        "#!/bin/sh\n"
+        "# Launcher for the unpacked PvZ Gardendless AP build.\n"
+        "# Use this when the AppImage will not run (no FUSE runtime).\n"
+        f'BIN="{binary}"\n'
+        'if [ ! -x "$BIN" ]; then\n'
+        '  echo "Not found: $BIN" >&2\n'
+        '  echo "Re-run the installer to rebuild it." >&2\n'
+        '  exit 1\n'
+        'fi\n'
+        'userns=$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || echo 1)\n'
+        'if [ "$userns" = "0" ]; then\n'
+        '  exec "$BIN" --no-sandbox "$@"\n'
+        'fi\n'
+        'exec "$BIN" "$@"\n'
+    )
+    with open(launcher, "w", encoding="utf-8") as f:
+        f.write(script)
+    os.chmod(launcher, 0o755)
+    log(f"  Unpacked build: {unpacked_dir}")
+    log(f"  Launcher:       {launcher}")
+    return launcher
+
+
 def build(build_dir, log, done_cb, error_cb, fast=False):
     """Full build sequence. Runs in a thread.
 
@@ -4575,6 +4685,8 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
     electron_dir = os.path.join(build_dir, "PVZGE-Electron")
     docs_dir     = os.path.join(electron_dir, "pvzge_web", "docs")
     release_dir  = os.path.join(electron_dir, "release")
+
+    plat = _sys_platform.system()
 
     def step(msg):
         log(f"\n{'─'*50}")
@@ -4594,14 +4706,44 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
         if not find_tool(tool):
             missing.append(tool)
     if missing:
+        # Every tool listed gets a line, npm included: it ships separately from
+        # node on a number of distros (Arch's `nodejs` package is node alone),
+        # so "missing npm, present node" is a real and otherwise baffling state.
+        if plat == "Windows":
+            git_hint  = "  • Git:     https://git-scm.com/download/win\n"
+            node_hint = "  • Node.js: https://nodejs.org (LTS version)\n"
+            npm_hint  = "  • npm:     bundled with the Node.js installer above\n"
+            tail = (
+                "If this message continues to appear, run powershell as administrator and run\n"
+                "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser\n"
+                "Then run archipelago as an administrator."
+            )
+        else:
+            git_hint  = "  • Git:     https://git-scm.com/downloads\n"
+            node_hint = "  • Node.js: https://nodejs.org (LTS version)\n"
+            npm_hint  = "  • npm:     often a separate package from node\n"
+            # Naming distro packages is a trap here: this has to work on
+            # immutable/atomic systems (Bazzite, SteamOS) where the root is
+            # read-only and there is no usable system package manager. Every
+            # route below installs into the home directory instead.
+            tail = (
+                "These are the only requirements, and none of them need root.\n"
+                "If your system has no package manager you can use (Bazzite,\n"
+                "SteamOS and other atomic distros have a read-only root), any\n"
+                "of these work without touching it:\n"
+                "  • nvm or fnm       installs node + npm into your home dir\n"
+                "  • Homebrew         preinstalled on Bazzite: brew install node git\n"
+                "  • distrobox/toolbx  a mutable container that shares your home\n"
+                "\n"
+                "If you build inside a container, run the finished app on the host."
+            )
         error_cb(
             f"Missing required tools: {', '.join(missing)}\n\n"
             "Please install:\n"
-            + ("  • Git:    https://git-scm.com/download/win\n" if "git" in missing else "")
-            + ("  • Node.js: https://nodejs.org (LTS version)\n" if "node" in missing else "")
-            + "If this message continues to appear, run powershell as administrator and run\n"
-            + "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser\n"
-            + "Then run archipelago as an administrator."
+            + (git_hint  if "git"  in missing else "")
+            + (node_hint if "node" in missing else "")
+            + (npm_hint  if "npm"  in missing else "")
+            + "\n" + tail
         )
         return
 
@@ -4750,8 +4892,6 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
             return
 
     # ── 6. Build ──────────────────────────────────────────────────────────────
-    import platform as _platform
-    plat = _platform.system()
     if plat == "Windows":
         build_cmd = "npm run build:win -- --publish=never"
         output_exts = [".exe"]
@@ -4782,22 +4922,94 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
         if built_path:
             break
 
-    if not built_path:
+    # electron-builder always leaves its unpacked staging tree behind, even
+    # when the only requested target is AppImage. That tree is the same
+    # application and needs no FUSE runtime to run, so it is the fallback for
+    # machines that cannot mount an AppImage. Only treat a missing AppImage as
+    # fatal if the unpacked build is missing too.
+    unpacked_dir = None
+    if plat == "Linux":
+        for entry in sorted(os.listdir(release_dir)) if os.path.isdir(release_dir) else []:
+            p = os.path.join(release_dir, entry)
+            if os.path.isdir(p) and entry.endswith("unpacked"):
+                unpacked_dir = p
+                break
+
+    if not built_path and not unpacked_dir:
         error_cb(f"Build succeeded but no output found in:\n{release_dir}\n\nExpected: {output_exts}")
         return
 
-    final_path = os.path.join(build_dir, output_name)
-    shutil.copy2(built_path, final_path)
-    # Make executable on Linux/Mac
-    if plat != "Windows":
-        os.chmod(final_path, 0o755)
-    log(f"\n  Output: {final_path}")
-    log(f"  Size:   {os.path.getsize(final_path)/1024/1024:.0f} MB")
+    final_path = None
+    if built_path:
+        final_path = os.path.join(build_dir, output_name)
+        shutil.copy2(built_path, final_path)
+        # Make executable on Linux/Mac
+        if plat != "Windows":
+            os.chmod(final_path, 0o755)
+        log(f"\n  Output: {final_path}")
+        log(f"  Size:   {os.path.getsize(final_path)/1024/1024:.0f} MB")
+
+    if unpacked_dir:
+        launcher = _write_linux_launcher(build_dir, unpacked_dir, log,
+                                         os.path.join(electron_dir, "package.json"))
+        if launcher and final_path is None:
+            final_path = launcher
+
+    if final_path is None:
+        error_cb(f"Build succeeded but no runnable output was produced in:\n{release_dir}")
+        return
 
     done_cb(final_path)
 
 
 # ── GUI ───────────────────────────────────────────────────────────────────────
+
+# Consolas is a Windows font. Asking Tk for it elsewhere does not fail, it
+# silently substitutes a proportional default, which is why the layout drifts
+# on Linux and macOS. Pick a monospace family that is actually installed.
+_MONO_CANDIDATES = {
+    "Windows": ["Consolas", "Cascadia Mono", "Courier New"],
+    "Darwin":  ["Menlo", "Monaco", "Courier New"],
+}
+_MONO_LINUX = ["DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono",
+               "Ubuntu Mono", "FreeMono", "Courier New"]
+
+
+def _mono_family(root):
+    """First installed monospace family, or Tk's own fixed font as a floor."""
+    import tkinter.font as tkfont
+    candidates = _MONO_CANDIDATES.get(_sys_platform.system(), _MONO_LINUX)
+    try:
+        available = {f.lower() for f in tkfont.families(root)}
+    except tk.TclError:
+        return candidates[0]
+    for name in candidates:
+        if name.lower() in available:
+            return name
+    # TkFixedFont is guaranteed to exist and is guaranteed to be monospace.
+    return tkfont.nametofont("TkFixedFont").actual("family")
+
+
+# Tk on X11 cannot render colour emoji: the glyphs come out as empty boxes
+# even with Noto Color Emoji installed. Keep the decorated labels on Windows,
+# where they have always worked, and use plain text everywhere else.
+if _sys_platform.system() == "Windows":
+    GLYPH = {
+        "title":  "\U0001f33b  PvZ2 Gardendless",
+        "check":  "\u27f3  CHECK FOR UPDATES",
+        "update": "\u2b06  UPDATE",
+        "build":  "\u25b6  START BUILD",
+        "again":  "\u25b6  BUILD AGAIN",
+    }
+else:
+    GLYPH = {
+        "title":  "PvZ2 Gardendless",
+        "check":  "CHECK FOR UPDATES",
+        "update": "UPDATE",
+        "build":  "START BUILD",
+        "again":  "BUILD AGAIN",
+    }
+
 
 class BuilderApp:
     def __init__(self, root):
@@ -4820,15 +5032,16 @@ class BuilderApp:
         ACCL = "#6ee7b7"
         TEXT = "#e2e8f0"
         MUTE = "#64748b"
-        FONT = ("Consolas", 10)
+        MONO = _mono_family(self.root)
+        FONT = (MONO, 10)
 
         # Title
         title_frame = tk.Frame(self.root, bg=BG, pady=16)
         title_frame.pack(fill="x", padx=24)
-        tk.Label(title_frame, text="🌻  PvZ2 Gardendless", font=("Consolas", 18, "bold"),
+        tk.Label(title_frame, text=GLYPH["title"], font=(MONO, 18, "bold"),
                  bg=BG, fg=ACCL).pack(anchor="w")
         tk.Label(title_frame, text="Archipelago Mod Builder",
-                 font=("Consolas", 11), bg=BG, fg=MUTE).pack(anchor="w")
+                 font=(MONO, 11), bg=BG, fg=MUTE).pack(anchor="w")
 
         # Divider
         tk.Frame(self.root, bg=ACC, height=1).pack(fill="x", padx=24)
@@ -4836,7 +5049,7 @@ class BuilderApp:
         # Build folder picker
         dir_frame = tk.Frame(self.root, bg=BG, pady=12)
         dir_frame.pack(fill="x", padx=24)
-        tk.Label(dir_frame, text="BUILD FOLDER", font=("Consolas", 9, "bold"),
+        tk.Label(dir_frame, text="BUILD FOLDER", font=(MONO, 9, "bold"),
                  bg=BG, fg=MUTE).pack(anchor="w")
 
         row = tk.Frame(dir_frame, bg=BG)
@@ -4875,7 +5088,7 @@ class BuilderApp:
                       "whether a rebuild would change anything. UPDATE then does\n"
                       "steps 3 and 4 only, reusing the downloads.\n\n"
                       "Requirements: Git + Node.js (LTS) must be installed.",
-                 font=("Consolas", 9), bg=BG2, fg=MUTE, justify="left"
+                 font=(MONO, 9), bg=BG2, fg=MUTE, justify="left"
                  ).pack(anchor="w")
 
         # Actions. Check is the cheap read-only path and sits first, so the
@@ -4884,7 +5097,7 @@ class BuilderApp:
         btn_row.pack(pady=(0, 12))
 
         self.check_btn = tk.Button(
-            btn_row, text="⟳  CHECK FOR UPDATES", font=("Consolas", 11),
+            btn_row, text=GLYPH["check"], font=(MONO, 11),
             bg=BG2, fg=ACCL, activebackground="#334155", activeforeground=ACCL,
             relief="flat", bd=0, padx=16, pady=10, cursor="hand2",
             command=self._start_check
@@ -4894,7 +5107,7 @@ class BuilderApp:
         # Disabled until a check finds something to do -- offering an update
         # before knowing one is needed is what the check exists to replace.
         self.update_btn = tk.Button(
-            btn_row, text="⬆  UPDATE", font=("Consolas", 11, "bold"),
+            btn_row, text=GLYPH["update"], font=(MONO, 11, "bold"),
             bg=BG2, fg=MUTE, activebackground="#334155", activeforeground=ACCL,
             relief="flat", bd=0, padx=16, pady=10, cursor="hand2",
             state="disabled", command=self._start_update
@@ -4902,7 +5115,7 @@ class BuilderApp:
         self.update_btn.pack(side="left", padx=(0, 8))
 
         self.build_btn = tk.Button(
-            btn_row, text="▶  START BUILD", font=("Consolas", 12, "bold"),
+            btn_row, text=GLYPH["build"], font=(MONO, 12, "bold"),
             bg=ACC, fg="#022c22", activebackground="#047857", activeforeground="#022c22",
             relief="flat", bd=0, padx=20, pady=10, cursor="hand2",
             command=self._start_build
@@ -4913,7 +5126,7 @@ class BuilderApp:
         log_frame = tk.Frame(self.root, bg=BG, padx=24, pady=0)
         log_frame.pack(fill="both", expand=True)
 
-        tk.Label(log_frame, text="BUILD LOG", font=("Consolas", 9, "bold"),
+        tk.Label(log_frame, text="BUILD LOG", font=(MONO, 9, "bold"),
                  bg=BG, fg=MUTE).pack(anchor="w")
 
         log_inner = tk.Frame(log_frame, bg="#020617")
@@ -4921,7 +5134,7 @@ class BuilderApp:
         scrollbar = tk.Scrollbar(log_inner)
         scrollbar.pack(side="right", fill="y")
         self.log_area = tk.Text(
-            log_inner, font=("Consolas", 9), bg="#020617", fg="#94a3b8",
+            log_inner, font=(MONO, 9), bg="#020617", fg="#94a3b8",
             insertbackground=TEXT, relief="flat", bd=4,
             state="disabled", wrap="word", yscrollcommand=scrollbar.set
         )
@@ -4930,7 +5143,7 @@ class BuilderApp:
 
         # Status bar
         self.status_var = tk.StringVar(value="Ready.")
-        tk.Label(self.root, textvariable=self.status_var, font=("Consolas", 9),
+        tk.Label(self.root, textvariable=self.status_var, font=(MONO, 9),
                  bg=BG2, fg=MUTE, anchor="w", padx=8, pady=4
                  ).pack(fill="x", side="bottom")
 
@@ -5019,7 +5232,7 @@ class BuilderApp:
 
     def _on_check_done(self, stale, lines):
         self._busy(False)
-        self.check_btn.configure(text="⟳  CHECK FOR UPDATES")
+        self.check_btn.configure(text=GLYPH["check"])
         self._log("")
         for line in lines:
             self._log(f"  {line}")
@@ -5062,7 +5275,7 @@ class BuilderApp:
 
     def _on_done(self, exe_path):
         self._busy(False)
-        self.build_btn.configure(text="▶  BUILD AGAIN")
+        self.build_btn.configure(text=GLYPH["again"])
         self.update_btn.configure(state="disabled", fg="#64748b")
         self.status_var.set("✓ Build complete!")
         self._log(f"\n{'='*50}")
@@ -5088,8 +5301,8 @@ class BuilderApp:
 
     def _on_error(self, msg):
         self._busy(False)
-        self.build_btn.configure(text="▶  START BUILD")
-        self.check_btn.configure(text="⟳  CHECK FOR UPDATES")
+        self.build_btn.configure(text=GLYPH["build"])
+        self.check_btn.configure(text=GLYPH["check"])
         self.status_var.set("✗ Build failed.")
         self._log(f"\n{'!'*50}")
         self._log("  ERROR")
