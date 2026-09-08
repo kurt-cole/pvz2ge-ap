@@ -4433,8 +4433,91 @@ def run_cmd(cmd, cwd, log):
     return proc.returncode
 
 
+# Directories that hold a home-directory node/npm/git on the systems this has
+# to work on. Archipelago is often launched from a desktop entry or Steam, and
+# that process inherits a bare PATH -- not the one a login shell builds -- so
+# shutil.which() alone reports "not installed" for a perfectly good nvm, fnm,
+# Homebrew or ~/.local install. Every entry here is a user-writable prefix,
+# which is exactly where SteamOS/Bazzite users have to put these tools.
+_EXTRA_TOOL_GLOBS = (
+    "~/.nvm/versions/node/*/bin",
+    "~/.local/share/fnm/node-versions/*/installation/bin",
+    "~/.local/share/nvm/*/bin",
+    "~/.volta/bin",
+    "~/.asdf/shims",
+    "~/.bun/bin",
+    "~/.local/bin",
+    "~/bin",
+    "/home/linuxbrew/.linuxbrew/bin",
+    "~/.linuxbrew/bin",
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/var/lib/flatpak/exports/bin",
+    "~/.local/share/flatpak/exports/bin",
+)
+
+_login_path_cache = None
+
+
+def _login_shell_path():
+    """PATH as the user's own login shell builds it.
+
+    This is the cheapest way to pick up whatever nvm/fnm/brew line lives in a
+    .bashrc or .zshrc without reimplementing any of them. Cached: it spawns a
+    shell, and find_tool is called repeatedly.
+    """
+    global _login_path_cache
+    if _login_path_cache is not None:
+        return _login_path_cache
+    _login_path_cache = ""
+    shell = os.environ.get("SHELL")
+    if shell and os.name != "nt" and os.path.exists(shell):
+        try:
+            proc = subprocess.run(
+                [shell, "-lic", "printf %s \"$PATH\""],
+                capture_output=True, text=True, timeout=20,
+            )
+            # -i can make a chatty rc file print banners; the PATH is the last
+            # non-empty line that actually looks like one.
+            for line in reversed((proc.stdout or "").splitlines()):
+                if os.pathsep in line and "/" in line:
+                    _login_path_cache = line.strip()
+                    break
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return _login_path_cache
+
+
+def _candidate_dirs():
+    dirs = []
+    for chunk in _login_shell_path().split(os.pathsep):
+        if chunk and chunk not in dirs:
+            dirs.append(chunk)
+    import glob as _glob
+    for pattern in _EXTRA_TOOL_GLOBS:
+        for d in sorted(_glob.glob(os.path.expanduser(pattern))):
+            if os.path.isdir(d) and d not in dirs:
+                dirs.append(d)
+    return dirs
+
+
 def find_tool(name):
-    return shutil.which(name)
+    """Locate a required tool, then make it visible to every later subprocess.
+
+    On success the tool's directory is prepended to this process's PATH, so the
+    shell=True build commands (npm install, git clone, electron-builder and the
+    npm scripts it spawns) find it too -- not just this lookup.
+    """
+    found = shutil.which(name)
+    if found:
+        return found
+    for d in _candidate_dirs():
+        found = shutil.which(name, path=d)
+        if found:
+            os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+            return found
+    return None
 
 
 def git_capture(args, cwd):
@@ -4846,6 +4929,26 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
                 "\n"
                 "If you build inside a container, run the finished app on the host."
             )
+            # Already-installed-but-invisible is the common case on Steam Deck:
+            # Archipelago launched from Steam or a desktop entry gets a bare
+            # PATH, and a ~/.nvm or Homebrew node is not on it. find_tool has
+            # already searched the login shell's PATH and the usual home-dir
+            # prefixes by this point, so say where it looked.
+            if os.path.isfile("/.flatpak-info"):
+                tail = (
+                    "Archipelago is running inside Flatpak, which cannot see\n"
+                    "tools installed on the host. Either install node, npm and\n"
+                    "git inside the sandbox, or run Archipelago outside Flatpak.\n"
+                    "\n" + tail
+                )
+            else:
+                tail = (
+                    "If these ARE installed, this launcher just cannot see them:\n"
+                    "Archipelago started from Steam or a desktop shortcut does\n"
+                    "not inherit the PATH your terminal has. Launching\n"
+                    "Archipelago from a terminal usually fixes it.\n"
+                    "\n" + tail
+                )
         error_cb(
             f"Missing required tools: {', '.join(missing)}\n\n"
             "Please install:\n"
@@ -4853,6 +4956,8 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
             + (node_hint if "node" in missing else "")
             + (npm_hint  if "npm"  in missing else "")
             + "\n" + tail
+            + ("" if plat == "Windows" else
+               "\n\nSearched:\n  " + "\n  ".join(_candidate_dirs() or ["(nothing)"]))
         )
         return
 
