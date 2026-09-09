@@ -112,22 +112,34 @@ Archipelago has sent you, and you do not keep what comes down the belt.
 Every level fields a different set of zombies. A level that sent Mummies might send Cowboys, Pirates
 or Jetpack Zombies instead.
 
-Swaps stay inside a tier, so a level keeps the difficulty it was built around. The tier comes from the
-game's own wave-point price for each zombie — what its wave generator pays to field one — so a basic
-zombie is traded for another basic zombie, never for a Gargantuar. Gargantuars only become
-Gargantuars, water zombies only become water zombies, and Zombosses are never touched, so every boss
-fight is the one the level intended.
+Swaps stay inside a tier, so a level keeps the difficulty it was built around. A tier is a set of
+zombies the game itself prices the same — its own wave-point price, what its wave generator pays to
+field one — that fight in the same lane and take about the same killing. So a basic zombie is traded
+for another basic zombie, never for a Gargantuar. Gargantuars only become Gargantuars, water zombies
+only become water zombies, and Zombosses are never touched, so every boss fight is the one the level
+intended.
+
+The level as a whole is weighed too. If a roll would leave a level noticeably tougher or softer than
+it shipped, it is rolled again, and a level with nothing fair to trade for simply keeps its own
+zombies. Across every level in the game, a shuffled lawn lands within a few percent of the health the
+level was built with.
 
 Zombies that need a specific plant to answer them stay where they are. The Jester still only turns up
-where a Jester turned up, and the ice-block carriers only where they already were. That is what keeps
+where a Jester turned up, the ice-block carriers only where they already were, and the same goes for
+the zombies that fly, that block your shots, and that summon more of their own. That is what keeps
 Dark Ages' Jester requirement and Frostbite Caves' warmth requirement meaningful — the shuffle cannot
 drop a threat into a world you have no answer for, and it cannot take one out of a world whose logic
 is built on it. Nothing about item placement or logic changes when this is on.
 
+Some zombies are not really walkers at all, and those stay exactly where the game put them: the
+camels, Sky City's airship crews, the imps that are meant to be thrown at you rather than to walk in,
+and the immobile props. A level that ships one still gets it, and no other level can ever gain one.
+
 Levels built around particular zombies are skipped entirely — the camel matching games in Ancient
 Egypt, the Pirate Seas cannon levels, Beghouled, bowling, Last Stand and the other set pieces. Those
 levels are won on their specific zombies rather than just spawning them, so a swap could leave one
-unbeatable. That is 84 of the game's 1134 levels; everything else shuffles.
+unbeatable. That is 73 of the game's levels; everything else shuffles, and about 70% of what those
+levels field changes.
 
 The roll is fixed per level, so retrying is not a reroll, and two players on the same seed get
 different lawns.

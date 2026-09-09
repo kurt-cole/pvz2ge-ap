@@ -427,8 +427,9 @@ assert _sd_off["goal_locations"] == _sd_on["goal_locations"], "conveyor changed 
 # ── shuffle_zombies ─────────────────────────────────────────────────────────
 # Also pure client behaviour: generation carries the flag, a per-slot seed and
 # the tier table, and must leave the pool, the locations and the logic alone.
-from pvz2gardendless.zombie_data import (ZOMBIE_TIERS, ZOMBIE_TIER_OF,
-                                         THREAT_TAGS, swap_pool, tier_of)
+from pvz2gardendless.zombie_data import (ZOMBIE_HP, ZOMBIE_TIERS,
+                                         ZOMBIE_TIER_OF, THREAT_TAGS,
+                                         swap_pool, tier_of)
 
 _z_off_w, _z_off = run("zombies off", shuffle_zombies=0)
 _z_on_w,  _z_on  = run("zombies on",  shuffle_zombies=1)
@@ -444,10 +445,20 @@ assert sorted(i.name for i in _z_off_w.multiworld.itempool) == \
 assert _z_off["zombie_tiers"] == {}, "tiers sent with the option off"
 assert _z_on["zombie_tiers"] == ZOMBIE_TIERS
 
+# The HP table rides along on the same terms: the client weighs a level's
+# roster with it before and after a shuffle, so it is useless with the option
+# off and required for the budget guard with it on.
+assert _z_off["zombie_hp"] == {}, "HP table sent with the option off"
+assert _z_on["zombie_hp"] == ZOMBIE_HP
+assert set(_z_on["zombie_hp"]) == set(ZOMBIE_TIER_OF), \
+    "the HP table and the tier table describe different zombies"
+
 # slot_data is append-only: an older client reads only the keys it knows, so
 # removing or renaming one silently breaks every build already out there. The
-# three zombie keys are additive, and a seed predating them sends none of the
-# three -- which the client reads as off.
+# zombie keys are additive, and a seed predating them sends none of them --
+# which the client reads as off. zombie_hp came later still, and a client that
+# does not find it skips its budget guard and takes its first roll, which is
+# what every client before the guard existed did.
 _SLOT_DATA_BEFORE_ZOMBIES = {
     "conveyor_seed", "death_link", "enabled_worlds", "game_version",
     "goal_locations", "goal_type", "modern_day_victory", "randomize_conveyor",
@@ -457,7 +468,8 @@ _SLOT_DATA_BEFORE_ZOMBIES = {
 assert _SLOT_DATA_BEFORE_ZOMBIES <= set(_z_on), \
     f"slot_data lost keys: {sorted(_SLOT_DATA_BEFORE_ZOMBIES - set(_z_on))}"
 assert set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES == \
-    {"shuffle_zombies", "zombie_tiers", "zombie_seed", "modern_day_keyed",
+    {"shuffle_zombies", "zombie_tiers", "zombie_seed", "zombie_hp",
+     "modern_day_keyed",
      "world_gates", "goal_item", "goal_item_plural",
      # Added 2026-08-26 for Universal Tracker: everything generation ROLLED or
      # decided from an option the client never needed. The client ignores all
@@ -506,8 +518,10 @@ THREAT_MEMBERS = {
                  "iceage_troglobite_1block", "iceage_troglobite_2block",
                  "iceage_troglobite_veteran"},
 }
+# The tag sits in the middle of a tier key now that the key ends with its HP
+# band (t3-land-jester-h20), so match on the tag rather than the suffix.
 for _tag, _expected in THREAT_MEMBERS.items():
-    _tiers = [t for t in ZOMBIE_TIERS if t.endswith("-" + _tag)]
+    _tiers = [t for t in ZOMBIE_TIERS if f"-{_tag}" in t]
     assert _tiers, f"no tier carries the {_tag} tag any more"
     _members = {z for t in _tiers for z in ZOMBIE_TIERS[t]}
     assert _members == _expected, (
@@ -517,7 +531,7 @@ for _tag, _expected in THREAT_MEMBERS.items():
 # air and blocker have no counter-plant list to gate on, so they are pinned by
 # size only -- they are partitioned to stop them spreading, not to gate on.
 for _tag in THREAT_TAGS:
-    assert any(t.endswith("-" + _tag) for t in ZOMBIE_TIERS), \
+    assert any(f"-{_tag}" in t for t in ZOMBIE_TIERS), \
         f"no tier carries the {_tag} tag any more"
 print(f"zombie tiers: {len(ZOMBIE_TIERS)} tiers over {len(ZOMBIE_TIER_OF)} zombies, "
       f"{len(THREAT_TAGS)} threat classes partitioned")

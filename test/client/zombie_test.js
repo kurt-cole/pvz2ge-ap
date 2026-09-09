@@ -5,7 +5,7 @@
 // so what the stand-in records IS the level's roster after shuffling. Every
 // assertion below reads off that.
 const {
-  window, st, TEST_TIERS,
+  window, st, TEST_TIERS, TEST_HP,
   syncZombieConfig, installZombieHook, makeZombiesClass, setLevel, resetCache,
 } = require('./zombie_fn.js');
 
@@ -196,9 +196,9 @@ syncZombieConfig();
 // neither appear in a world that had none nor vanish from one whose access
 // rule is built on it. Both hold only because the threat tiers are closed.
 {
-  const JEST = new Set(TEST_TIERS['t3-land-jester']);
-  const ICE  = new Set(TEST_TIERS['t3-land-iceblock']);
-  const GARG = new Set(TEST_TIERS['t5-water-garg']);
+  const JEST = new Set(TEST_TIERS['t3-land-jester-h20']);
+  const ICE  = new Set(TEST_TIERS['t3-land-iceblock-h21']);
+  const GARG = new Set(TEST_TIERS['t5-water-garg-h27']);
   let jest = 0, ice = 0, garg = 0, leaked = 0;
   for (let i = 0; i < 200; i++) {
     const Z = fresh();
@@ -260,7 +260,7 @@ syncZombieConfig();
 // Different levels must actually differ, or "per level" is a lie. Compared
 // on the big tier only; a 3-member tier collides often by chance.
 {
-  const big = TEST_TIERS['t1-land'];
+  const big = TEST_TIERS['t1-land-h17'];
   const rosters = new Set();
   for (let i = 0; i < 60; i++) {
     const Z = fresh();
@@ -288,7 +288,7 @@ syncZombieConfig();
 {
   const roster = () => {
     const Z = fresh(); setLevel('egypt10');
-    return TEST_TIERS['t1-land'].map(z => resolve(Z, z)).join(',');
+    return TEST_TIERS['t1-land-h17'].map(z => resolve(Z, z)).join(',');
   };
   st.zombieSeed = 111; syncZombieConfig(); const one = roster();
   st.zombieSeed = 222; syncZombieConfig(); const two = roster();
@@ -322,6 +322,166 @@ syncZombieConfig();
   try { resolve(Z, 'mummy'); } catch (e) { threw = e; }
   if (threw) fail('a missing levelController threw: ' + threw.message);
   else ok('a missing or half-built levelController does not throw');
+}
+
+
+// ── the level's own roster drives the plan ───────────────────────────────────
+// The swap used to be rolled one codename at a time, which meant it never saw
+// more than one zombie at once. Reading the level's object list is what lets
+// it weigh the roster and hand distinct zombies distinct replacements.
+{
+  const Z = fresh();
+  setLevel('egypt10', ['WaveManagerProperties'],
+           { mummy: 10, cowboy: 6, pirate: 4, future: 2 });
+  const picks = ['mummy', 'cowboy', 'pirate', 'future'].map(z => resolve(Z, z));
+  if (new Set(picks).size !== picks.length)
+    fail('two of the level\'s zombies collapsed onto one replacement: ' + picks.join(', '));
+  else ok('distinct zombies in a roster get distinct replacements');
+
+  // The pool is bigger than the roster, so nobody should have been forced to
+  // reuse. A codename the level never names still resolves, down the lazy path.
+  const stranger = resolve(Z, 'dark');
+  if (!TEST_TIERS['t1-land-h17'].includes(stranger))
+    fail('a codename outside the roster left its tier: ' + stranger);
+  else ok('a codename the level never names still resolves, in tier');
+}
+
+// A roster longer than its tier cannot be injective, and must not deadlock or
+// drop anybody trying to be.
+{
+  const Z = fresh();
+  const roster = {};
+  for (const z of TEST_TIERS['t3-land-jester-h20']) roster[z] = 1;
+  roster['iceage_troglobite'] = 1;
+  setLevel('crowded', ['WaveManagerProperties'], roster);
+  const out = Object.keys(roster).map(z => resolve(Z, z));
+  if (out.some(z => z === undefined || z === null)) fail('a crowded roster dropped a zombie');
+  else ok('a roster as large as its tier still maps every zombie');
+}
+
+// ── the budget guard ─────────────────────────────────────────────────────────
+// Every individual swap is inside an HP band, but a level rolls many at once
+// and the errors can all land the same way. The guard weighs the roster the
+// plan would produce and re-rolls if it drifted.
+{
+  // One member of the tier is made ten times as tough as the rest, so any plan
+  // that hands it to a level of eight basic zombies is far too heavy.
+  const HEAVY = 'kongfu';
+  const hp = Object.assign({}, TEST_HP);
+  hp[HEAVY] = TEST_HP[HEAVY] * 10;
+  st.zombieHp = hp;
+  syncZombieConfig();
+
+  let overweight = 0, total = 0;
+  for (let i = 0; i < 120; i++) {
+    const Z = fresh();
+    setLevel('budget' + i, ['WaveManagerProperties'], { mummy: 8 });
+    const got = resolve(Z, 'mummy');
+    total++;
+    if (got === HEAVY) overweight++;
+  }
+  if (overweight) fail(`${overweight} of ${total} single-type levels took a 10x zombie`);
+  else ok(`${total} levels all refused a swap that would have tripled their HP`);
+
+  // ...and the guard must not be a blanket off switch: a swap that keeps the
+  // weight is still made.
+  let changed = 0;
+  for (let i = 0; i < 120; i++) {
+    const Z = fresh();
+    setLevel('budget' + i, ['WaveManagerProperties'], { mummy: 8 });
+    if (resolve(Z, 'mummy') !== 'mummy') changed++;
+  }
+  if (changed < 60) fail(`the guard stopped shuffling: only ${changed} of 120 levels changed`);
+  else ok(`${changed} of 120 levels still shuffled under the guard`);
+
+  // A level whose whole tier is too heavy has nowhere to go, so it keeps
+  // exactly what it shipped with rather than shipping something unfair.
+  {
+    const only = { mummy: 1, cowboy: 1 };
+    const heavyAll = {};
+    for (const z of TEST_TIERS['t1-land-h17']) heavyAll[z] = TEST_HP[z] * 20;
+    heavyAll['mummy'] = TEST_HP['mummy'];
+    heavyAll['cowboy'] = TEST_HP['cowboy'];
+    st.zombieHp = heavyAll;
+    syncZombieConfig();
+    const Z = fresh();
+    setLevel('nowhere', ['WaveManagerProperties'], only);
+    const got = Object.keys(only).map(z => resolve(Z, z));
+    if (got.join(',') !== 'mummy,cowboy')
+      fail('a level with no affordable swap shipped one anyway: ' + got.join(','));
+    else ok('a level with no swap inside the budget keeps its own zombies');
+  }
+
+  // A seed generated before the guard existed sends no zombie_hp at all. That
+  // has to read as "no guard", not as "every zombie weighs nothing".
+  {
+    delete st.zombieHp;
+    syncZombieConfig();
+    const Z = fresh();
+    setLevel('egypt10', ['WaveManagerProperties'], { mummy: 8 });
+    const withoutHp = resolve(Z, 'mummy');
+    st.zombieHp = TEST_HP;                     // flat: the guard is a no-op
+    syncZombieConfig();
+    const Z2 = fresh();
+    setLevel('egypt10', ['WaveManagerProperties'], { mummy: 8 });
+    const withFlatHp = resolve(Z2, 'mummy');
+    if (withoutHp !== withFlatHp)
+      fail(`no HP table rolled ${withoutHp}, a flat one rolled ${withFlatHp} -- ` +
+           'a seed predating the guard must roll as it always did');
+    else ok('a seed with no zombie_hp rolls exactly as it did before the guard');
+  }
+  st.zombieHp = TEST_HP;
+  syncZombieConfig();
+}
+
+// ── the stale object list ────────────────────────────────────────────────────
+// THE regression this section exists for. thisLevelsID is assigned when the
+// level data loads; currentLevelObjects is filled in by the component
+// afterwards. Between the two, the ID is the new level's and the object list
+// is still the previous level's. Keying the verdict on the ID alone let a
+// resolve landing in that window pin the wrong answer for the whole level.
+{
+  // Entering egypt7 (camel matching) from an ordinary level: if the ordinary
+  // level's objects are still in place when the first zombie resolves, the
+  // plan must NOT stay built on them once the real list arrives.
+  const Z = fresh();
+  setLevel('egypt8', ['WaveManagerProperties'], { mummy: 4 });
+  resolve(Z, 'mummy');                                  // plan built, ordinary
+  window._AP_levelController.thisLevelsID = ['egypt7']; // ID moves first
+  resolve(Z, 'mummy');                                  // resolve in the window
+  setLevel('egypt7', ['WaveManagerProperties', 'CamelMinigameProperties'],
+           { mummy: 4 });                               // objects catch up
+  const got = resolve(Z, 'mummy');
+  if (got !== 'mummy')
+    fail('a bespoke level entered from an ordinary one was shuffled anyway ' +
+         `(mummy -> ${got}) -- the stale object list pinned the wrong verdict`);
+  else ok('a bespoke level is still spared when its object list arrives late');
+}
+{
+  // ...and the other direction: an ordinary level entered from egypt7 must not
+  // inherit egypt7's "do not shuffle".
+  const Z = fresh();
+  setLevel('egypt7', ['WaveManagerProperties', 'CamelMinigameProperties'],
+           { mummy: 4 });
+  resolve(Z, 'mummy');
+  window._AP_levelController.thisLevelsID = ['egypt8'];
+  resolve(Z, 'mummy');
+  setLevel('egypt8', ['WaveManagerProperties'], { mummy: 4 });
+  const changed = TEST_TIERS['t1-land-h17'].filter(z => resolve(Z, z) !== z);
+  if (!changed.length)
+    fail('an ordinary level inherited the previous level\'s bespoke verdict');
+  else ok(`an ordinary level entered from a bespoke one still shuffles (${changed.length})`);
+}
+{
+  // A level that reloads its own objects -- a retry -- is the same level, and
+  // must roll the same way rather than being treated as new.
+  const Z = fresh();
+  setLevel('egypt10', ['WaveManagerProperties'], { mummy: 4, cowboy: 2 });
+  const first = ['mummy', 'cowboy'].map(z => resolve(Z, z)).join(',');
+  setLevel('egypt10', ['WaveManagerProperties'], { mummy: 4, cowboy: 2 });
+  const again = ['mummy', 'cowboy'].map(z => resolve(Z, z)).join(',');
+  if (first !== again) fail(`a retry rerolled: ${first} then ${again}`);
+  else ok('a retry rebuilds the same plan from the same level');
 }
 
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nZOMBIE SHUFFLE HOOK OK');

@@ -38,7 +38,7 @@ from .locations import (
 )
 from .regions import create_regions as build_regions
 from .rules import set_rules as apply_rules
-from .zombie_data import ZOMBIE_TIERS
+from .zombie_data import ZOMBIE_TIERS, ZOMBIE_HP
 
 # ── Launcher ──────────────────────────────────────────────────────────────────
 
@@ -740,6 +740,17 @@ class PvZ2GardendlessWorld(World):
             # keeps a level's difficulty and every world's threat footprint
             # intact. ~6KB, and only sent when the option is on.
             "zombie_tiers":      (ZOMBIE_TIERS
+                                  if self.options.shuffle_zombies else {}),
+            # Effective HP per tiered zombie, for the client's per-level
+            # budget guard: it weighs a level's whole roster before and after
+            # a shuffle and re-rolls if the total moved too far. Sent rather
+            # than duplicated in the client for the same reason the tiers are.
+            # ~4KB, and only sent when the option is on.
+            #
+            # A client that does not find this key skips the guard and takes
+            # its first roll, which is what every client before the guard
+            # existed did.
+            "zombie_hp":         (ZOMBIE_HP
                                   if self.options.shuffle_zombies else {}),
             # Per-slot seed for the client's zombie roll, for the same reason
             # conveyor_seed exists: the belt and the waves should differ

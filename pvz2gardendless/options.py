@@ -272,28 +272,42 @@ class ShuffleZombies(Toggle):
     Shuffle which zombies each level sends at you.
 
     Swaps stay inside a tier, so a level keeps the difficulty it was built
-    around. The tier is the game's own `WavePointCost` -- the price its wave
-    generator pays to field that zombie -- so a 100-point Mummy is traded for
-    another 100-point zombie, never for a Gargantuar. Gargantuars only become
+    around. A tier is a set of zombies the game itself prices the same (its
+    own `WavePointCost`), fields in the same lane, and that take about the
+    same killing -- so a Mummy is traded for another zombie of a Mummy's
+    price and toughness, never for a Gargantuar. Gargantuars only become
     Gargantuars, and Zombosses are never touched, so every boss fight is the
     one the level intended.
 
+    On top of that, the level as a whole is weighed: if a roll would leave a
+    level meaningfully tougher or softer than it shipped, it is re-rolled, and
+    a level with nothing fair to swap to simply keeps its own zombies. Across
+    every shipped level, a shuffled lawn lands within a few percent of the
+    health the level was built with.
+
     Zombies that need a specific plant to answer them stay put: the Jester
-    still only appears where a Jester appeared, and ice-block carriers only
-    where ice-block carriers did. That is what keeps Dark Ages' Jester
-    requirement and Frostbite Caves' warmth requirement honest -- the shuffle
-    cannot move a threat into a world with no answer for it, nor take one out
-    of a world whose access rule is built on it. Nothing about generation
-    logic changes when this is on.
+    still only appears where a Jester appeared, ice-block carriers only where
+    ice-block carriers did, and the same goes for zombies that fly, that block
+    your shots, and that summon more of their own. That is what keeps Dark
+    Ages' Jester requirement and Frostbite Caves' warmth requirement honest --
+    the shuffle cannot move a threat into a world with no answer for it, nor
+    take one out of a world whose access rule is built on it. Nothing about
+    generation logic changes when this is on.
 
     Water zombies and land zombies are kept apart, since a land zombie
     dropped in a deep-water lane drowns.
 
+    Zombies that are not really walkers stay exactly where the game put them:
+    the camels, Sky City's airship crews, the imps that are meant to arrive
+    from a carrier, and the immobile props. A level that ships one still gets
+    it; no other level can gain one.
+
     Levels built around particular zombies are skipped entirely -- the camel
     matching games, the cannon levels, Beghouled, bowling, Last Stand and the
     other set pieces. Those levels win on their specific zombies rather than
-    just spawning them, so swapping there can leave one unbeatable. That is 84
-    of the game's 1134 levels; the rest all shuffle.
+    just spawning them, so swapping there can leave one unbeatable. That is 73
+    of the game's levels; the rest all shuffle, and about 70% of everything
+    they field changes.
 
     The roll is fixed per level, so retrying a level gives the same zombies
     rather than rerolling until you like them. Rolls differ between slots on

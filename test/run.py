@@ -19,6 +19,8 @@ PY_SUITES = [
     ("generation", "gen_test.py",    "pool, locations, options, item IDs"),
     ("spheres",    "sphere_test.py", "reachability and sphere depth"),
     ("drift",      "drift_test.py",  "client JS copies match the real client"),
+    ("zombietiers","zombie_tier_test.py", "the zombie swap tiers still partition"),
+    ("balance",    "balance_test.py", "the client's roll replayed over every level"),
     ("tracker",    "tracker_test.py", "Universal Tracker rebuilds the same seed"),
 ]
 JS_SUITES = [
