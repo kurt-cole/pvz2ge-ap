@@ -4597,9 +4597,29 @@ def _bundle_prefixes():
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
         out.append(meipass)
+    # A frozen build that is just an unpacked directory sets none of the above:
+    # Archipelago's Linux tarball is cx_Freeze, and its launcher script exports
+    # LD_LIBRARY_PATH=<app>/lib with no marker variable at all. The app
+    # directory is the only thing that identifies it, so derive it from the
+    # running executable. Guarded on `frozen` because under a normal
+    # interpreter that directory is something like /usr/bin, which must not be
+    # treated as a bundle.
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        # Only the executable's own directory: sys.prefix is tempting here,
+        # but on some frozen layouts it is /usr, and calling /usr a bundle
+        # prefix would strip the host's own library directories.
+        if exe_dir and exe_dir not in ("/", os.sep):
+            out.append(exe_dir)
     # AppImages mount here even when APPDIR was not exported to children.
     out.append("/tmp/.mount_")
     return [p for p in out if p]
+
+
+# Set by tool_version when pruning the loader variables was not enough and
+# they had to go entirely. It sticks for the rest of the build, so npm, git and
+# electron-builder are spawned with the environment that was proven to work.
+_drop_bundle_vars = False
 
 
 def host_env():
@@ -4611,6 +4631,12 @@ def host_env():
     bundle paths is removed entirely.
     """
     env = os.environ.copy()
+    if _drop_bundle_vars:
+        for var in _BUNDLE_ENV_VARS:
+            env.pop(var, None)
+            env.pop(var + "_ORIG", None)
+            env.pop(var + "_OLD", None)
+        return env
     prefixes = tuple(_bundle_prefixes())
     for var in _BUNDLE_ENV_VARS:
         orig = env.pop(var + "_ORIG", None)
@@ -4633,6 +4659,44 @@ def host_env():
             env.pop(var, None)
     # find_tool's PATH additions live in os.environ, so they come along.
     return env
+
+
+def tool_version(tool):
+    """(True, version) for a working host tool, else (False, what it printed).
+
+    The retry matters more than the version string does. host_env() prunes the
+    bundle's directories out of the loader variables, but it can only prune
+    prefixes it recognises; a frozen build laid out in a way this does not know
+    about would still poison every tool it spawns. Dropping the variables
+    outright is always safe here -- everything spawned from this point on is a
+    host binary that wants the host's libraries -- so if the pruned environment
+    fails, fall back to no bundle variables at all and keep that environment
+    for the rest of the build.
+    """
+    global _drop_bundle_vars
+    attempts = [host_env()]
+    stripped = host_env()
+    for var in _BUNDLE_ENV_VARS:
+        stripped.pop(var, None)
+    if stripped != attempts[0]:
+        attempts.append(stripped)
+    last = ""
+    for i, env in enumerate(attempts):
+        try:
+            proc = subprocess.run(
+                f"{tool} --version", shell=True, capture_output=True,
+                text=True, timeout=60, env=env,
+            )
+        except (OSError, subprocess.SubprocessError) as e:
+            last = str(e)
+            continue
+        if proc.returncode == 0 and (proc.stdout or "").strip():
+            if i:
+                _drop_bundle_vars = True
+            return True, proc.stdout.strip()
+        last = ((proc.stderr or "") + (proc.stdout or "")).strip() or \
+            f"exit status {proc.returncode}"
+    return False, last
 
 
 def run_cmd(cmd, cwd, log):
@@ -5246,11 +5310,26 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
         )
         return
 
-    _venv = host_env()
-    node_ver = subprocess.check_output("node --version", shell=True, text=True, env=_venv).strip()
-    npm_ver  = subprocess.check_output("npm --version",  shell=True, text=True, env=_venv).strip()
-    git_ver  = subprocess.check_output("git --version",  shell=True, text=True, env=_venv).strip()
-    log(f"  node {node_ver}  |  npm {npm_ver}  |  {git_ver}")
+    vers = {}
+    for tool in ("node", "npm", "git"):
+        ok, out = tool_version(tool)
+        if not ok:
+            # A host tool that runs from a terminal but not from here is
+            # almost always the bundle's libraries winning over the host's,
+            # so say that and show what the tool actually printed.
+            error_cb(
+                f"`{tool} --version` failed when run from Archipelago, even "
+                f"though {tool} was found at:\n"
+                f"  {find_tool(tool)}\n\n"
+                f"{out}\n\n"
+                "If that mentions a library or a version symbol, Archipelago's\n"
+                "own bundled libraries are being loaded by the host tool. "
+                "Running\nthe installer standalone works around it:\n"
+                "  python pvz2gardendless/build_pvzge_ap.py"
+            )
+            return
+        vers[tool] = out
+    log(f"  node {vers['node']}  |  npm {vers['npm']}  |  {vers['git']}")
 
     # ── 2. Clone Electron wrapper ─────────────────────────────────────────────
     step("Cloning Electron wrapper")
@@ -5785,13 +5864,25 @@ class BuilderApp:
         self.status_var.set("Updating…" if fast else "Building…")
 
         def _thread():
-            build(
-                build_dir,
-                log=lambda m: self.q.put(("log", m)),
-                done_cb=lambda exe: self.q.put(("done", exe)),
-                error_cb=lambda err: self.q.put(("error", err)),
-                fast=fast,
-            )
+            try:
+                build(
+                    build_dir,
+                    log=lambda m: self.q.put(("log", m)),
+                    done_cb=lambda exe: self.q.put(("done", exe)),
+                    error_cb=lambda err: self.q.put(("error", err)),
+                    fast=fast,
+                )
+            except BaseException as e:
+                # Without this the thread dies, its traceback goes to a stderr
+                # nobody is looking at, and the window sits on whatever step it
+                # last logged looking like a hang. Put it where the user is.
+                import traceback as _tb
+                detail = _tb.format_exc()
+                self.q.put(("log", "\n" + detail))
+                self.q.put(("error",
+                            f"The build stopped with an unexpected error:\n\n"
+                            f"{type(e).__name__}: {e}\n\n"
+                            "The full traceback is in the log above."))
 
         threading.Thread(target=_thread, daemon=True).start()
 
