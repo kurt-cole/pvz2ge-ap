@@ -19,6 +19,7 @@ import sys
 import json
 import shutil
 import subprocess
+import signal
 import threading
 import platform as _sys_platform
 import tkinter as tk
@@ -4674,45 +4675,109 @@ _EXTRA_TOOL_GLOBS = (
 _login_path_cache = None
 
 
+def _shell_path_probe(shell):
+    """The command that makes `shell` print its PATH colon-separated.
+
+    fish keeps PATH as a list, so the POSIX `printf %s "$PATH"` prints it
+    space-separated there and the result parses as one nonsense directory.
+    """
+    if os.path.basename(shell) == "fish":
+        return "string join : $PATH"
+    return 'printf %s "$PATH"'
+
+
+def _run_shell_path(shell, args, timeout):
+    """Run one shell PATH probe, returning its stdout or "".
+
+    Every guard here exists because this runs under a GUI-launched
+    Archipelago, where a hang has no visible cause and no way out:
+
+      * stdin is /dev/null, so an rc file that prompts gets EOF instead of
+        blocking forever on a terminal that is not there.
+      * the shell gets its own process group, and a timeout kills the group.
+        Killing only the shell leaves any background job it started holding
+        the stdout pipe, and the read that follows never returns -- that is
+        subprocess.run(timeout=...) hanging *past* its own timeout.
+      * stderr is discarded rather than merged, so rc-file noise cannot be
+        mistaken for output.
+    """
+    try:
+        proc = subprocess.Popen(
+            [shell] + args,
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, text=True, env=host_env(),
+            start_new_session=True,
+        )
+    except (OSError, ValueError):
+        return ""
+    try:
+        out, _ = proc.communicate(timeout=timeout)
+        return out or ""
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (OSError, AttributeError):
+            proc.kill()
+        # The group is gone, so this cannot block on an inherited pipe.
+        try:
+            proc.communicate(timeout=5)
+        except (subprocess.SubprocessError, OSError):
+            pass
+        return ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
 def _login_shell_path():
     """PATH as the user's own login shell builds it.
 
     This is the cheapest way to pick up whatever nvm/fnm/brew line lives in a
     .bashrc or .zshrc without reimplementing any of them. Cached: it spawns a
     shell, and find_tool is called repeatedly.
+
+    The non-interactive login shell is tried first and the interactive one only
+    if that came back empty: -i is what runs the parts of an rc file that
+    assume a terminal, and those are what hang.
     """
     global _login_path_cache
     if _login_path_cache is not None:
         return _login_path_cache
     _login_path_cache = ""
     shell = os.environ.get("SHELL")
-    if shell and os.name != "nt" and os.path.exists(shell):
-        try:
-            proc = subprocess.run(
-                [shell, "-lic", "printf %s \"$PATH\""],
-                capture_output=True, text=True, timeout=20, env=host_env(),
-            )
-            # -i can make a chatty rc file print banners; the PATH is the last
-            # non-empty line that actually looks like one.
-            for line in reversed((proc.stdout or "").splitlines()):
-                if os.pathsep in line and "/" in line:
-                    _login_path_cache = line.strip()
-                    break
-        except (OSError, subprocess.SubprocessError):
-            pass
+    if not shell or os.name == "nt" or not os.path.exists(shell):
+        return _login_path_cache
+    probe = _shell_path_probe(shell)
+    for flags, timeout in (("-lc", 10), ("-lic", 10)):
+        out = _run_shell_path(shell, [flags, probe], timeout)
+        # A chatty rc file prints banners; the PATH is the last non-empty line
+        # that actually looks like one.
+        for line in reversed(out.splitlines()):
+            if os.pathsep in line and "/" in line:
+                _login_path_cache = line.strip()
+                return _login_path_cache
     return _login_path_cache
 
 
-def _candidate_dirs():
+def _glob_dirs():
+    """The known home-directory tool prefixes that exist on this machine."""
     dirs = []
-    for chunk in _login_shell_path().split(os.pathsep):
-        if chunk and chunk not in dirs:
-            dirs.append(chunk)
     import glob as _glob
     for pattern in _EXTRA_TOOL_GLOBS:
         for d in sorted(_glob.glob(os.path.expanduser(pattern))):
             if os.path.isdir(d) and d not in dirs:
                 dirs.append(d)
+    return dirs
+
+
+def _login_shell_path_dirs():
+    return [c for c in _login_shell_path().split(os.pathsep) if c]
+
+
+def _candidate_dirs():
+    dirs = _glob_dirs()
+    for chunk in _login_shell_path().split(os.pathsep):
+        if chunk and chunk not in dirs:
+            dirs.append(chunk)
     return dirs
 
 
@@ -4722,15 +4787,20 @@ def find_tool(name):
     On success the tool's directory is prepended to this process's PATH, so the
     shell=True build commands (npm install, git clone, electron-builder and the
     npm scripts it spawns) find it too -- not just this lookup.
+
+    The glob prefixes are searched before the login shell is asked, because
+    asking means spawning the user's shell and sourcing their rc files. A
+    system-packaged node in /usr/bin answers the question without that.
     """
     found = shutil.which(name)
     if found:
         return found
-    for d in _candidate_dirs():
-        found = shutil.which(name, path=d)
-        if found:
-            os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
-            return found
+    for finder in (_glob_dirs, _login_shell_path_dirs):
+        for d in finder():
+            found = shutil.which(name, path=d)
+            if found:
+                os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+                return found
     return None
 
 
