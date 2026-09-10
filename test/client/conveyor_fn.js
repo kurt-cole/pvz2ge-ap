@@ -7,6 +7,7 @@ const ID_TO_CN = {
     16:'firepeashooter', 17:'threepeater', 18:'primalpeashooter',
     19:'rotobaga', 20:'homingthistle', 21:'starfruit', 22:'shootingstarfruit',
     23:'lilypad', 24:'sunshroom', 25:'twinsunflower', 26:'dragonbruit',
+    207:'darkmatterdragonfruit',
     27:'moonflower', 28:'snowpea', 29:'lightningreed', 30:'kernelpult',
     31:'meteorflower', 32:'springbean', 33:'umbrellaleaf',
     34:'melonpult', 35:'wintermelon', 36:'blover', 37:'spikeweed',
@@ -42,7 +43,7 @@ const CONVEYOR_GROUPS = {
   'attacker:mid': [
     'akee', 'bambooshoot', 'bamboozle', 'bloomerang', 'bloominghearts',
     'bonkchoy', 'bowlingbulb', 'cactus', 'chomper', 'coldsnapdragon',
-    'doomshroom', 'dragonbruit', 'dusklobber', 'electriccurrant',
+    'doomshroom', 'dusklobber', 'electriccurrant',
     'electricpeashooter', 'firegourd', 'firepeashooter', 'hotdate',
     'iceweed', 'jackolantern', 'laser_bean', 'lychee', 'parsnip',
     'peanut', 'pepperpult', 'phatbeet', 'primalpeashooter',
@@ -50,14 +51,15 @@ const CONVEYOR_GROUPS = {
     'snowpea', 'sporeshroom', 'starfruit', 'torchwood'
   ],
   'instant:budget': [
-    'blover', 'chilibean', 'empea', 'escaperoot', 'goldbloom',
+    'blover', 'chilibean', 'empea', 'escaperoot',
     'goldleaf', 'gravebuster', 'hotpotato', 'iceburg', 'potatomine',
     'primalpotatomine', 'shadowshroom', 'shrinkingviolet', 'squash',
     'stallia', 'stunion', 'sunbean', 'tanglekelp'
   ],
   'attacker:high': [
     'applemortar', 'banana', 'cantaloupe', 'citron', 'coconutcannon',
-    'dandelion', 'gatling', 'gloomshroom', 'homingthistle', 'melonpult',
+    'dandelion', 'darkmatterdragonfruit', 'gatling', 'gloomshroom',
+    'homingthistle', 'melonpult',
     'meteorflower', 'missiletoe', 'shootingstarfruit', 'spikerock',
     'strawburst', 'threepeater', 'wintermelon'
   ],
@@ -149,7 +151,7 @@ const CONVEYOR_FAMILIES = {
     'scaredyshroom', 'seashroom', 'sporeshroom', 'vamporcini'
   ],
   'Shadow': [
-    'dragonbruit', 'dusklobber', 'gloomshroom', 'gloomvine', 'grimrose',
+    'darkmatterdragonfruit', 'dusklobber', 'gloomshroom', 'gloomvine', 'grimrose',
     'moonflower', 'nightshade', 'shadowshroom'
   ],
   'Sharp': [
@@ -181,7 +183,7 @@ const CONVEYOR_DPS = {
 };
 // Shadow belt, mirroring the client's declarations verbatim.
 const CONVEYOR_SHADOW = [
-  'moonflower', 'dragonbruit', 'dusklobber', 'gloomshroom', 'gloomvine',
+  'moonflower', 'darkmatterdragonfruit', 'dusklobber', 'gloomshroom', 'gloomvine',
   'grimrose', 'nightshade', 'shadowshroom'
 ];
 const CONVEYOR_SHADOW_CHANCE = 0.12;
@@ -230,8 +232,8 @@ function installConveyorHook(LC) {
         // unreadable level loses aquatic swaps rather than gaining dead slots.
         let hasWater = false;
         try {
-          const lc = window._AP_levelController;
-          hasWater = !!(lc && lc.component && lc.component.haveWater);
+          const lp = window._AP_LevelPlay || window._AP_levelController;
+          hasWater = !!(lp && lp.component && lp.component.haveWater);
         } catch (e) { /* fall through to the belt signal */ }
         if (!hasWater) {
           hasWater = list.some(e => e && window._AP_conveyorTerrainLocked.has(e.PlantType) &&
@@ -420,7 +422,10 @@ window._AP_conveyorTerrainLocked = new Set([
 // Sets the game's own per-level water flag the hook reads. Pass undefined to
 // model a level whose grid is not built yet, which must fail closed.
 function setLevelWater(haveWater) {
-  window._AP_levelController = { component: { haveWater: haveWater } };
+  // haveWater hangs off LevelPlay.component in the real game, not off the
+  // levelController component class -- see zombie_fn.js's setLevel.
+  window._AP_levelController = { prototype: {} };
+  window._AP_LevelPlay = { component: { haveWater: haveWater } };
 }
 
 module.exports={installConveyorHook, window, CONVEYOR_GROUPS, CONVEYOR_FAMILIES, CONVEYOR_DPS,

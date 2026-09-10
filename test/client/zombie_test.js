@@ -160,19 +160,36 @@ syncZombieConfig();
 // Unreadable level objects must fail CLOSED. Not shuffling is a cheap
 // mistake; shuffling a level that cannot then be beaten is not.
 {
-  for (const [label, lc] of [
-    ['no levelController', undefined],
+  for (const [label, lp] of [
+    ['no LevelPlay',       undefined],
     ['no component',       { thisLevelsID: ['x'] }],
     ['no object list',     { thisLevelsID: ['x'], component: {} }],
     ['empty object list',  { thisLevelsID: ['x'], component: { currentLevelObjects: [] } }],
   ]) {
     const Z = fresh();
     setLevel('probe');
-    window._AP_levelController = lc;
+    // Both exports, because the reader falls back from one to the other: the
+    // level is unreadable only when neither carries the statics.
+    window._AP_LevelPlay = lp;
+    window._AP_levelController = { prototype: {} };
     const changed = ALL.filter(z => resolve(Z, z) !== z);
     if (changed.length) fail(`${label}: shuffled anyway, should fail closed`);
   }
   if (!failed) ok('an unreadable level fails closed and is not shuffled');
+}
+
+// The statics live on LevelPlay in the shipped game, but a build that puts
+// them on the levelController export must still shuffle -- that fallback is
+// the only thing keeping an older or patched game working.
+{
+  const Z = fresh();
+  const objs = setLevel('egypt8', ['WaveManagerProperties']);
+  window._AP_LevelPlay = undefined;
+  window._AP_levelController = { thisLevelsID: ['egypt8'],
+                                 component: { currentLevelObjects: objs } };
+  const changed = ALL.filter(z => resolve(Z, z) !== z);
+  if (!changed.length) fail('statics on levelController: nothing shuffled');
+  else ok(`statics on levelController still shuffle (${changed.length} swaps)`);
 }
 
 // ── swaps stay inside the tier ───────────────────────────────────────────────

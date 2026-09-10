@@ -402,6 +402,44 @@ for (const l of LEVELS) {
 if (goldIn) fail(`goldleaf swapped in ${goldIn} time(s) despite needing a gold tile`);
 else ok('goldleaf is never swapped in, on any lawn');
 
+// goldbloom produces sun and nothing else, and a conveyor level hands plants
+// out rather than charging for them, so it is a dead slot on any belt. It is
+// in no group, which must keep it off every belt it did not ship on -- and
+// equally must not stop a level that ships one from keeping it.
+{
+  if (GROUP_OF['goldbloom']) fail('goldbloom is back in a conveyor group');
+  let bloomIn = 0;
+  for (const l of LEVELS) {
+    const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
+    for (let i = 0; i < after.length; i++) {
+      if (after[i].PlantType === 'goldbloom' && before[i].PlantType !== 'goldbloom') bloomIn++;
+      if (before[i].PlantType === 'goldbloom' && after[i].PlantType !== 'goldbloom')
+        fail('a level that ships goldbloom had it swapped away');
+    }
+  }
+  if (bloomIn) fail(`goldbloom swapped in ${bloomIn} time(s); it is a wasted belt slot`);
+  else ok('goldbloom is never swapped onto a belt');
+}
+
+// Dragonbruit is cut content -- absent from the game's SEEDCHOOSERDEFAULTORDER,
+// so a card for it can never reach the seed chooser. It must not be handed out
+// by the belt either; darkmatterdragonfruit is the real shadow dragonfruit.
+{
+  if (GROUP_OF['dragonbruit']) fail('dragonbruit is back in a conveyor group');
+  if (SHADOW.has('dragonbruit')) fail('dragonbruit is still in the shadow deck');
+  if (!SHADOW.has('darkmatterdragonfruit'))
+    fail('darkmatterdragonfruit missing from the shadow deck');
+  let cutIn = 0;
+  for (const l of LEVELS) {
+    const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
+    for (let i = 0; i < after.length; i++) {
+      if (after[i].PlantType === 'dragonbruit' && before[i].PlantType !== 'dragonbruit') cutIn++;
+    }
+  }
+  if (cutIn) fail(`dragonbruit swapped in ${cutIn} time(s); it is unusable cut content`);
+  else ok('dragonbruit (cut content) is never swapped onto a belt');
+}
+
 // The other direction: a level that placed a terrain-locked plant itself keeps
 // it. Swapping a Big Wave Beach belt's Lily Pad for a Wall-nut removes the only
 // thing making its water columns usable.

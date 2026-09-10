@@ -278,6 +278,14 @@ window.electron = electron;
     // Lower-case l: levelController.ts exports 'levelController', not
     // 'LevelController'. module_SetConveyor lives on its prototype.
     'levelController': function(v) { window._AP_levelController = v; installConveyorHook(v); },
+    // Same module, different class. levelController.ts exports the Cocos
+    // component (whose prototype carries module_SetConveyor) AND LevelPlay,
+    // which is where the level's own statics live: `component` is the live
+    // levelController instance, and thisLevelsID is the level being played.
+    // Reading those off the component class instead finds nothing, which is
+    // silent -- the zombie plan fails closed to "bespoke" and stops shuffling
+    // entirely, and the conveyor's water check fails closed to "no water".
+    'LevelPlay': function(v) { window._AP_LevelPlay = v; },
     'CoinCount': function(v) { window._AP_CoinCount = v; },
     'GemCount':  function(v) { window._AP_GemCount  = v; },
     // World keys are the game's own currency for unlocking worlds, and under
@@ -566,8 +574,8 @@ window.electron = electron;
           // unreadable level loses aquatic swaps rather than gaining dead slots.
           let hasWater = false;
           try {
-            const lc = window._AP_levelController;
-            hasWater = !!(lc && lc.component && lc.component.haveWater);
+            const lp = window._AP_LevelPlay || window._AP_levelController;
+            hasWater = !!(lp && lp.component && lp.component.haveWater);
           } catch (e) { /* fall through to the belt signal */ }
           if (!hasWater) {
             hasWater = list.some(e => e && window._AP_conveyorTerrainLocked.has(e.PlantType) &&
@@ -784,17 +792,27 @@ window.electron = electron;
   // The level's object list, or null if it cannot be read. Read through rather
   // than cached: it is the identity the whole plan is keyed on, because
   // thisLevelsID alone is not enough -- see _apZombiePlanFor.
+  // Whichever export actually carries the level statics. LevelPlay is where
+  // they live; the levelController fallback is for a game build that put them
+  // on the component class, so this keeps working either way.
+  function _apLevelPlay() {
+    const lp = window._AP_LevelPlay;
+    if (lp && (lp.component !== undefined || lp.thisLevelsID !== undefined)) return lp;
+    return window._AP_levelController;
+  }
+
   function _apLevelObjects() {
     try {
-      const lc = window._AP_levelController;
-      const objs = lc && lc.component && lc.component.currentLevelObjects;
+      const lp = _apLevelPlay();
+      const objs = lp && lp.component && lp.component.currentLevelObjects;
       return (Array.isArray(objs) && objs.length) ? objs : null;
     } catch (e) { return null; }
   }
 
   function _apLevelKey() {
     try {
-      const ids = window._AP_levelController && window._AP_levelController.thisLevelsID;
+      const lp = _apLevelPlay();
+      const ids = lp && lp.thisLevelsID;
       if (ids && ids.length) return ids.join(',');
     } catch (e) { /* fall through to the shared key */ }
     // Levels with no ID -- local test levels, Level of the Day -- share one
@@ -1071,7 +1089,14 @@ window.electron = electron;
     ColdSnapDragon:148, NightShade:149, DuskLobber:150, Grimrose:151, GoldBloom:152,
     BloomingHeart:153, ShrinkingViolet:154, HotDate:155, FireGourd:156, BambooShoot:157,
     Snowdrop:158, Lychee:159, PerfumeShroom:160, SolarSage:161, Bamboozle:162,
-    Cantaloupe:164, Iceweed:165
+    Cantaloupe:164, Iceweed:165,
+    // Dragonbruit (26) is CUT CONTENT: it has a plant class, props and an
+    // almanac page, but its codename is absent from SEEDCHOOSERDEFAULTORDER,
+    // and getObtainedPlantIDs() skips any plant not in that list. Owning it is
+    // therefore unobservable -- the card can never reach the seed chooser no
+    // matter what plantProps says. Dark Matter Dragonfruit is the real shadow
+    // dragonfruit and IS in the order, so it is what the item grants.
+    DarkMatterDragonfruit:207
   };
 
   // id -> actual CODENAME from PlantFeatures.json (game's save key)
@@ -1085,6 +1110,7 @@ window.electron = electron;
     16:'firepeashooter', 17:'threepeater', 18:'primalpeashooter',
     19:'rotobaga', 20:'homingthistle', 21:'starfruit', 22:'shootingstarfruit',
     23:'lilypad', 24:'sunshroom', 25:'twinsunflower', 26:'dragonbruit',
+    207:'darkmatterdragonfruit',
     27:'moonflower', 28:'snowpea', 29:'lightningreed', 30:'kernelpult',
     31:'meteorflower', 32:'springbean', 33:'umbrellaleaf',
     34:'melonpult', 35:'wintermelon', 36:'blover', 37:'spikeweed',
@@ -1162,9 +1188,16 @@ window.electron = electron;
   // Family and DPS are then applied INSIDE a group as preferences, not as part
   // of the key -- see CONVEYOR_FAMILIES and CONVEYOR_DPS.
   //
-  // Two plants are deliberately in no group and so are never swapped:
+  // Plants deliberately in no group are never swapped, in either direction:
   // glaciershroom, whose damage is not in any table the game loads, and
   // rotobaga, which has no sun cost anywhere. An unknown is not a zero.
+  //
+  // goldbloom is here for a different reason (Kurt, 2026-09-09). It costs 0 sun
+  // and so banded as instant:budget, but the only thing it does is produce sun
+  // -- and a conveyor level hands you plants instead of charging for them, so
+  // sun is exactly the resource a belt does not need. It was a wasted slot
+  // every time it rolled. It keeps its CONVEYOR_FAMILIES entry, which is only
+  // read as a preference inside a group, the same way glaciershroom's is.
   //
   // Sun producers no longer have a role of their own. They used to, to stop a
   // belt losing its sun economy -- but of the 504 levels with a conveyor, THREE
@@ -1176,7 +1209,7 @@ window.electron = electron;
     'attacker:mid': [
       'akee', 'bambooshoot', 'bamboozle', 'bloomerang', 'bloominghearts',
       'bonkchoy', 'bowlingbulb', 'cactus', 'chomper', 'coldsnapdragon',
-      'doomshroom', 'dragonbruit', 'dusklobber', 'electriccurrant',
+      'doomshroom', 'dusklobber', 'electriccurrant',
       'electricpeashooter', 'firegourd', 'firepeashooter', 'hotdate',
       'iceweed', 'jackolantern', 'laser_bean', 'lychee', 'parsnip',
       'peanut', 'pepperpult', 'phatbeet', 'primalpeashooter',
@@ -1184,14 +1217,15 @@ window.electron = electron;
       'snowpea', 'sporeshroom', 'starfruit', 'torchwood'
     ],
     'instant:budget': [
-      'blover', 'chilibean', 'empea', 'escaperoot', 'goldbloom',
+      'blover', 'chilibean', 'empea', 'escaperoot',
       'goldleaf', 'gravebuster', 'hotpotato', 'iceburg', 'potatomine',
       'primalpotatomine', 'shadowshroom', 'shrinkingviolet', 'squash',
       'stallia', 'stunion', 'sunbean', 'tanglekelp'
     ],
     'attacker:high': [
       'applemortar', 'banana', 'cantaloupe', 'citron', 'coconutcannon',
-      'dandelion', 'gatling', 'gloomshroom', 'homingthistle', 'melonpult',
+      'dandelion', 'darkmatterdragonfruit', 'gatling', 'gloomshroom',
+      'homingthistle', 'melonpult',
       'meteorflower', 'missiletoe', 'shootingstarfruit', 'spikerock',
       'strawburst', 'threepeater', 'wintermelon'
     ],
@@ -1283,7 +1317,7 @@ window.electron = electron;
       'scaredyshroom', 'seashroom', 'sporeshroom', 'vamporcini'
     ],
     'Shadow': [
-      'dragonbruit', 'dusklobber', 'gloomshroom', 'gloomvine', 'grimrose',
+      'darkmatterdragonfruit', 'dusklobber', 'gloomshroom', 'gloomvine', 'grimrose',
       'moonflower', 'nightshade', 'shadowshroom'
     ],
     'Sharp': [
@@ -1326,7 +1360,7 @@ window.electron = electron;
   // than a theme. The game ships one by hand: modern44 is Chomper, Dusk Lobber,
   // Fume-shroom, Moonflower, Nightshade, Shadow-shroom.
   const CONVEYOR_SHADOW = [
-    'moonflower', 'dragonbruit', 'dusklobber', 'gloomshroom', 'gloomvine',
+    'moonflower', 'darkmatterdragonfruit', 'dusklobber', 'gloomshroom', 'gloomvine',
     'grimrose', 'nightshade', 'shadowshroom'
   ];
   // Roughly one belt in eight. Rolled from the same seeded stream as the swaps,
@@ -1466,7 +1500,13 @@ window.electron = electron;
     'Fire Peashooter':P.FirePeashooter,'Threepeater':P.ThreePeater,'Rotobaga':P.Rotobaga,
     'Homing Thistle':P.HomingThistle,'Star Fruit':P.StarFruit,
     'Shooting Starfruit':P.ShootingStarfruit,'Lily Pad':P.LilyPad,
-    'Sun-Shroom':P.SunShroom,'Twin Sunflower':P.TwinSunflower,'Dragon Fruit':P.Dragonbruit,
+    'Sun-Shroom':P.SunShroom,'Twin Sunflower':P.TwinSunflower,
+    'Dark Matter Dragonfruit':P.DarkMatterDragonfruit,
+    // Seeds generated before this was corrected send the old name for the
+    // same item id. It granted Dragonbruit, which the seed chooser drops,
+    // so those seeds shipped a plant that could never be used -- point the
+    // old name at the real plant rather than leaving it dead.
+    'Dragon Fruit':P.DarkMatterDragonfruit,
     'Moonflower':P.Moonflower,'Snow Pea':P.SnowPea,'Lightning Reed':P.LightningReed,
     'Kernel-pult':P.KernelPult,'Meteor Flower':P.MeteorFlower,'Spring Bean':P.SpringBean,
     'Umbrella Leaf':P.UmbrellaLeaf,'Melon-Pult':P.MelonPult,'Winter Melon':P.WinterMelon,

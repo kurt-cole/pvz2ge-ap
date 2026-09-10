@@ -165,7 +165,12 @@ _plants = [
     ("Explode-O-Nut",       ItemClassification.useful),
     ("Shrinking Violet",    ItemClassification.useful),
     ("Moonflower",          ItemClassification.useful),
-    ("Dragon Fruit",        ItemClassification.useful),
+    # Dragonbruit, which this used to grant, is cut content: its codename is
+    # missing from the game's SEEDCHOOSERDEFAULTORDER, so the card can never
+    # reach the seed chooser. Dark Matter Dragonfruit is the real shadow
+    # dragonfruit. The name changed in place, so the item id is unchanged and
+    # the client still accepts the old name -- see ITEM_PLANT.
+    ("Dark Matter Dragonfruit", ItemClassification.useful),
     ("Nightshade",          ItemClassification.useful),
     ("Shadow-shroom",       ItemClassification.useful),
     ("Dusk Lobber",         ItemClassification.useful),

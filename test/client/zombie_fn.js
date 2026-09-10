@@ -97,17 +97,27 @@ function _apZombieBare(type) {
 // The level's object list, or null if it cannot be read. Read through rather
 // than cached: it is the identity the whole plan is keyed on, because
 // thisLevelsID alone is not enough -- see _apZombiePlanFor.
+// Whichever export actually carries the level statics. LevelPlay is where
+// they live; the levelController fallback is for a game build that put them
+// on the component class, so this keeps working either way.
+function _apLevelPlay() {
+  const lp = window._AP_LevelPlay;
+  if (lp && (lp.component !== undefined || lp.thisLevelsID !== undefined)) return lp;
+  return window._AP_levelController;
+}
+
 function _apLevelObjects() {
   try {
-    const lc = window._AP_levelController;
-    const objs = lc && lc.component && lc.component.currentLevelObjects;
+    const lp = _apLevelPlay();
+    const objs = lp && lp.component && lp.component.currentLevelObjects;
     return (Array.isArray(objs) && objs.length) ? objs : null;
   } catch (e) { return null; }
 }
 
 function _apLevelKey() {
   try {
-    const ids = window._AP_levelController && window._AP_levelController.thisLevelsID;
+    const lp = _apLevelPlay();
+    const ids = lp && lp.thisLevelsID;
     if (ids && ids.length) return ids.join(',');
   } catch (e) { /* fall through to the shared key */ }
   // Levels with no ID -- local test levels, Level of the Day -- share one
@@ -360,7 +370,12 @@ function setLevel(id, modules, waves) {
     objs.push({ objclass: 'SpawnZombiesJitteredWaveActionProps',
                 objdata: { Zombies: list } });
   }
-  window._AP_levelController = {
+  // The game splits these across two exports of levelController.ts: the
+  // component class (module_SetConveyor on its prototype, no statics) and
+  // LevelPlay (component + thisLevelsID). Modelled exactly, so reading them
+  // off the wrong one fails here the way it failed in the real game.
+  window._AP_levelController = { prototype: {} };
+  window._AP_LevelPlay = {
     thisLevelsID: id ? [id] : [],
     component: { currentLevelObjects: objs },
   };

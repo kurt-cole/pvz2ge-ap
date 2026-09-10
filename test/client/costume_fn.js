@@ -10,6 +10,7 @@ const ID_TO_CN = {
     16:'firepeashooter', 17:'threepeater', 18:'primalpeashooter',
     19:'rotobaga', 20:'homingthistle', 21:'starfruit', 22:'shootingstarfruit',
     23:'lilypad', 24:'sunshroom', 25:'twinsunflower', 26:'dragonbruit',
+    207:'darkmatterdragonfruit',
     27:'moonflower', 28:'snowpea', 29:'lightningreed', 30:'kernelpult',
     31:'meteorflower', 32:'springbean', 33:'umbrellaleaf',
     34:'melonpult', 35:'wintermelon', 36:'blover', 37:'spikeweed',
