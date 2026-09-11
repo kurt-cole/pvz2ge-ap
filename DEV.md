@@ -54,9 +54,17 @@ Concretely, `Shop: bamboozle` requires `kongfu38`, which requires the Kongfu Tem
 that world — while generation treats it as reachable from the start. A world key placed on a shop
 check that is itself gated behind the world that key opens produces an unwinnable seed.
 
-Two commodities, `caulipower` (`eighties39`) and `floawerPot` (`sky31`), are gated behind levels the
-world and client do not track at all. They remain obtainable in-game but are entirely invisible to
-logic.
+Two commodities, `caulipower` (`eighties39`) and `floawerPot` (`sky31`), were gated behind levels the
+world and client did not track at all. Both levels are tracked now -- `neon39` and `sky31`, added when
+the second halves of those two worlds were filled in -- so the gap is the general one above rather
+than a separate case.
+
+Which plants the store prices in tickets rotates weekly, which `SHOP_PLANT_COMMODITIES` and
+`SHOP_ABSENT_COMMODITIES` in constants.py handle by freezing the gem-priced names and routing the
+rest into `UNREACHABLE_LOCATIONS`. That snapshot goes stale on its own: a card that rotates back in
+is a check no seed builds, one that rotates out is a check that can never fire. Re-reading a current
+checkout and hand-editing the two lists is the fix -- they cannot be derived, because a commodity
+that rotates out still has to keep its location id.
 
 The mapping from commodity to gating level lives in the game's own
 `json/Features/StoreCommodityFeatures` asset, and every tracked commodity's `UnlockLevel` resolves to

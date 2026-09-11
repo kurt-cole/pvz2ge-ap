@@ -759,13 +759,24 @@ def slot_entry_groups(world, world_name):
 # same table are repeatable, so they can be bought over and over and would
 # not be valid locations. Codenames are used as-is so the location name the
 # client builds from CommodityName always matches exactly.
-# Deliberately excluded: imitater, darkmatterdragonfruit, snappea,
-# shootingstarfruit, witchhazel, slingpea and turkeypult (the last added by
-# game 0.14.0) are priced in tickets (1000 each). Tickets only come from
-# Pinata prizes and in-level drops worth 10 apiece, there is no ticket bundle
-# in the store, and Archipelago has no ticket item -- so each of those would be
-# ~400 pickups of pure grind. Everything kept below is priced in gems, which
-# AP's filler actually supplies.
+# Deliberately excluded: every plant the store prices in TICKETS rather than
+# gems. Tickets only come from Pinata prizes and in-level drops worth 10
+# apiece, there is no ticket bundle in the store, and Archipelago has no ticket
+# item -- so a 1000-ticket card is ~100 pickups of pure grind rather than a
+# check. Everything kept below is gem-priced, which AP's filler supplies.
+#
+# WHICH plants those are is not a fixed set: the store rotates its ticket
+# lineup weekly (the cards carry a PlantWeekDiscount, and the same rotation is
+# why SHOP_ABSENT_COMMODITIES below exists), so do not treat a count or a
+# snapshot of names as stable. Reading a checkout on one particular day in
+# game 0.14.0 gave imitater, darkmatterdragonfruit, snappea, shootingstarfruit,
+# witchhazel, slingpea and turkeypult, all at 1000 -- an example of the shape,
+# not the list.
+#
+# That rotation is also why this list is NOT re-derived from a checkout: a
+# commodity that rotates out still has to keep its location id (see
+# SHOP_ABSENT_COMMODITIES), so the gem-priced names below are frozen and a card
+# the store is not currently stocking is handled there instead of removed.
 SHOP_PLANT_COMMODITIES = [
     'iceweed', 'snowdrop', 'jalapeno', 'starfruit', 'mirrornut',
     'pinkstarfruit', 'asparagus', 'hypnoshroom', 'peanut', 'homingthistle',
@@ -788,11 +799,18 @@ SHOP_UPGRADE_COMMODITIES = [
 # every location after it. locations.py adds these at the very end instead.
 SHOP_EXTRA_COMMODITIES = ['chillypepper']  # 40 gem, no UnlockLevel
 
-# In those lists, but NOT in the store the game actually loads. Kurt's build
-# sells witchhazel, slingpea and chillypepper where this table has mirrornut,
-# wasabiwhip and pyrevine -- 43 commodities either way, three swapped upstream
-# (confirmed 2026-08-18 against PVZGE-Electron/pvzge_web, not the `Base Game`
-# snapshot, which is older and still lists the old three).
+# In those lists, but NOT in the store the game was loading when this was last
+# read: it sold witchhazel, slingpea and chillypepper where this table has
+# mirrornut, wasabiwhip and pyrevine -- 43 commodities either way, three
+# swapped (confirmed 2026-08-18 against PVZGE-Electron/pvzge_web, not the
+# `Base Game` snapshot, which is older and still lists the old three).
+#
+# This is a SNAPSHOT of a weekly rotation, not a settled upstream change, so it
+# can go stale without any apworld edit: a card that rotates back in is simply
+# a check no seed builds, and one that rotates out becomes a check that can
+# never fire. Re-checking it against a current checkout and hand-editing this
+# list is the fix; it is not derived, because a commodity that rotates out
+# still has to keep its location id.
 #
 # A card that is not in StoreCommodityFeatures is never drawn, so its check can
 # never fire. Kept here rather than deleted for the same id reason, and routed
