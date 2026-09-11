@@ -41,6 +41,32 @@ This takes several minutes the first time (clone + `npm install` + packaging).
 `git`, `node` and `npm` must all be on your PATH; on many Linux distributions `npm` ships as a
 separate package from `node`. Nothing else is required, and nothing needs root.
 
+### Packaging the apworld itself
+
+`build_apworld.py` at the repo root zips the Python world into
+`build/pvz2gardendless.apworld`, which is the file you install into Archipelago. It is separate from
+the full build above: this packages the logic, that packages the game.
+
+```
+python build_apworld.py            # write build/pvz2gardendless.apworld
+python build_apworld.py --check    # ...then generate three seeds from the zip itself
+python build_apworld.py --list     # show what would ship, write nothing
+python build_apworld.py -o path/to/other.apworld
+```
+
+Standard library only, and the same on Windows and Linux. It ships the package's `.py` files and the
+two guides in `pvz2gardendless/docs/` and nothing else, on an allow-list, so `__pycache__`, `.pyc`
+files, scratch JSON and editor leftovers cannot reach a player. A stale `.pyc` inside the zip shadows
+the source next to it, which is a confusing way to ship last week's logic.
+
+The output is reproducible: fixed member timestamps and permissions, sorted order, so two builds of
+the same sources hash identically and the printed SHA-256 identifies the contents rather than the
+moment it was built. `--check` extracts the zip to a temporary directory and runs
+`generate_early` through `fill_slot_data` against *that* copy in a child interpreter, which is what
+catches a module that imports fine from the repo and is missing from the apworld.
+
+Run `python test/run.py` first; this script does not.
+
 ### Fast iteration on the client JS (Primarily for development)
 
 Once you've run the full build once, use `devrun.py` instead of rebuilding — it skips the clone,
