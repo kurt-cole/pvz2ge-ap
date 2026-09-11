@@ -38,6 +38,7 @@ const ID_TO_CN = {
     156:'firegourd', 157:'bambooshoot', 158:'snowdrop', 159:'lychee',
     160:'perfumeshroom', 161:'solarsage', 162:'bamboozle',
     164:'cantaloupe', 165:'iceweed',
+    214:'turkeypult',
   };
 const CONVEYOR_GROUPS = {
   'attacker:mid': [
@@ -48,7 +49,7 @@ const CONVEYOR_GROUPS = {
     'iceweed', 'jackolantern', 'laser_bean', 'lychee', 'parsnip',
     'peanut', 'pepperpult', 'phatbeet', 'primalpeashooter',
     'redstinger', 'repeater', 'skyshooter', 'snapdragon', 'snowdrop',
-    'snowpea', 'sporeshroom', 'starfruit', 'torchwood'
+    'snowpea', 'sporeshroom', 'starfruit', 'torchwood', 'turkeypult'
   ],
   'instant:budget': [
     'blover', 'chilibean', 'empea', 'escaperoot',
@@ -130,7 +131,7 @@ const CONVEYOR_FAMILIES = {
     'coconutcannon', 'kernelpult', 'melonpult'
   ],
   'Magic': [
-    'hypnoshroom', 'intensivecarrot', 'shrinkingviolet'
+    'hypnoshroom', 'intensivecarrot', 'shrinkingviolet', 'turkeypult'
   ],
   'Melee': [
     'bonkchoy', 'celerystalker', 'chomper', 'guacodile', 'parsnip',

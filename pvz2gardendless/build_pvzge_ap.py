@@ -1090,6 +1090,11 @@ window.electron = electron;
     BloomingHeart:153, ShrinkingViolet:154, HotDate:155, FireGourd:156, BambooShoot:157,
     Snowdrop:158, Lychee:159, PerfumeShroom:160, SolarSage:161, Bamboozle:162,
     Cantaloupe:164, Iceweed:165,
+    // Added in game 0.14.0. The other three plants that update shipped
+    // (Blastberry Vine, Stickybomb Rice, Lotorpedo) are OBTAINWORLD "epic"
+    // and the patch notes call them unobtainable until the Arma-Mint EQ, so
+    // only this one is an item.
+    TurkeyPult:214,
     // Dragonbruit (26) is CUT CONTENT: it has a plant class, props and an
     // almanac page, but its codename is absent from SEEDCHOOSERDEFAULTORDER,
     // and getObtainedPlantIDs() skips any plant not in that list. Owning it is
@@ -1141,6 +1146,7 @@ window.electron = electron;
     156:'firegourd', 157:'bambooshoot', 158:'snowdrop', 159:'lychee',
     160:'perfumeshroom', 161:'solarsage', 162:'bamboozle',
     164:'cantaloupe', 165:'iceweed',
+    214:'turkeypult',
   };
 
   // Reverse map exposed for the plantProps Proxy in the SystemJS hook IIFE above.
@@ -1150,17 +1156,19 @@ window.electron = electron;
   // How many costumes each plant has, from the game's PlantFeatures table
   // (its COSTUME field). Costume indices for a plant run 0..count-1, which is
   // how getAvailablePlantCostumeList() enumerates them. Only the plants
-  // Archipelago manages are listed: 120 of them, 309 costumes between them.
+  // Archipelago manages are listed: 121 of them, 312 costumes between them.
+  // Re-read from game 0.14.0, which gave Jack O' Lantern a fourth costume and
+  // Fire Gourd a second, and added Turkey-pult (one costume).
   const PLANT_COSTUMES = {
     0:10, 1:8, 2:9, 3:3, 4:6, 5:3, 6:5, 7:10, 8:9, 10:2, 11:2, 12:3, 13:1, 14:1, 16:1, 17:3,
     18:2, 19:2, 20:1, 21:2, 23:1, 24:4, 25:8, 27:1, 28:5, 29:5, 30:5, 32:3, 33:1, 34:4,
     35:4, 36:3, 37:4, 38:3, 39:1, 41:2, 42:1, 43:1, 44:3, 45:3, 46:2, 49:4, 50:1, 51:2,
     54:2, 55:2, 56:3, 57:3, 58:2, 59:5, 60:1, 61:3, 62:3, 63:6, 64:1, 65:2, 66:1, 67:3,
-    69:3, 70:2, 71:1, 72:2, 73:1, 74:2, 75:2, 76:1, 77:3, 78:2, 79:3, 80:2, 81:2, 82:3,
+    69:3, 70:2, 71:1, 72:2, 73:1, 74:2, 75:2, 76:1, 77:4, 78:2, 79:3, 80:2, 81:2, 82:3,
     84:1, 85:1, 86:1, 87:3, 88:3, 89:3, 90:2, 96:3, 97:4, 106:1, 107:2, 108:1, 109:1, 110:1,
     114:2, 120:1, 127:2, 128:1, 129:4, 130:1, 131:2, 132:3, 133:2, 134:2, 135:2, 136:2,
     137:2, 138:2, 139:2, 142:2, 143:2, 144:2, 145:2, 146:2, 148:2, 149:1, 150:2, 151:2,
-    152:2, 153:2, 154:2, 155:1, 156:1, 157:1, 160:2, 161:1, 164:2, 165:1
+    152:2, 153:2, 154:2, 155:1, 156:2, 157:1, 160:2, 161:1, 164:2, 165:1, 214:1
   };
 
   // Conveyor swap groups. A belt entry is traded for a plant that plays the
@@ -1214,7 +1222,7 @@ window.electron = electron;
       'iceweed', 'jackolantern', 'laser_bean', 'lychee', 'parsnip',
       'peanut', 'pepperpult', 'phatbeet', 'primalpeashooter',
       'redstinger', 'repeater', 'skyshooter', 'snapdragon', 'snowdrop',
-      'snowpea', 'sporeshroom', 'starfruit', 'torchwood'
+      'snowpea', 'sporeshroom', 'starfruit', 'torchwood', 'turkeypult'
     ],
     'instant:budget': [
       'blover', 'chilibean', 'empea', 'escaperoot',
@@ -1296,7 +1304,7 @@ window.electron = electron;
       'coconutcannon', 'kernelpult', 'melonpult'
     ],
     'Magic': [
-      'hypnoshroom', 'intensivecarrot', 'shrinkingviolet'
+      'hypnoshroom', 'intensivecarrot', 'shrinkingviolet', 'turkeypult'
     ],
     'Melee': [
       'bonkchoy', 'celerystalker', 'chomper', 'guacodile', 'parsnip',
@@ -1546,7 +1554,7 @@ window.electron = electron;
     'Hot Date':P.HotDate,'Fire Gourd':P.FireGourd,'Bamboo Shoot':P.BambooShoot,
     'Snowdrop':P.Snowdrop,'Lychee':P.Lychee,'Perfume-shroom':P.PerfumeShroom,
     'Solar Sage':P.SolarSage,'Bamboozle':P.Bamboozle,'Cantaloupe-pult':P.Cantaloupe,
-    'Iceweed':P.Iceweed
+    'Iceweed':P.Iceweed,'Turkey-pult':P.TurkeyPult
   };
 
   // World Key gates: [keysNeeded, [worldIds]]
@@ -2149,6 +2157,10 @@ window.electron = electron;
     'sky29':'sky29',
     'sky30':'sky30',
     'sky31':'sky31',
+    // The Aerial Fortress Zomboss, added by game 0.14.0. An older client
+    // reading a newer seed simply has no entry for it, which is why this is
+    // appended rather than woven in.
+    'sky32':'sky32',
     'sky_dangerroom':'sky_dangerroom',
     // The game's level ids carry no extension -- these six read 'aloe0.JSON'
     // and so on until 2026-08-17, and isFinished() looks the id up as an exact

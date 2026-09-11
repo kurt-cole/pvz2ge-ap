@@ -355,7 +355,7 @@ UPGRADE_ITEM_TO_CNS: Dict[str, List[str]] = {name: list(cns)
                                              for name, cns in UPGRADE_GROUPS}
 
 # A cosmetic filler: grants one costume, for a random plant you already hold,
-# out of the 309 the game has across the 120 plants Archipelago manages.
+# out of the 312 the game has across the 121 plants Archipelago manages.
 # Appended after every other block so no existing item ID moves. It is NOT
 # added to FILLER_ITEMS, which would have shifted the trap and upgrade blocks
 # that are numbered from the end of it.
@@ -586,6 +586,31 @@ GOAL_ITEMS: List[PvZ2ItemData] = [
     PvZ2ItemData(name, ItemClassification.progression, _goal_item_base + i)
     for i, name in enumerate(GOAL_ITEM_NAMES)
 ]
+
+# ── Plants added by a later game version ────────────────────────────────────
+# Turkey-pult arrived in game 0.14.0, long after the id blocks above were
+# assigned. Plants are the FIRST block, so appending one to `_plants` would
+# renumber every key, filler, trap, upgrade, unlock and goal item after it and
+# break every seed already generated. It is numbered HERE instead, past every
+# other group, and folded into PLANT_ITEMS afterwards -- so the pool builder,
+# the hint groups and create_item all see it as an ordinary plant.
+#
+# The other three plants 0.14.0 shipped -- Blastberry Vine, Stickybomb Rice and
+# Lotorpedo -- are unobtainable until the Arma-Mint EQ releases, so they are
+# deliberately not items yet.
+#
+# A plant added here cannot be named by an access rule: the LOGIC_PLANTS check
+# above has already run. Anything a rule names still belongs in `_plants`.
+_late_plants = [
+    ("Turkey-pult",         ItemClassification.useful),
+]
+_late_plant_base = _goal_item_base + len(GOAL_ITEMS)
+LATE_PLANT_ITEMS: List[PvZ2ItemData] = [
+    PvZ2ItemData(name, cls, _late_plant_base + i)
+    for i, (name, cls) in enumerate(_late_plants)
+]
+PLANT_ITEMS.extend(LATE_PLANT_ITEMS)
+PLANT_NAMES.update(plant.name for plant in LATE_PLANT_ITEMS)
 
 ALL_ITEMS: List[PvZ2ItemData] = (PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS
                                  + TRAP_ITEMS + UPGRADE_ITEMS + COSTUME_ITEMS

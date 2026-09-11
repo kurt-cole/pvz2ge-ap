@@ -5996,18 +5996,6 @@
     "lawn_armor2": 2
    }
   },
-  "lod_119": {
-   "bespoke": false,
-   "zombies": {
-    "lostcity": 5,
-    "lostcity_armor1": 0,
-    "lostcity_bug": 4,
-    "lostcity_bug_armor1": 2,
-    "lostcity_gargantuar": 2,
-    "lostcity_imp": 6,
-    "lostcity_relichunter": 7
-   }
-  },
   "lod_12": {
    "bespoke": false,
    "zombies": {
@@ -7193,12 +7181,12 @@
     "eighties_breakdancer": 1,
     "eighties_mc": 1,
     "football_mech": 1,
+    "lawn": 8,
+    "lawn_armor1": 8,
     "lostcity_crystalskull": 2,
     "modern_allstar": 1,
     "sky_arbiterx": 1,
     "tomb_raiser": 1,
-    "tutorial": 8,
-    "tutorial_armor1": 8,
     "west_bull_veteran": 1
    }
   },
@@ -8020,6 +8008,23 @@
     "lawn_gargantuar": 0
    }
   },
+  "lod_268": {
+   "bespoke": false,
+   "zombies": {
+    "camel_manyhump": 3,
+    "camel_onehump": 1,
+    "camel_threehump": 2,
+    "camel_twohump": 10,
+    "egypt_gargantuar": 4,
+    "egypt_imp": 7,
+    "explorer": 9,
+    "mummy": 40,
+    "mummy_armor1": 38,
+    "mummy_armor2": 19,
+    "pharaoh": 6,
+    "tomb_raiser": 22
+   }
+  },
   "lod_27": {
    "bespoke": false,
    "zombies": {
@@ -8028,6 +8033,32 @@
     "future_armor1": 0,
     "future_gargantuar": 0,
     "future_protector": 0
+   }
+  },
+  "lod_270": {
+   "bespoke": false,
+   "zombies": {
+    "sky": 11,
+    "sky_armor1": 18,
+    "sky_armor2": 39,
+    "sky_electric": 44,
+    "sky_gargantuar_armor2_thrower": 23,
+    "sky_twin": 15
+   }
+  },
+  "lod_278": {
+   "bespoke": false,
+   "zombies": {
+    "barrelroller": 15
+   }
+  },
+  "lod_279": {
+   "bespoke": false,
+   "zombies": {
+    "beach_snorkel": 4,
+    "duckytube": 6,
+    "duckytube_armor1": 3,
+    "mech_cone": 3
    }
   },
   "lod_28": {
@@ -8040,6 +8071,140 @@
     "dark_imp": 2
    }
   },
+  "lod_280": {
+   "bespoke": false,
+   "zombies": {
+    "beach_snorkel": 5,
+    "duckytube_armor1": 7,
+    "duckytube_armor2": 4,
+    "football_mech": 1,
+    "modern_balloon": 3,
+    "prospector": 8,
+    "tutorial_gargantuar": 1
+   }
+  },
+  "lod_281": {
+   "bespoke": false,
+   "zombies": {
+    "duckytube": 9,
+    "duckytube_armor1": 5,
+    "duckytube_armor2": 4,
+    "sky_dropship": 2
+   }
+  },
+  "lod_282": {
+   "bespoke": false,
+   "zombies": {
+    "eighties_armor1": 8,
+    "eighties_armor2": 3,
+    "eighties_armor4": 3,
+    "eighties_boombox": 3,
+    "eighties_gargantuar": 2,
+    "eighties_glitter": 27
+   }
+  },
+  "lod_283": {
+   "bespoke": false,
+   "zombies": {
+    "abbot": 19,
+    "beach_fem_armor1": 57,
+    "chicken_farmer": 11,
+    "dark_king_veteran": 7,
+    "dino_bully": 13,
+    "eighties_armor4": 14,
+    "feastivus_swashbuckler": 15,
+    "iceage_dodo": 13,
+    "lostcity_jane": 27,
+    "pharaoh": 12,
+    "sky_armor2": 17
+   }
+  },
+  "lod_284": {
+   "bespoke": false,
+   "zombies": {
+    "dino_gargantuar": 7,
+    "iceage_weaselhoarder": 9,
+    "lostcity_bug_armor4": 14,
+    "monk_torch": 6,
+    "mummy_armor2": 10,
+    "west_bull": 4,
+    "zomboni": 4
+   }
+  },
+  "lod_285": {
+   "bespoke": false,
+   "zombies": {
+    "cannon": 7,
+    "dark_wizard": 5,
+    "duckytube_armor1": 16,
+    "duckytube_armor2": 10,
+    "eighties_glitter": 16,
+    "future_gargantuar": 2,
+    "lostcity_relichunter": 10,
+    "modern_balloon": 8
+   }
+  },
+  "lod_286": {
+   "bespoke": false,
+   "zombies": {
+    "pirate": 21,
+    "pirate_armor1": 9,
+    "swashbuckler": 15
+   }
+  },
+  "lod_287": {
+   "bespoke": false,
+   "zombies": {
+    "abbot_torch": 3,
+    "dark_king_veteran": 4,
+    "kongfu_drink": 5,
+    "lawn_armor4": 54,
+    "lawn_gargantuar": 4,
+    "pharaoh": 11
+   }
+  },
+  "lod_288": {
+   "bespoke": false,
+   "zombies": {
+    "cowboy": 3,
+    "cowboy_armor1": 3,
+    "cowboy_armor2": 2,
+    "lostcity": 8,
+    "lostcity_armor1": 8,
+    "lostcity_armor2": 5,
+    "lostcity_bug": 1,
+    "lostcity_bug_armor1": 1,
+    "lostcity_bug_armor2": 1,
+    "lostcity_excavator": 2,
+    "lostcity_imp": 1,
+    "lostcity_jane": 8,
+    "piano": 3,
+    "prospector": 1,
+    "ra": 3,
+    "tutorial_imp": 1
+   }
+  },
+  "lod_289": {
+   "bespoke": false,
+   "zombies": {
+    "beach": 1,
+    "beach_armor1": 0,
+    "beach_armor2": 0,
+    "beach_armor4": 0,
+    "beach_fem": 0,
+    "beach_fem_armor1": 0,
+    "beach_fem_armor2": 0,
+    "beach_fem_armor4": 0,
+    "beach_gargantuar": 2,
+    "beach_imp": 0,
+    "beach_octopus": 0,
+    "summer_bug": 0,
+    "summer_bug_armor1": 0,
+    "summer_bug_armor2": 0,
+    "summer_gargantuar": 2,
+    "summer_imp": 0
+   }
+  },
   "lod_29": {
    "bespoke": false,
    "zombies": {
@@ -8049,6 +8214,99 @@
     "lawn_armor1": 3,
     "lawn_armor2": 4,
     "lawn_armor3": 4
+   }
+  },
+  "lod_290": {
+   "bespoke": false,
+   "zombies": {
+    "beach": 0,
+    "beach_armor1": 5,
+    "beach_armor2": 1,
+    "beach_armor4": 6,
+    "beach_fem": 1,
+    "beach_fem_armor1": 1,
+    "beach_fem_armor2": 1,
+    "beach_fem_armor4": 5,
+    "beach_fisherman": 3,
+    "beach_gargantuar": 2,
+    "beach_snorkel": 0,
+    "duckytube": 0,
+    "duckytube_armor1": 0,
+    "duckytube_armor2": 0,
+    "duckytube_armor4": 8,
+    "future_protector": 9,
+    "prospector": 26,
+    "seagull": 0
+   }
+  },
+  "lod_291": {
+   "bespoke": false,
+   "zombies": {
+    "chicken_farmer": 7,
+    "dino_imp": 0,
+    "eighties": 4,
+    "eighties_armor1": 0,
+    "eighties_armor2": 2,
+    "eighties_armor4": 10,
+    "eighties_gargantuar": 3,
+    "eighties_punk": 13,
+    "future_jetpack_veteran": 6,
+    "iceage_weaselhoarder": 7,
+    "kongfu_bronze_strong": 3,
+    "modern_allstar": 13,
+    "modern_newspaper": 0,
+    "modern_superfanimp": 13,
+    "pelican": 0,
+    "west_bull": 7,
+    "zomboni": 12
+   }
+  },
+  "lod_292": {
+   "bespoke": false,
+   "zombies": {
+    "abbot_torch": 33,
+    "dark_gargantuar": 26,
+    "dark_imp_dragon": 40
+   }
+  },
+  "lod_293": {
+   "bespoke": false,
+   "zombies": {
+    "dark": 4,
+    "dark_armor1": 4,
+    "dark_armor2": 2,
+    "dark_armor3": 0,
+    "dark_armor4": 8,
+    "dark_gargantuar": 6,
+    "dark_juggler": 39,
+    "dark_wizard": 21,
+    "dark_wizard_veteran": 9
+   }
+  },
+  "lod_294": {
+   "bespoke": false,
+   "zombies": {
+    "dark": 25,
+    "dark_armor1": 16,
+    "dark_armor2": 9,
+    "dark_armor3": 6,
+    "dark_armor4": 4,
+    "dark_imp_dragon": 4,
+    "dark_juggler": 5
+   }
+  },
+  "lod_295": {
+   "bespoke": false,
+   "zombies": {
+    "abbot_fan": 5,
+    "barrelroller": 30,
+    "cannon": 5,
+    "lostcity": 10,
+    "lostcity_armor1": 1,
+    "lostcity_armor2": 1,
+    "lostcity_impporter": 5,
+    "lostcity_jane": 0,
+    "lostcity_relichunter": 5
    }
   },
   "lod_3": {
@@ -8154,9 +8412,11 @@
   "lod_38": {
    "bespoke": false,
    "zombies": {
-    "dark": 10,
-    "dark_armor1": 0,
-    "dark_armor2": 0
+    "kongfu": 5,
+    "kongfu_armor1": 29,
+    "kongfu_armor2": 21,
+    "kongfu_bomb": 11,
+    "kongfu_torch": 12
    }
   },
   "lod_39": {
@@ -8277,23 +8537,6 @@
     "lawn_armor1": 21,
     "lawn_armor2": 17,
     "lawn_armor3": 11
-   }
-  },
-  "lod_5": {
-   "bespoke": false,
-   "zombies": {
-    "barrelroller": 0,
-    "cowboy": 0,
-    "cowboy_armor1": 0,
-    "cowboy_armor2": 0,
-    "mummy": 7,
-    "mummy_armor1": 0,
-    "mummy_armor2": 0,
-    "pharaoh": 0,
-    "pirate": 0,
-    "pirate_armor1": 0,
-    "pirate_armor2": 0,
-    "swashbuckler": 24
    }
   },
   "lod_50": {
@@ -8522,11 +8765,16 @@
   "lod_68": {
    "bespoke": false,
    "zombies": {
-    "chicken_farmer": 12,
-    "dark_wizard": 4,
-    "future_gargantuar": 2,
-    "pirate_captain": 6,
-    "seagull": 22
+    "camel_onehump": 10,
+    "dark": 12,
+    "dark_armor1": 25,
+    "dark_armor2": 31,
+    "dark_armor3": 8,
+    "dark_imp": 11,
+    "explorer": 11,
+    "kongfu_bronze_chi": 4,
+    "pharaoh": 7,
+    "prospector": 12
    }
   },
   "lod_69": {
@@ -9223,19 +9471,6 @@
     "seagull": 0
    }
   },
-  "lod_birthday_5": {
-   "bespoke": false,
-   "zombies": {
-    "birthday_barrelroller": 0,
-    "birthday_gargantuar": 3,
-    "birthday_jetpack": 0,
-    "birthday_pharaoh": 6,
-    "lawn": 3,
-    "lawn_armor1": 2,
-    "lawn_armor2": 0,
-    "tutorial_armor1": 1
-   }
-  },
   "lod_birthday_6": {
    "bespoke": false,
    "zombies": {
@@ -9325,18 +9560,6 @@
     "lawn_armor2": 4,
     "lostcity_crystalskull": 0,
     "lostcity_excavator": 4
-   }
-  },
-  "lod_easter_12": {
-   "bespoke": false,
-   "zombies": {
-    "chicken_farmer": 7,
-    "disco_mech": 1,
-    "easter_gargantuar": 2,
-    "iceage_weaselhoarder": 5,
-    "lawn": 8,
-    "lawn_armor1": 3,
-    "lawn_armor2": 3
    }
   },
   "lod_easter_13": {
@@ -9535,15 +9758,6 @@
     "lawn_gargantuar": 6
    }
   },
-  "lod_feastivus_14": {
-   "bespoke": false,
-   "zombies": {
-    "feastivus_piano": 0,
-    "lawn": 10,
-    "lawn_armor1": 0,
-    "lawn_armor2": 0
-   }
-  },
   "lod_feastivus_15": {
    "bespoke": false,
    "zombies": {
@@ -9651,6 +9865,27 @@
     "feastivus_piano": 4,
     "feastivus_poncho": 12,
     "feastivus_swashbuckler": 10
+   }
+  },
+  "lod_feastivus_22": {
+   "bespoke": false,
+   "zombies": {
+    "bobsled": 5,
+    "feastivus": 13,
+    "feastivus_armor1": 16,
+    "feastivus_armor2": 0,
+    "feastivus_camel_onehump": 0,
+    "feastivus_camel_segment": 8,
+    "feastivus_camel_twohump": 0,
+    "feastivus_gargantuar": 2,
+    "feastivus_imp": 0,
+    "feastivus_piano": 6,
+    "feastivus_poncho": 0,
+    "feastivus_swashbuckler": 0,
+    "holiday_gargantuar": 2,
+    "holiday_imp": 0,
+    "iceage_dodo": 13,
+    "zomboni": 8
    }
   },
   "lod_feastivus_3": {
@@ -9909,17 +10144,27 @@
     "mummy": 9
    }
   },
-  "lod_halloween_6": {
+  "lod_halloween_7": {
    "bespoke": false,
    "zombies": {
-    "beach_octopus": 2,
-    "chicken_pumpkin": 3,
-    "dark_imp_dragon": 3,
-    "halloween": 15,
-    "halloween_armor1": 7,
-    "halloween_armor2": 5,
-    "halloween_gargantuar": 2,
-    "mummy": 9
+    "disco_mech": 37,
+    "halloween": 1,
+    "halloween_armor1": 0,
+    "halloween_armor2": 6,
+    "halloween_gargantuar": 1,
+    "kongfu_bomb": 2,
+    "kongfu_bronze_chi": 12,
+    "kongfu_gong": 7
+   }
+  },
+  "lod_halloween_8": {
+   "bespoke": false,
+   "zombies": {
+    "chicken_farmer": 19,
+    "halloween_armor1": 1,
+    "halloween_armor2": 1,
+    "halloween_gargantuar": 5,
+    "halloween_imp": 15
    }
   },
   "lod_harvest_0": {
@@ -10073,6 +10318,33 @@
     "cowboy_armor1": 0,
     "cowboy_armor2": 0,
     "swashbuckler": 9
+   }
+  },
+  "lod_harvest_20": {
+   "bespoke": false,
+   "zombies": {
+    "catapult": 0,
+    "foodfight": 1,
+    "foodfight_armor1": 0,
+    "foodfight_armor2": 0,
+    "foodfight_chefster": 9,
+    "foodfight_gobbler_king": 0,
+    "sky_electric": 7
+   }
+  },
+  "lod_harvest_21": {
+   "bespoke": false,
+   "zombies": {
+    "beach_octopus": 12,
+    "chicken_farmer": 7,
+    "dark_imp_dragon": 12,
+    "iceage_weaselhoarder": 16,
+    "pelican": 3,
+    "pirate_captain": 4,
+    "pirate_captain_parrot": 0,
+    "seagull": 3,
+    "west_bull": 8,
+    "west_bull_veteran": 7
    }
   },
   "lod_harvest_3": {
@@ -10238,6 +10510,24 @@
     "modern_superfanimp": 0,
     "monk_torch": 0,
     "prospector": 0
+   }
+  },
+  "lod_lunar_16": {
+   "bespoke": true,
+   "zombies": {
+    "kongfu_bomb": 1,
+    "kongfu_drink": 2,
+    "kongfu_hammer": 3,
+    "kongfu_torch": 3,
+    "lunar": 5,
+    "lunar_armor1": 9,
+    "lunar_armor2": 11,
+    "lunar_camel_onehump": 7,
+    "lunar_superfanimp": 11,
+    "monk_blade": 8,
+    "monk_drink": 2,
+    "monk_nunchaku": 2,
+    "monk_torch": 5
    }
   },
   "lod_lunar_2": {
@@ -10707,6 +10997,28 @@
     "lawn_gargantuar": 2,
     "summer_bug": 0,
     "summer_bug_armor1": 0
+   }
+  },
+  "lod_summer_7": {
+   "bespoke": false,
+   "zombies": {
+    "summer_armor1": 11,
+    "summer_armor2": 4,
+    "summer_basic": 13,
+    "summer_gargantuar": 1,
+    "zomboni": 5
+   }
+  },
+  "lod_summer_8": {
+   "bespoke": false,
+   "zombies": {
+    "beach_surfer": 30,
+    "eighties_armor4": 26,
+    "eighties_gargantuar": 5,
+    "summer_basic": 44,
+    "summer_bug": 13,
+    "summer_bug_armor1": 12,
+    "summer_bug_armor2": 12
    }
   },
   "lod_valentines_0": {
@@ -14188,6 +14500,10 @@
    "cost": 400,
    "hp": 470
   },
+  "bobsled": {
+   "cost": 100,
+   "hp": 190
+  },
   "bobsled_team": {
    "cost": 200,
    "hp": 390
@@ -14526,6 +14842,10 @@
   },
   "feastivus_camel_onehump": {
    "cost": 600,
+   "hp": 250
+  },
+  "feastivus_camel_segment": {
+   "cost": 200,
    "hp": 250
   },
   "feastivus_camel_twohump": {
@@ -14977,8 +15297,8 @@
    "hp": 600
   },
   "monk_imp": {
-   "cost": 400,
-   "hp": 600
+   "cost": 300,
+   "hp": 300
   },
   "monk_nunchaku": {
    "cost": 200,
@@ -15047,6 +15367,10 @@
   "pirate_captain": {
    "cost": 500,
    "hp": 420
+  },
+  "pirate_captain_parrot": {
+   "cost": 400,
+   "hp": 300
   },
   "pirate_flag_veteran": {
    "cost": 100,
@@ -15211,6 +15535,10 @@
   "summer_armor2": {
    "cost": 400,
    "hp": 1290
+  },
+  "summer_basic": {
+   "cost": 100,
+   "hp": 190
   },
   "summer_bug": {
    "cost": 350,

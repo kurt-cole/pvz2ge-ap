@@ -87,9 +87,9 @@ with somebody to trade with (88% once the two extra tags below are in). Coarser 
 
 Immobile, `IgnoredInWaves` and Sky City ship-dependent types leave the table entirely, joining
 Zomboss and the camels. Untiered already means "leave exactly as the level authored it", so a level
-that ships a `sky_dropship` still gets its dropship -- no other level can gain one. As shipped, 61
-codenames are excluded (20 `IgnoredInWaves`, 17 camel, 14 Sky City, 9 unpriced placeholders, 1
-immobile) and 259 are tiered.
+that ships a `sky_dropship` still gets its dropship -- no other level can gain one. As shipped against game
+0.14.0, 62 codenames are excluded (20 `IgnoredInWaves`, 18 camel, 14 Sky City, 9 unpriced
+placeholders, 1 immobile) and 262 are tiered.
 
 The `air` tag is re-derived from `ChooseToSpawnOnNonDeckRows` / `BalloonToughness` / `BugToughness`,
 which makes the "threat mechanics are conserved" claim true as stated rather than true for two

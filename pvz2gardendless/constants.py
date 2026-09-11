@@ -73,9 +73,29 @@ EGYPT_STRETCHES = ("", " Early", " Mid", " Late")
 EGYPT_SUN_CUT = "egypt5"
 
 
+# Worlds whose Zomboss IS their final level, and which are therefore cut into
+# TWO stretches rather than three.
+#
+# Every other world has a "2.0" rematch after its Zomboss, and that rematch is
+# what the third stretch holds. Aerial Fortress ends on its Zomboss (sky32,
+# added by game 0.14.0), so a third stretch there would be empty: an unlock
+# that opens nothing and a region with no locations in it.
+#
+# Moving the cut off the Zomboss instead is not an option: the goal trim
+# depends on a goal landing exactly on a stretch boundary (see stretches_kept),
+# so a cut anywhere else would trim this world's Zomboss out of the very seed
+# whose goal is to beat it.
+TWO_STRETCH_WORLDS = ("Aerial Fortress",)
+SHORT_WORLD_STRETCHES = ("", " Mid")
+
+
 def stretch_suffixes(world: str):
     """The region suffixes this world is cut into, in order."""
-    return EGYPT_STRETCHES if world == "Ancient Egypt" else WORLD_STRETCHES
+    if world == "Ancient Egypt":
+        return EGYPT_STRETCHES
+    if world in TWO_STRETCH_WORLDS:
+        return SHORT_WORLD_STRETCHES
+    return WORLD_STRETCHES
 
 
 # How many progressive world unlocks a stretch needs.
@@ -739,10 +759,11 @@ def slot_entry_groups(world, world_name):
 # same table are repeatable, so they can be bought over and over and would
 # not be valid locations. Codenames are used as-is so the location name the
 # client builds from CommodityName always matches exactly.
-# Deliberately excluded: imitater, darkmatterdragonfruit, snappea and
-# shootingstarfruit are priced in tickets (1000 each). Tickets only come from
+# Deliberately excluded: imitater, darkmatterdragonfruit, snappea,
+# shootingstarfruit, witchhazel, slingpea and turkeypult (the last added by
+# game 0.14.0) are priced in tickets (1000 each). Tickets only come from
 # Pinata prizes and in-level drops worth 10 apiece, there is no ticket bundle
-# in the store, and Archipelago has no ticket item -- so those four would be
+# in the store, and Archipelago has no ticket item -- so each of those would be
 # ~400 pickups of pure grind. Everything kept below is priced in gems, which
 # AP's filler actually supplies.
 SHOP_PLANT_COMMODITIES = [

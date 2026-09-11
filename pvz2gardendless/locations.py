@@ -866,7 +866,9 @@ def _make_locs() -> List[PvZ2LocationData]:
     # sky31 is one of the two levels a gem-priced shop card unlocks on.
     #
     # sky20 awards the dangerroom_sky trophy, so it is what opens sky_dangerroom
-    # (see DANGER_ROOM_UNLOCK). sky22, sky23 and sky26 award Bulbkekengi,
+    # (see DANGER_ROOM_UNLOCK). sky22, sky23 and sky26 award Glowkengi
+    # (renamed from Bulbkekengi in game 0.14.0; its codename is still
+    # `bulbkekengi` and its plant id still 202, so nothing here moved),
     # Loquanado and Pea Commando, none of which AP ships as items -- they are
     # all above plant id 165 -- so the game grants them itself.
     #
@@ -894,6 +896,16 @@ def _make_locs() -> List[PvZ2LocationData]:
     # "mirrornut". Six stages. From the map data only, not yet seen in game.
     for _mir in range(6):
         add(f"Mirror-nut {_mir}", "Mirror-nut Sidepath")    # mirrornut<N>
+
+    # ── Aerial Fortress Zomboss (game 0.14.0) ───────────────────────────────
+    # sky32, node "32" on the Sky map, hanging off sky31 in the same unbroken
+    # chain as every node before it. It is the world's Zomboss -- a
+    # ZombossBattleModuleProperties with ZombossMechType zombossmech_sky --
+    # and also its last level, which is new: every other world has a rematch
+    # after its Zomboss.
+    #
+    # Appended last so nothing above it renumbers.
+    add("sky32", "Aerial Fortress")
 
     return locs
 
@@ -1064,8 +1076,13 @@ def active_locations(shopsanity: bool,
 #
 # Kongfu Temple has no Zomboss level in the game data and is excluded, so this
 # list is one shorter than the other two and a Kongfu seed cannot satisfy this
-# goal for that world. Aerial Fortress is excluded as well: it has neither a
-# Zomboss nor a World Key level, so it is playable but never counts.
+# goal for that world.
+#
+# Aerial Fortress used to be excluded here for the same reason, on the belief
+# that it had neither a Zomboss nor a World Key level. It has both: sky16 has
+# always carried FirstRewardParam "worldkey", exactly like lostcity16, and
+# game 0.14.0 added sky32, its Zomboss. It is an ordinary world now and
+# appears in all three lists.
 #
 # Called world trophies until 2026-08-23; the name is kept as an alias below
 # because it is what the option value 0 has always meant.
@@ -1081,13 +1098,15 @@ WORLD_ZOMBOSS_LOCS = [
     "neon32", # eighties32
     "dino32",     # dino32
     "modern_zomboss_01_egypt",  # Modern Day, the first of its ten rematches
-]  # 11 total (Kongfu excluded — no Zomboss level in the game data)
+    # Added by game 0.14.0. Unlike every other world's, this Zomboss is also
+    # the world's LAST level, so it is its completion location too.
+    "sky32",      # Aerial Fortress
+]  # 12 total (Kongfu excluded — no Zomboss level in the game data)
 
 # The pre-2026-08-23 name. Same list, so anything importing it is unaffected.
 WORLD_TROPHY_LOCS = WORLD_ZOMBOSS_LOCS
 
 # World Completion locations — the final regular level of each world.
-# Aerial Fortress is excluded: see WORLD_ZOMBOSS_LOCS.
 #
 # Neon Mixtape Tour used to reuse its trophy location here, on the belief that
 # the world "is shorter than the other worlds and its trophy check (eighties32)
@@ -1111,12 +1130,13 @@ WORLD_COMPLETION_LOCS = [
     "neon42", # Neon Mixtape Tour
     "dino42",     # Jurassic Marsh
     "modern44",   # Modern Day
-]  # 12 total
+    "sky32",      # Aerial Fortress — its Zomboss is also its last level
+]  # 13 total
 
 # World Key locations — the "World Key - X" check present in every world.
 # Not necessarily on the same stage per world, and not forced to contain
-# that world's own key item (fill is unconstrained). Aerial Fortress is
-# excluded: see WORLD_ZOMBOSS_LOCS. Same set as WORLD_COMPLETION_LOCS.
+# that world's own key item (fill is unconstrained). Same set as
+# WORLD_COMPLETION_LOCS.
 WORLD_KEY_LOCS = [
     "egypt8",
     "pirate8",
@@ -1130,7 +1150,8 @@ WORLD_KEY_LOCS = [
     "neon16",
     "dino16",
     "modern16",   # Modern Day
-]  # 12 total
+    "sky16",      # Aerial Fortress — FirstRewardParam "worldkey" in its level
+]  # 13 total
 
 
 # ── World stretches ──────────────────────────────────────────────────────────
@@ -1144,13 +1165,21 @@ WORLD_KEY_LOCS = [
 # milestones, so a player working toward the goal is always working toward
 # their next unlock too.
 #
-# Two worlds do not have all three markers, and each falls back one step:
-#   Kongfu Temple has no Zomboss level, so its second cut is the midpoint of
-#     what is left after its World Key level.
-#   Aerial Fortress has neither, so it is cut into equal thirds -- which is
-#     what every world used to get.
+# Kongfu Temple does not have all three markers and falls back one step: it
+# has no Zomboss level, so its second cut is the midpoint of what is left
+# after its World Key level. A world with neither marker is cut into equal
+# thirds -- what every world used to get -- which no world needs today, since
+# Aerial Fortress gained its Zomboss (sky32) in game 0.14.0 and its World Key
+# level (sky16) was there all along.
 # Both fallbacks are computed from the NUMBERED levels alone, so turning the
 # Danger Rooms on or off cannot move a cut.
+#
+# Aerial Fortress is the one world whose Zomboss is its LAST level, so its
+# third stretch comes out empty. That is deliberate rather than papered over:
+# the goal trim (constants.stretches_kept) relies on a goal landing exactly on
+# a stretch boundary, and moving this cut off sky32 to fill that stretch would
+# trim the Zomboss goal out of a seed that is meant to end on it. The cost is
+# one unlock that opens an empty region.
 
 # Where a level sits in its world's play order.
 #
@@ -1187,7 +1216,7 @@ def _stretch_cuts(numbered: List[str]) -> tuple:
         rest = [n for n in numbered if _play_order(n) > _play_order(key)]
         mid = rest[max(0, len(rest) // 2 - 1)] if rest else key
         return _play_order(key), _play_order(mid)
-    # Aerial Fortress: equal thirds.
+    # Neither marker: equal thirds. No world is in this shape today.
     third = max(1, len(numbered) // 3)
     return (_play_order(numbered[third - 1]),
             _play_order(numbered[min(2 * third, len(numbered)) - 1]))

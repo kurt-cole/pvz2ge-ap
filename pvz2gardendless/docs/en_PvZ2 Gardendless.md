@@ -56,7 +56,8 @@ Modern Day works exactly the same way, and so does every other world: what you a
 three copies of **Progressive &lt;World&gt;**.
 
 The first opens the world — that is the item the old World Key became. The second and third open its
-later stretches, because a world is cut into three and you get them one at a time. **The game
+later stretches, because a world is cut into three (Aerial Fortress, two) and you get them one at a
+time. **The game
 enforces this**: a level you have not unlocked cannot be started at all, not just cannot be logically
 required.
 
@@ -64,8 +65,11 @@ The cuts are the world's own milestones: its World Key level, then its Zomboss, 
 world splits at the same two places, which are the same levels the goal is measured on, so working
 toward the goal is always working toward your next unlock.
 
-Two worlds have no such milestone to use. Kongfu Temple has no Zomboss level, so its second cut is
-the midpoint of what is left; Aerial Fortress has neither, so it is cut into equal thirds.
+One world has no such milestone to use: Kongfu Temple has no Zomboss level, so its second cut is the
+midpoint of what is left.
+
+Aerial Fortress is cut into **two** stretches rather than three, so it ships two unlocks. Its Zomboss
+(added by game 0.14.0) is also its last level, so there is nothing left over for a third.
 
 Ancient Egypt has no key, so its opening is where every run starts — and it has one extra gate the
 other worlds do not: **from Egypt level 6 you need a sun producer and a cheap attacker.** That is the
@@ -172,7 +176,8 @@ still counts — you just have to end up holding the item.
 Asking for more worlds than the seed contains is not a mistake — it clamps down to what is actually
 there, so a three-world seed asking for eleven needs three.
 
-Aerial Fortress is playable but never counts: it has neither a World Key level nor a Zomboss.
+Aerial Fortress counts toward all three now that game 0.14.0 gave it a Zomboss. Its Zomboss is also
+its final level, so its Zomboss and Completion goals are the same check.
 
 *Changed in this version.* The goal items are new: the win used to be measured off the goal
 locations directly, with nothing on them to collect.
@@ -235,8 +240,8 @@ unlocks it is, matching the game.
   | Sky Shield | 1 | — |
 - **Coins and gems** — filler, and the currency the store runs on.
 - **Random Plant Costume** — filler. Each one dresses a plant you already own in
-  a costume you do not have yet, picked at random from the 309 the game has
-  across 120 plants. Purely cosmetic. One arriving before you own any plant is
+  a costume you do not have yet, picked at random from the 312 the game has
+  across 121 plants. Purely cosmetic. One arriving before you own any plant is
   held and applied once you do.
 - **Lawn Mower Trap** — sets off every lawn mower on the field at once. They roll out and are spent,
   leaving those lanes with no last line of defence for the rest of the level. A trap received while

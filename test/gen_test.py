@@ -591,9 +591,13 @@ from pvz2gardendless.items import (PLANT_ITEMS, KEY_ITEMS, FILLER_ITEMS,
                                    COIN_TRAP, GEM_TRAP,
                                    PROGRESSIVE_WORLD_ITEMS,
                                    GEM_GRANT, GEM_GRANT_COUNT, GEM_GRANT_ITEMS,
-                                   GOAL_ITEMS)
+                                   GOAL_ITEMS, LATE_PLANT_ITEMS)
+# PLANT_ITEMS now holds two blocks: the original plants, whose ids open the
+# range, and the ones a later game version added, which are numbered past
+# every other block (see items.LATE_PLANT_ITEMS).
+_ORIGINAL_PLANTS = [p for p in PLANT_ITEMS if p not in LATE_PLANT_ITEMS]
 BLOCKS = [
-    ("plants+keys+filler+traps", PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS + TRAP_ITEMS),
+    ("plants+keys+filler+traps", _ORIGINAL_PLANTS + KEY_ITEMS + FILLER_ITEMS + TRAP_ITEMS),
     ("upgrades", UPGRADE_ITEMS),
     ("costume filler", COSTUME_ITEMS),
     ("costume trap", COSTUME_TRAP_ITEMS),
@@ -601,6 +605,7 @@ BLOCKS = [
     ("progressive world unlocks", PROGRESSIVE_WORLD_ITEMS),
     ("guaranteed gem grants", GEM_GRANT_ITEMS),
     ("goal mcguffins", GOAL_ITEMS),
+    ("plants added by a later game version", LATE_PLANT_ITEMS),
 ]
 for bi in range(1, len(BLOCKS)):
     name, block = BLOCKS[bi]
@@ -1276,6 +1281,9 @@ _WORLD_FINAL_LEVEL = {
     # so 44 is the last level, and there is no modern32/33/34 to confuse it
     # with.
     "modern": 44,
+    # Aerial Fortress ends on sky32, the Zomboss game 0.14.0 added. It is the
+    # one world whose Zomboss and final level are the same level.
+    "sky": 32,
 }
 from pvz2gardendless.locations import (WORLD_COMPLETION_LOCS as _WC,
                                       WORLD_ZOMBOSS_LOCS as _WT)
@@ -1295,7 +1303,16 @@ for _n in _WC:
 assert len(_seen) == len(_WC), "two completion goals in the same world"
 # ...and completion must be a strictly later ask than the trophy, or the two
 # goal types collapse into each other for that world.
-_both = set(_WC) & set(_WT)
+#
+# Aerial Fortress is the documented exception: its Zomboss IS its final level,
+# so the two goals really are the same check there. Allowed only for a world
+# the constants already declare to be that shape, so a world silently losing
+# its rematch (the Neon Mixtape Tour bug) is still caught.
+_two_stretch_levels = {
+    _n for _w in C.TWO_STRETCH_WORLDS
+    for _n in (_l.name for _l in _ALL if _l.region in C.WORLD_REGIONS[_w])
+}
+_both = (set(_WC) & set(_WT)) - _two_stretch_levels
 assert not _both, f"location used as BOTH zomboss and completion goal: {sorted(_both)}"
 print(f"all {len(_WC)} completion goals are their world's real final level, "
       "and none doubles as a trophy goal")

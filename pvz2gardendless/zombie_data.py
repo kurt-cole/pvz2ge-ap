@@ -69,7 +69,7 @@ ships one still gets it, and no other level can ever gain one:
             CamelMinigameProperties, and in the three levels that carry
             that module the camels ARE the game: you match them by hump
             count. Kurt found this in play testing, on egypt7.
-            17 types.
+            18 types.
 
   immobile  `WalkSPS` of 0 -- future_infinut_shield (10000 HP),
             future_protector_shield, sky_dropship. These are props, not
@@ -97,8 +97,8 @@ than being handled here: the camel matching games, the cannon levels,
 Beghouled, bowling, Last Stand and the other set pieces. See
 AP_BESPOKE_MODULES in build_pvzge_ap.py.
 
-259 zombies over 74 tiers, 230 of them (88%) with somebody to trade with.
-Worst intra-tier HP ratio 1.33. 61 codenames excluded.
+262 zombies over 74 tiers, 233 of them (88%) with somebody to trade with.
+Worst intra-tier HP ratio 1.33. 62 codenames excluded.
 """
 
 from collections import Counter
@@ -106,8 +106,8 @@ from typing import Dict, List
 
 ZOMBIE_TIERS: Dict[str, List[str]] = {
     't1-land-air-h17': [
-        'feastivus_swashbuckler', 'lostcity', 'swashbuckler',
-    ],  # 3
+        'feastivus_swashbuckler', 'lostcity', 'summer_basic', 'swashbuckler',
+    ],  # 4
     't1-land-air-h19': [
         'birthday_jetpack', 'future_jetpack', 'future_jetpack_disco',
     ],  # 3
@@ -118,13 +118,13 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
         'iceage_weasel',
     ],  # 1
     't1-land-h17': [
-        'beach', 'beach_fem', 'birthday', 'cowboy', 'dark', 'dark_imp_dragon',
-        'dino', 'easter', 'eighties', 'eighties_8bit', 'feastivus',
-        'feastivus_flag', 'foodfight', 'foodfight_flag', 'future',
-        'future_flag', 'halloween', 'iceage', 'kongfu_rocket_imp', 'lunar',
-        'mummy', 'pirate', 'ra', 'sportzball', 'stpatrick', 'tutorial',
-        'valentines',
-    ],  # 27
+        'beach', 'beach_fem', 'birthday', 'bobsled', 'cowboy', 'dark',
+        'dark_imp_dragon', 'dino', 'easter', 'eighties', 'eighties_8bit',
+        'feastivus', 'feastivus_flag', 'foodfight', 'foodfight_flag',
+        'future', 'future_flag', 'halloween', 'iceage', 'kongfu_rocket_imp',
+        'lunar', 'mummy', 'pirate', 'ra', 'sportzball', 'stpatrick',
+        'tutorial', 'valentines',
+    ],  # 28
     't1-land-h18': [
         'birthday_pharaoh_inner',
     ],  # 1
@@ -174,8 +174,8 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
     ],  # 8
     't2-land-h19': [
         'bobsled_team', 'kongfu_chi', 'lostcity_excavator', 'lostcity_jane',
-        'tomb_raiser',
-    ],  # 5
+        'monk_imp', 'tomb_raiser',
+    ],  # 6
     't2-land-h20': [
         'abbot_torch', 'eighties_glitter',
     ],  # 2
@@ -237,13 +237,14 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
     ],  # 1
     't3-land-h19': [
         'eighties_punk_veteran', 'lostcity_impporter',
-    ],  # 2
+        'pirate_captain_parrot',
+    ],  # 3
     't3-land-h20': [
         'kongfu_bomb', 'pirate_captain',
     ],  # 2
     't3-land-h21': [
-        'iceage_hunter', 'kongfu_drink', 'monk_drink', 'monk_imp',
-    ],  # 4
+        'iceage_hunter', 'kongfu_drink', 'monk_drink',
+    ],  # 3
     't3-land-h22': [
         'feastivus_piano', 'piano',
     ],  # 2
@@ -408,6 +409,7 @@ ZOMBIE_HP: Dict[str, int] = {
     'birthday_troglobite': 470,
     'birthday_troglobite_1block': 470,
     'birthday_troglobite_2block': 470,
+    'bobsled': 190,
     'bobsled_team': 390,
     'cannon': 600,
     'catapult': 750,
@@ -568,7 +570,7 @@ ZOMBIE_HP: Dict[str, int] = {
     'monk_blade': 600,
     'monk_drink': 600,
     'monk_drink_veteran': 600,
-    'monk_imp': 600,
+    'monk_imp': 300,
     'monk_nunchaku': 600,
     'monk_torch': 270,
     'mummy': 190,
@@ -586,6 +588,7 @@ ZOMBIE_HP: Dict[str, int] = {
     'pirate_armor2': 1290,
     'pirate_armor4': 2390,
     'pirate_captain': 420,
+    'pirate_captain_parrot': 300,
     'pirate_flag_veteran': 350,
     'pirate_gargantuar': 3600,
     'poncho': 190,
@@ -607,6 +610,7 @@ ZOMBIE_HP: Dict[str, int] = {
     'stpatrick_dodo': 490,
     'summer_armor1': 560,
     'summer_armor2': 1290,
+    'summer_basic': 190,
     'summer_bug': 190,
     'summer_bug_armor1': 560,
     'summer_bug_armor2': 1290,
@@ -642,9 +646,9 @@ ZOMBIE_EXCLUSIONS: Dict[str, List[str]] = {
         'camel_twohump', 'camel_twohump_touch', 'easter_camel_manyhump',
         'easter_camel_onehump', 'easter_camel_twohump',
         'feastivus_camel_manyhump', 'feastivus_camel_onehump',
-        'feastivus_camel_twohump', 'lunar_camel_manyhump',
-        'lunar_camel_onehump', 'lunar_camel_twohump',
-    ],  # 17
+        'feastivus_camel_segment', 'feastivus_camel_twohump',
+        'lunar_camel_manyhump', 'lunar_camel_onehump', 'lunar_camel_twohump',
+    ],  # 18
     'ignored_in_waves': [
         'beach_imp', 'dark_imp', 'dino_imp', 'easter_imp', 'egypt_imp',
         'eighties_imp', 'feastivus_imp', 'future_imp', 'halloween_imp',
