@@ -12,7 +12,7 @@ from pvz2gardendless.options import (
     WorldCount, EnabledWorlds, GoalType, WorldsRequired, ModernDayVictory,
     SkipTutorial, Shopsanity, TrapPercentage, ShuffleUpgrades,
     RandomizeConveyorPlants, EarlyWorldKeys, ShuffleZombies, IncludeSidePaths,
-    IncludeDangerRooms, StartingPlants,
+    IncludeDangerRooms, StartingPlants, PlantPowerLogic,
     TrapWeightLawnMower, TrapWeightCostumeShuffle, TrapWeightCoins,
     TrapWeightGems, IncludeLevelsPastGoal,
 )
@@ -43,6 +43,8 @@ class Opts:
         self.randomize_conveyor_plants = RandomizeConveyorPlants(
             kw.get("randomize_conveyor_plants", RandomizeConveyorPlants.default))
         self.shuffle_zombies = ShuffleZombies(kw.get("shuffle_zombies", 0))
+        self.plant_power_logic = PlantPowerLogic(
+            kw.get("plant_power_logic", PlantPowerLogic.default))
         self.early_world_keys = EarlyWorldKeys(kw.get("early_world_keys", 0))
         self.include_levels_past_goal = IncludeLevelsPastGoal(
             kw.get("include_levels_past_goal",

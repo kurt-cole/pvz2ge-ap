@@ -21,8 +21,10 @@ from .constants import (
     LOGIC_ATTACKER_COUNT, LOGIC_PLANTS, OPTIONAL_WORLDS,
     SELECTABLE_WORLDS, STARTER_PLANTS, SUN_PRODUCER_PLANTS, WORLD_REGIONS,
     WORLD_STRETCHES,
+    draw_power_plants,
     progressive_item_name, progressive_need, stretch_suffixes,
 )
+from .plant_data import LEVEL_REQUIRED_DPS
 from .options import PvZ2Options, OPTION_GROUPS
 from .items import (
     FILLER_POOL, ITEM_NAME_GROUPS, ITEM_NAME_TO_ID, ITEM_NAME_TO_ITEM,
@@ -247,6 +249,14 @@ class PvZ2GardendlessWorld(World):
     # slot_progression_plants.
     logic_jesters: frozenset = frozenset()
 
+    # This slot's drawn plant-power ladder: one tuple of plant names per rung of
+    # plant_data.DRAW_RUNGS that some level in this seed needs. These are the
+    # plants create_item promotes to progression for the power rules, and the
+    # ones the pool floor protects. The RULES name every plant that clears a
+    # level, not just these -- see POWER_DRAW_COUNT in constants.py for why the
+    # two differ.
+    logic_power_plants: tuple = ()
+
     # What generate_early handed the player. Declared here for the same reason:
     # create_item_pool reads it to keep those plants out of the pool, and an
     # empty default means "nothing granted" rather than an AttributeError.
@@ -436,6 +446,21 @@ class PvZ2GardendlessWorld(World):
         # the pool is built in a fixed order regardless of how the draw fell.
         self.starting_plants = sorted([starter] + extras)
 
+        # This slot's plant-power ladder. Drawn from the requirements of the
+        # levels this seed actually BUILDS, so an Egypt-only seed does not
+        # reserve pool space for the rungs only Modern Day reaches, and a seed
+        # with the option off draws nothing at all.
+        #
+        # Drawn here rather than in set_rules because create_item needs it: a
+        # plant a rule names has to be progression, and create_item runs before
+        # set_rules does. It reads active_locations(), which needs
+        # enabled_regions -- set at the top of this method.
+        if self.options.plant_power_logic:
+            built = [LEVEL_REQUIRED_DPS[loc.name]
+                     for loc in self.active_locations()
+                     if loc.name in LEVEL_REQUIRED_DPS]
+            self.logic_power_plants = draw_power_plants(self, built)
+
         # THE SEED'S OWN ROLLS, under Universal Tracker. All three are drawn
         # from self.random above, and a tracker's local draw is a different
         # draw: the granted plants decide what is precollected (and so what is
@@ -450,6 +475,15 @@ class PvZ2GardendlessWorld(World):
                 self.logic_attackers = frozenset(passthrough["logic_attackers"])
             if passthrough.get("logic_jesters"):
                 self.logic_jesters = frozenset(passthrough["logic_jesters"])
+            # PRESENCE, not truthiness: an empty list is the seed saying it had
+            # plant_power_logic off, and the local draw has to be thrown away
+            # rather than kept. A seed from before the key existed omits it, and
+            # keeping the local draw is the right answer there.
+            if "logic_power_plants" in passthrough:
+                # Tuples, and order matters: it pairs each group with its rung,
+                # and the pool floor takes the last group.
+                self.logic_power_plants = tuple(
+                    tuple(group) for group in passthrough["logic_power_plants"])
 
         for name in self.starting_plants:
             self.multiworld.push_precollected(self.create_item(name))
@@ -783,6 +817,14 @@ class PvZ2GardendlessWorld(World):
             # is invisible to its logic entirely.
             "logic_attackers":   sorted(self.logic_attackers),
             "logic_jesters":     sorted(self.logic_jesters),
+            # ...and this slot's plant-power ladder, for the same reason: these
+            # are the plants the power rules promote to progression. A list of
+            # lists rather than a flat list because the order pairs each group
+            # with its rung. Empty when plant_power_logic is off, and absent
+            # altogether from a seed generated before it existed -- a tracker
+            # reading either draws nothing and sees no power requirement, which
+            # is what those seeds have.
+            "logic_power_plants": [list(group) for group in self.logic_power_plants],
             # The options that decide which locations exist. goal_type,
             # shopsanity, worlds_required and skip_tutorial are above already;
             # these three were client-irrelevant and so were never sent. UT is

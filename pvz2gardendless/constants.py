@@ -3,7 +3,9 @@ Static world-shape data shared across items.py, locations.py, regions.py and
 rules.py: identifiers, world lists, and the plant sets used for logic gating.
 """
 
-from typing import Dict, List
+from typing import Dict, Iterable, List, Tuple
+
+from .plant_data import DRAW_RUNGS, LEVEL_REQUIRED_DPS, PLANT_LAWN_DPS
 
 GAME_NAME = "PvZ2 Gardendless"
 BASE_ID   = 0xD1A2B3C4
@@ -436,12 +438,51 @@ NON_DAMAGING_PLANTS = [
     "Shrinking Violet", # shrinks zombies, no damage
 ]
 
+# The levels a player can reach before any item arrives: Ancient Egypt's
+# opening, which is always in the seed, plus the tutorial. Nothing here can be
+# gated on an item, because there is no earlier check for fill to put one in --
+# so whatever these levels need, the STARTING PLANT has to cover.
+#
+# egypt1 has no wave data of its own and egypt4 and egypt5 hand the player their
+# plants (conveyor, then a challenge), so in practice egypt3 is what sets the
+# floor below.
+SPHERE_ONE_LEVELS = ("egypt1", "egypt2", "egypt3", "egypt4", "egypt5")
+
+# ...and the lawn dps the hardest of them needs. See plant_data.py: this is
+# damage per second a lawn of one plant can do, measured from the game's own
+# tables, against the HP per wave the level sends.
+STARTER_POWER_FLOOR = max(
+    [LEVEL_REQUIRED_DPS[level] for level in SPHERE_ONE_LEVELS
+     if level in LEVEL_REQUIRED_DPS] or [0.0])
+
 # What generate_early() may hand a player for free. A cheap attacker that
-# persists on the lawn and does damage on its own.
+# persists on the lawn, does damage on its own, AND can carry the opening levels
+# by itself.
+#
+# The power floor is the half of the plant-power work that is not a logic rule,
+# and it is the half that closes the hole: a rule can only ask for something
+# fill is able to place somewhere earlier, and there is nothing earlier than
+# Ancient Egypt 3. Before this, the draw could hand a player Electric Blueberry
+# (one 150-sun plant that fires every 45 seconds), Vamporcini or Dusk Lobber as
+# the ONLY plant they had, and no rule anywhere asked for better. That is the
+# Egypt 3/4 seed Kurt could not beat.
+#
+# It applies whether or not plant_power_logic is on: the guarantee that a run
+# opens with something usable is a gameplay promise, not a logic requirement,
+# exactly as the rest of STARTER_PLANTS' derivation is.
 STARTER_PLANTS = [
     plant for plant in CHEAP_ATTACKER_PLANTS
     if plant not in set(SINGLE_USE_PLANTS) | set(NON_DAMAGING_PLANTS)
+    and PLANT_LAWN_DPS.get(plant, 0.0) >= STARTER_POWER_FLOOR
 ]
+
+# The draw must not be empty, and it must not be one plant either -- a single
+# candidate would hand every seed the same opening hand.
+if len(STARTER_PLANTS) < 5:
+    raise ValueError(
+        "the starting-plant power floor of "
+        f"{STARTER_POWER_FLOOR} leaves only {len(STARTER_PLANTS)} candidates; "
+        "plant_data.py and CHEAP_ATTACKER_PLANTS have drifted apart")
 
 # No plant that cannot deal damage may count as an attacker.
 _bad_attackers = set(NON_DAMAGING_PLANTS) & set(CHEAP_ATTACKER_PLANTS)
@@ -719,6 +760,76 @@ ALL_LOGIC_PLANTS = (LOGIC_PLANTS | set(CHEAP_ATTACKER_PLANTS)
                     | set(JESTER_COUNTER_PLANTS))
 
 
+
+
+# ── Plant power ───────────────────────────────────────────────────────────────
+# How many plants each rung of the power ladder contributes to a slot's draw.
+#
+# TWO, and the draw exists for the same reason LOGIC_ATTACKER_COUNT does. Every
+# level's requirement is met by between 12 and 73 of the game's plants, and
+# rules.py NAMES all of them -- a player with any of them is in logic, and a
+# tracker shows all of them as options. But a plant a rule names has to be
+# PROGRESSION for fill to reason about it, and promoting seventy plants would
+# leave a small seed room for nothing else. So the rule stays wide and the
+# promotion stays narrow: a handful per rung of DRAW_RUNGS, which between them
+# cover every level in the seed, because a rung is the hardest requirement in
+# its bucket.
+#
+# Two rather than one so no single plant is load-bearing for a whole rung.
+POWER_DRAW_COUNT = 2
+
+
+def plants_clearing(required_dps: float) -> Tuple[str, ...]:
+    """Every plant whose lawn dps reaches `required_dps`.
+
+    The exact list, with no banding: this is what a level's access rule names.
+    Sorted so a seed is built in a fixed order.
+    """
+    return tuple(sorted(name for name, lawn in PLANT_LAWN_DPS.items()
+                        if lawn >= required_dps))
+
+
+def power_draw_groups(world) -> List[List[str]]:
+    """This slot's drawn power plants, one group per rung, hardest last.
+
+    A group is the rung's own draw, so one plant out of each group is what the
+    pool floor has to protect. Empty when the option is off, or when nothing the
+    seed built asks for anything.
+    """
+    drawn = getattr(world, "logic_power_plants", ())
+    return [list(group) for group in drawn]
+
+
+def slot_power_plants(world) -> set:
+    """Flat set of this slot's drawn power plants, for the progression promote."""
+    return {name for group in power_draw_groups(world) for name in group}
+
+
+def draw_power_plants(world, required: Iterable[float]) -> Tuple[Tuple[str, ...], ...]:
+    """Pick POWER_DRAW_COUNT plants for each rung the seed actually needs.
+
+    `required` is every requirement the seed's built levels carry. A rung is
+    kept when some level needs it, which is what stops an Egypt-only seed
+    reserving pool space for the rungs only Modern Day reaches.
+
+    Drawn from world.random, so the same seed makes the same choice, and the
+    groups come back hardest LAST so the pool floor can take the last one and
+    know it covers everything.
+    """
+    hardest = max(required, default=0.0)
+    groups = []
+    for rung in DRAW_RUNGS:
+        if not any(req <= rung for req in required):
+            continue  # no level in this rung's bucket was built
+        candidates = plants_clearing(rung)
+        if not candidates:
+            continue
+        count = min(POWER_DRAW_COUNT, len(candidates))
+        groups.append(tuple(sorted(world.random.sample(candidates, count))))
+        if rung >= hardest:
+            # Every remaining rung is harder than anything the seed built.
+            break
+    return tuple(groups)
 
 
 def slot_stretch_groups(world, world_name, suffix):

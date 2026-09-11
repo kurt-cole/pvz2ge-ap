@@ -475,7 +475,12 @@ assert set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES == \
      # decided from an option the client never needed. The client ignores all
      # six; a seed that predates them leaves UT on its own local roll.
      "granted_plants", "logic_attackers", "logic_jesters",
-     "include_side_paths", "include_danger_rooms", "include_levels_past_goal"}, \
+     "include_side_paths", "include_danger_rooms", "include_levels_past_goal",
+     # ...and the plant-power ladder, same reason: it is what create_item
+     # promotes to progression for the power rules. A seed without the key
+     # leaves UT on its own draw, and an EMPTY list means the seed had
+     # plant_power_logic off.
+     "logic_power_plants"}, \
     f"unexpected new slot_data keys: {sorted(set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES)}"
 
 # modern_day_keyed is additive for the same reason, and modern_day_victory
@@ -1599,15 +1604,18 @@ for _label, _kw in (("default", {}), ("Egypt only", dict(world_count=1)),
     assert _starter[0] in C.STARTER_PLANTS, f"{_label}: starter is not lane-holding"
 
     # The other 37 are ordinary useful plants, not progression -- EXCEPT where
-    # one is also a world entry plant, which is a separate rule naming it for a
-    # separate reason. Lava Guava is the only such plant: it is a cheap attacker
-    # AND one of the five with a WarmingRadius, so Frostbite Caves names it and
-    # it stays progression in any seed containing that world whether the draw
-    # picked it or not.
+    # another rule names one for a reason of its own. Two kinds do. A world entry
+    # plant: Lava Guava is a cheap attacker AND one of the five with a
+    # WarmingRadius, so Frostbite Caves names it whether this draw picked it or
+    # not. And the plant-power ladder, which draws from the whole roster and
+    # lands on a cheap attacker often -- a different draw for a different rule,
+    # so a plant in it is progression for that rule's sake.
     _slot_prog = W.items.slot_progression_plants(_wD)
     _entry_here = {n for _w2 in _wD.enabled_worlds
                    for _g in C.WORLD_ENTRY_PLANTS.get(_w2, []) for n in _g}
-    _leaked = (set(C.CHEAP_ATTACKER_PLANTS) - _drawn - _entry_here) & _slot_prog
+    _power_here = C.slot_power_plants(_wD)
+    _leaked = ((set(C.CHEAP_ATTACKER_PLANTS) - _drawn - _entry_here - _power_here)
+               & _slot_prog)
     assert not _leaked, \
         f"{_label}: {len(_leaked)} undrawn attackers are still progression: {sorted(_leaked)[:5]}"
     _draws[_label] = _drawn
@@ -1669,8 +1677,10 @@ for _label2, _kw2 in (("Egypt only", dict(world_count=1)),
     _stretch_here = {n for _w3 in _wC.enabled_worlds
                      for _sfx in C.stretch_suffixes(_w3)
                      for _g3 in C.slot_stretch_groups(_wC, _w3, _sfx) for n in _g3}
+    # ...and the plant-power ladder, which is a rule naming them: see
+    # POWER_DRAW_COUNT in constants.py.
     _exempt = (_entry_here2 | _stretch_here | set(C.SUN_PRODUCER_PLANTS)
-               | set(_wC.logic_jesters))
+               | set(_wC.logic_jesters) | C.slot_power_plants(_wC))
     _prog_atk = [n for n in C.CHEAP_ATTACKER_PLANTS if n not in _exempt
                  and _wC.create_item(n).classification == _IC_j.progression]
     assert not _prog_atk, (
@@ -1841,20 +1851,27 @@ for _name in ("Progressive Ancient Egypt", "Sky Shield", "100 Coins",
 # the filler and the traps in a seed that has few to spare.
 #
 # The default goal trims Egypt at egypt8, so " Mid" is not built and Grave
-# Buster is not named either -- the exact set is the FIVE sun producers and
-# nothing else. That is down from 15 before 2026-08-25, when the attacker half
-# of the egypt6 checkpoint went: it was satisfied by the precollected starter in
-# every seed, so naming ten attackers bought nothing and cost ten slots.
+# Buster is not named either -- the exact set is the FIVE sun producers plus this
+# slot's plant-power ladder. That is down from 15 before 2026-08-25, when the
+# attacker half of the egypt6 checkpoint went: it was satisfied by the
+# precollected starter in every seed, so naming ten attackers bought nothing and
+# cost ten slots.
 _wE2, _ = run("classification: Egypt-only progression set", world_count=1)
 assert _wE2.enabled_worlds == {"Ancient Egypt"}, _wE2.enabled_worlds
 _egypt_prog = W.items.slot_progression_plants(_wE2)
-_want_egypt = set(C.SUN_PRODUCER_PLANTS)
+_power_egypt = C.slot_power_plants(_wE2)
+_want_egypt = set(C.SUN_PRODUCER_PLANTS) | _power_egypt
 assert _egypt_prog == _want_egypt, (
     f"an Egypt-only seed's progression plants are {sorted(_egypt_prog - _want_egypt)} "
     f"beyond its sun producers, and missing {sorted(_want_egypt - _egypt_prog)}")
-# Five, as a literal: reading the length off SUN_PRODUCER_PLANTS would agree
-# with whatever that list said.
-assert len(_egypt_prog) == 5, sorted(_egypt_prog)
+# The ladder is what the power rules cost a seed this small, and the number is
+# the reason it is DRAWN rather than naming every plant that clears a level:
+# egypt1-8 need two of the five rungs, so at POWER_DRAW_COUNT each that is at
+# most four plants, against the 38 to 73 the rules themselves name.
+assert len(_power_egypt) <= 2 * C.POWER_DRAW_COUNT, sorted(_power_egypt)
+# Five sun producers, as a literal: reading the length off SUN_PRODUCER_PLANTS
+# would agree with whatever that list said.
+assert len(_egypt_prog - _power_egypt) == 5, sorted(_egypt_prog)
 assert not ({"Lily Pad", "Blover", "Perfume-shroom", "Torchwood"} & _egypt_prog), \
     "an Egypt-only seed still carries entry plants for worlds it does not have"
 print(f"per-slot classification: {len(_egypt_prog)} progression plants in an "
@@ -2038,12 +2055,12 @@ _og_flat = [o for g in _OG for o in g.options]
 _og_declared = [f.type for f in _dc_og.fields(W.PvZ2Options)]
 
 # Literals, not len(OPTION_GROUPS) / len(fields) -- an expectation read from the
-# thing under test passes whatever that thing says. 21 is every option in
-# PvZ2Options as of 2026-08-25 (20 before include_levels_past_goal); 7 is the
-# groups options.py declares.
+# thing under test passes whatever that thing says. 22 is every option in
+# PvZ2Options as of 2026-09-10 (21 before plant_power_logic, 20 before
+# include_levels_past_goal); 7 is the groups options.py declares.
 assert len(_OG) == 7, f"expected 7 option groups, got {len(_OG)}"
-assert len(_og_declared) == 21, \
-    f"PvZ2Options declares {len(_og_declared)} options, not 21 -- if that is " \
+assert len(_og_declared) == 22, \
+    f"PvZ2Options declares {len(_og_declared)} options, not 22 -- if that is " \
     "intended, update this literal AND put the new option in a group"
 
 _og_missing = [o.__name__ for o in _og_declared if o not in _og_flat]
@@ -2205,9 +2222,11 @@ assert _jw.create_item(_drawn[0]).classification == _IC_j.progression, \
 for _other in sorted(set(C.JESTER_COUNTER_PLANTS) - set(_drawn)):
     # Except the ones another rule names anyway, which are progression for
     # their OWN reason: this slot's drawn cheap attackers, the sun producers,
-    # and the other worlds' entry plants. Lava Guava is the live example -- it
-    # is both a Jester counter and a Frostbite Caves warming plant.
-    if _other in _jw.logic_attackers or _other in C.SUN_PRODUCER_PLANTS             or _other in _OTHER_ENTRY:
+    # the other worlds' entry plants, and this slot's plant-power ladder. Lava
+    # Guava is the live example of the first kind -- it is both a Jester counter
+    # and a Frostbite Caves warming plant.
+    if (_other in _jw.logic_attackers or _other in C.SUN_PRODUCER_PLANTS
+            or _other in _OTHER_ENTRY or _other in C.slot_power_plants(_jw)):
         continue
     assert _jw.create_item(_other).classification == _IC_j.useful, \
         f"undrawn counter {_other} is progression; the draw is not narrowing"
@@ -2235,6 +2254,9 @@ _je, _ = run("jester: Egypt only", world_count=1)
 _je_prog = [n for n in C.JESTER_COUNTER_PLANTS
             if n not in _je.logic_attackers and n not in C.SUN_PRODUCER_PLANTS
             and n not in _OTHER_ENTRY
+            # ...and not in this slot's plant-power ladder, which Ancient Egypt's
+            # own levels do name.
+            and n not in C.slot_power_plants(_je)
             and _je.create_item(n).classification == _IC_j.progression]
 assert not _je_prog, \
     f"Egypt-only seed marks Jester counters progression for a world it never built: {_je_prog}"
@@ -2369,17 +2391,20 @@ assert len(_ew.multiworld.itempool) == 11, len(_ew.multiworld.itempool)
 assert _ew.multiworld.get_location("egypt8", 1).item.name == "Time Key"
 _eprog = [i.name for i in _ew.multiworld.itempool
           if i.classification == _IC_j.progression]
-# Every progression item is a sun producer, and there is at least one. Not a
-# fixed COUNT: since the upgrades started taking a 20% share instead of all 14
-# slots, this seed has room for more than one of the five. What matters is that
-# nothing ELSE is progression -- the whole point of the Egypt-only case is that
-# a sun producer is the only thing the run actually requires.
+# Every progression item is a sun producer or one of this slot's plant-power
+# plants, and there is at least one. Not a fixed COUNT: since the upgrades
+# started taking a 20% share instead of all 14 slots, this seed has room for more
+# than one of the five. What matters is that nothing ELSE is progression -- the
+# whole point of the Egypt-only case is that sun and enough damage to clear
+# egypt1-8 are the only things the run actually requires.
 assert _eprog, "no progression item at all, so egypt8 would be unreachable"
-_enonsun = sorted(set(_eprog) - set(C.SUN_PRODUCER_PLANTS))
+_enonsun = sorted(set(_eprog) - set(C.SUN_PRODUCER_PLANTS)
+                  - C.slot_power_plants(_ew))
 assert not _enonsun, f"progression items that are not sun producers: {_enonsun}"
 assert _esd["goal_locations"] == ["egypt8"], _esd["goal_locations"]
 print(f"Egypt-only world_key: {len(_enames)} locations, {len(_eprog)} progression "
-      f"(all sun producers), {len(_ew.multiworld.itempool) - len(_eprog)} other")
+      f"(sun producers and the power ladder), "
+      f"{len(_ew.multiworld.itempool) - len(_eprog)} other")
 
 
 # THE CROSS-CHECK, ON A TRIMMED SEED. gen_test already checks that the client's
@@ -2510,18 +2535,19 @@ assert _gn.create_item("Grave Buster").classification == _IC_j.progression, \
 # a plant appearing proves nothing about what was forced.
 #
 # Egypt-only with the levels past the goal kept builds egypt9-35, so its floor is
-# TWO plants now -- a sun producer for the egypt6 checkpoint, and Grave Buster
-# for " Mid". The attacker half is free from the precollected starter.
+# THREE plants now -- a sun producer for the egypt6 checkpoint, Grave Buster for
+# " Mid", and one plant off the top of this slot's plant-power ladder, which is
+# what the hardest level it built needs. The attacker half is free from the
+# precollected starter.
 _gf, _ = run("grave: small seed floor", world_count=1,
              include_levels_past_goal=1, worlds_required=1)
-# Squeezed to the floor itself: two plants, a sun producer for the egypt6
-# checkpoint and Grave Buster for " Mid". Four slots, because this seed keeps
-# the levels past the goal and so ships Ancient Egypt's two unlocks; 20% of four
-# locations is no upgrade and shopsanity is off, so the other two slots are
-# exactly the floor and whatever survives IS what it forced.
-_gf_pool = {i.name for i in W.items.create_item_pool(_gf, 4)}
+# Squeezed to the floor itself: five slots, because this seed keeps the levels
+# past the goal and so ships Ancient Egypt's two unlocks; 20% of five locations
+# is no upgrade and shopsanity is off, so the other three slots are exactly the
+# floor and whatever survives IS what it forced.
+_gf_pool = {i.name for i in W.items.create_item_pool(_gf, 5)}
 _gf_plants = _gf_pool & {p.name for p in W.items.PLANT_ITEMS}
-assert len(_gf_plants) == 2, f"floor is {sorted(_gf_plants)}, expected 2 plants"
+assert len(_gf_plants) == 3, f"floor is {sorted(_gf_plants)}, expected 3 plants"
 assert "Grave Buster" in _gf_plants, (
     f"the floor dropped Grave Buster, which Egypt Mid needs: {sorted(_gf_plants)}")
 assert set(C.SUN_PRODUCER_PLANTS) & _gf_plants, "floor has no sun producer"

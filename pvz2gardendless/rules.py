@@ -16,8 +16,10 @@ from .constants import (
     CHEAP_ATTACKER_PLANTS, DANGER_ROOM_UNLOCK, EGYPT_STRETCH_PLANTS,
     KEYED_WORLDS, SIDE_PATH_REGIONS, STRETCH_PLANTS, SUN_PRODUCER_PLANTS,
     WORLD_ENTRY_PLANTS, WORLD_REGIONS, gem_grant_regions, is_early_region,
+    plants_clearing,
     progressive_item_name, progressive_need, stretch_suffixes,
 )
+from .plant_data import LEVEL_REQUIRED_DPS
 from .items import GEM_GRANT
 from .locations import SHOP_LOC_UNLOCK, goal_locations_for
 
@@ -285,6 +287,64 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         unlock = multiworld.get_location(unlock_name, player)
         add_rule(shop_loc, lambda state, u=unlock: u.can_reach(state))
         shop_gated.append(shop_loc)
+
+    # PLANT POWER -- the lawn has to be able to kill what the level sends.
+    #
+    # One rule per level the player brings their own plants to: hold an attacker
+    # whose lawn's worth of damage per second reaches what that level's waves
+    # need. Both numbers come from the game's own tables, and the derivation is
+    # in plant_data.py.
+    #
+    # This is the hole it closes. Every other requirement in this file is about
+    # ACCESS -- an unlock, a key, a plant that answers a specific mechanic -- and
+    # none of them says anything about whether the plants in logic can win. A
+    # seed could therefore put Ancient Egypt 3 in logic while the only attacker
+    # the player had was Electric Blueberry, one 150-sun plant that fires every
+    # 45 seconds, and call that a solvable seed. Kurt hit exactly that.
+    #
+    # ON THE LOCATION, not the region or the entrance. The requirement is
+    # per-LEVEL and it does not rise monotonically through a world -- Ancient
+    # Egypt 13 needs less than Ancient Egypt 3 does -- so there is nothing for a
+    # region rule to say. A location rule also needs no
+    # register_indirect_condition, for the same reason the Danger Room and shop
+    # rules above do not: no region's reachability turns on it.
+    #
+    # THE RULE NAMES EVERY PLANT THAT CLEARS THE LEVEL, 12 to 73 of them, while
+    # only the slot's drawn ladder is promoted to progression. That asymmetry is
+    # deliberate and explained at POWER_DRAW_COUNT in constants.py: the player
+    # and the tracker get every option, and fill reasons about a bounded handful.
+    # It is sound in that direction -- fill plans with a subset of what actually
+    # satisfies the rule, so anything it considers reachable is reachable.
+    #
+    # Keyed off the drawn ladder rather than off the option, so that Universal
+    # Tracker follows the SEED: a seed generated with the option on sends its
+    # ladder, and a tracker whose own YAML says otherwise still gates the same
+    # levels. An empty ladder means the seed had the option off, and nothing
+    # here applies.
+    if world.logic_power_plants:
+        # One closure per distinct requirement rather than per location: the
+        # levels share requirements heavily, and this rule is evaluated on every
+        # sweep of every fill.
+        answers = {}
+        for loc_data in world.active_locations():
+            required = LEVEL_REQUIRED_DPS.get(loc_data.name)
+            if required is None:
+                continue  # a shop check, a Danger Room, or a level that hands
+                          # the player its plants
+            if required not in answers:
+                answers[required] = plants_clearing(required)
+            group = answers[required]
+            if not group:
+                # No plant in the game clears it. The generator refuses to emit
+                # such a level, so this cannot happen -- and if it ever does, an
+                # ungated level is a better outcome than an unreachable one.
+                continue
+            try:
+                location = multiworld.get_location(loc_data.name, player)
+            except KeyError:
+                continue  # not built in this seed
+            add_rule(location,
+                     lambda state, g=group: state.has_any(g, player))
 
     # Keys out of the late stretches, when the option asks for it. This is an
     # item rule rather than an access rule: it does not change what any

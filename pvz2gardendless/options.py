@@ -474,6 +474,30 @@ class TrapWeightGems(TrapWeight):
     display_name = "Trap Weight: -20 Gems"
 
 
+class PlantPowerLogic(DefaultOnToggle):
+    """
+    Require that the plants in logic can actually kill what a level sends.
+
+    On (the default), every level the player brings their own plants to carries
+    one extra requirement: hold an attacker whose lawn's worth of damage per
+    second reaches what that level's waves need. Both figures come from the
+    game's own tables -- see pvz2gardendless/plant_data.py -- and between 12 and
+    73 of the game's plants satisfy any given level, so this is a floor on what
+    a seed may leave you holding rather than a prescription of which plant to
+    use.
+
+    It exists because a seed could put a level in logic that the plants in logic
+    cannot beat: Ancient Egypt 3 with nothing but a 45-second-recharge attacker,
+    and no rule anywhere asking for better.
+
+    Off restores the older behaviour, where a level's only requirements were its
+    world's unlocks and the specific plants a handful of worlds ask for. The
+    guaranteed STARTING plant is held to the same standard either way, since
+    nothing in front of the opening levels can be gated at all.
+    """
+    display_name = "Plant Power Logic"
+
+
 @dataclasses.dataclass
 class PvZ2Options(PerGameCommonOptions):
     world_count:      WorldCount
@@ -489,6 +513,7 @@ class PvZ2Options(PerGameCommonOptions):
     shuffle_upgrades: ShuffleUpgrades
     randomize_conveyor_plants: RandomizeConveyorPlants
     shuffle_zombies:  ShuffleZombies
+    plant_power_logic: PlantPowerLogic
     early_world_keys: EarlyWorldKeys
     include_levels_past_goal: IncludeLevelsPastGoal
     trap_percentage:  TrapPercentage
@@ -501,7 +526,7 @@ OPTION_GROUPS = [
     OptionGroup("Goal Settings",[GoalType, WorldsRequired, EnabledWorlds]),
     OptionGroup("AP Settings", [DeathLink]),
     OptionGroup("Level Access",[WorldCount, IncludeSidePaths,
-                               IncludeLevelsPastGoal]),
+                               IncludeLevelsPastGoal, PlantPowerLogic]),
     OptionGroup("Extra Locations",[Shopsanity]),
     OptionGroup("Traps",[TrapPercentage, TrapWeightLawnMower,
                          TrapWeightCostumeShuffle, TrapWeightCoins,

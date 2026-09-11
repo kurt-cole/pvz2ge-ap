@@ -29,9 +29,11 @@ The tier key joins these with "-":
          iceblock  `NumberOfIceblocksToSpawnWith` -- arrives carrying ice
                    blocks. Answered by FIRE_AURA_PLANTS, which gates
                    Frostbite Caves.
-         air       `ChooseToSpawnOnNonDeckRows`, `BalloonToughness` or
-                   `BugToughness` -- flies over ground plants. No counter list
-                   models this yet, so it is pinned rather than gated.
+         air       `ChooseToSpawnOnNonDeckRows`, `BalloonToughness`,
+                   `BugToughness`, `PlantsToFlyOver`, `WalkSpeedMultFlying`,
+                   `FlyingSpeed`, `FlyDuration` or `FlyingSpeedScale` -- travels
+                   over ground plants instead of walking into them. No counter
+                   list models this yet, so it is pinned rather than gated.
          blocker   `PlantBlockers` / `ZombieBlockers` /
                    `NumberOfArcadeCabinetsToSpawnWith` -- drops something that
                    specific plants alone can clear.
@@ -97,7 +99,7 @@ than being handled here: the camel matching games, the cannon levels,
 Beghouled, bowling, Last Stand and the other set pieces. See
 AP_BESPOKE_MODULES in build_pvzge_ap.py.
 
-262 zombies over 74 tiers, 233 of them (88%) with somebody to trade with.
+262 zombies over 75 tiers, 233 of them (88%) with somebody to trade with.
 Worst intra-tier HP ratio 1.33. 62 codenames excluded.
 """
 
@@ -106,8 +108,9 @@ from typing import Dict, List
 
 ZOMBIE_TIERS: Dict[str, List[str]] = {
     't1-land-air-h17': [
-        'feastivus_swashbuckler', 'lostcity', 'summer_basic', 'swashbuckler',
-    ],  # 4
+        'feastivus_swashbuckler', 'kongfu_rocket_imp', 'lostcity',
+        'summer_basic', 'swashbuckler',
+    ],  # 5
     't1-land-air-h19': [
         'birthday_jetpack', 'future_jetpack', 'future_jetpack_disco',
     ],  # 3
@@ -121,10 +124,9 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
         'beach', 'beach_fem', 'birthday', 'bobsled', 'cowboy', 'dark',
         'dark_imp_dragon', 'dino', 'easter', 'eighties', 'eighties_8bit',
         'feastivus', 'feastivus_flag', 'foodfight', 'foodfight_flag',
-        'future', 'future_flag', 'halloween', 'iceage', 'kongfu_rocket_imp',
-        'lunar', 'mummy', 'pirate', 'ra', 'sportzball', 'stpatrick',
-        'tutorial', 'valentines',
-    ],  # 28
+        'future', 'future_flag', 'halloween', 'iceage', 'lunar', 'mummy',
+        'pirate', 'ra', 'sportzball', 'stpatrick', 'tutorial', 'valentines',
+    ],  # 27
     't1-land-h18': [
         'birthday_pharaoh_inner',
     ],  # 1
@@ -156,6 +158,9 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
     't2-land-air-h18': [
         'pelican', 'seagull',
     ],  # 2
+    't2-land-air-h19': [
+        'monk_imp',
+    ],  # 1
     't2-land-air-h21': [
         'lostcity_armor1', 'summer_armor1',
     ],  # 2
@@ -174,8 +179,8 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
     ],  # 8
     't2-land-h19': [
         'bobsled_team', 'kongfu_chi', 'lostcity_excavator', 'lostcity_jane',
-        'monk_imp', 'tomb_raiser',
-    ],  # 6
+        'tomb_raiser',
+    ],  # 5
     't2-land-h20': [
         'abbot_torch', 'eighties_glitter',
     ],  # 2
@@ -206,8 +211,8 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
         'modern_balloon', 'sportzball_balloon',
     ],  # 2
     't3-land-air-h19': [
-        'future_jetpack_veteran',
-    ],  # 1
+        'future_jetpack_veteran', 'pirate_captain_parrot',
+    ],  # 2
     't3-land-air-h20': [
         'iceage_dodo', 'leprachaun_dodo', 'stpatrick_dodo',
     ],  # 3
@@ -237,8 +242,7 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
     ],  # 1
     't3-land-h19': [
         'eighties_punk_veteran', 'lostcity_impporter',
-        'pirate_captain_parrot',
-    ],  # 3
+    ],  # 2
     't3-land-h20': [
         'kongfu_bomb', 'pirate_captain',
     ],  # 2

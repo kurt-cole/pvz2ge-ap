@@ -249,11 +249,38 @@ class Zombies:
             key += "-iceblock"   # arrives carrying ice blocks
         if (prop.get("ChooseToSpawnOnNonDeckRows")
                 or prop.get("BalloonToughness") is not None
-                or prop.get("BugToughness") is not None):
+                or prop.get("BugToughness") is not None
+                or prop.get("PlantsToFlyOver") is not None
+                or prop.get("WalkSpeedMultFlying") is not None
+                or prop.get("FlyingSpeed") is not None
+                or prop.get("FlyDuration") is not None
+                or prop.get("FlyingSpeedScale") is not None):
             # Flies over ground plants. NOT BalloonToughness alone: that
             # catches the three balloons and misses every jetpack, dodo, bug
             # rider, seagull and pelican, which is how 447 levels used to gain
             # an aerial threat they had none of.
+            #
+            # The last five markers were added on 2026-09-10, after Kurt found a
+            # flying firecracker imp in Ancient Egypt 2. Spawning position and a
+            # balloon's own hit points are not the only ways the game says a
+            # zombie travels over the lawn instead of walking it, and three
+            # zombies said it in a way nothing here was reading:
+            #
+            #   kongfu_rocket_imp   WalkSpeedMultFlying. Priced at 100 with 190
+            #                       HP, so it was tiered with mummy, ra and
+            #                       every other basic walker in the game -- any
+            #                       level with a basic zombie could gain one.
+            #                       Egypt 2 with one starting plant cannot
+            #                       answer a flier at all.
+            #   monk_imp            FlyDuration + FlyingSpeedScale. Tiered with
+            #                       lostcity_jane and tomb_raiser.
+            #   pirate_captain_parrot   FlyingSpeed. Tiered with
+            #                       lostcity_impporter.
+            #
+            # PlantsToFlyOver is in the list for completeness rather than for
+            # effect: the dodos carry it and were already caught by
+            # ChooseToSpawnOnNonDeckRows, and a rule that holds by coincidence
+            # is one regeneration away from not holding.
             key += "-air"
         if (prop.get("PlantBlockers") is not None
                 or prop.get("ZombieBlockers") is not None
@@ -383,9 +410,11 @@ The tier key joins these with "-":
          iceblock  `NumberOfIceblocksToSpawnWith` -- arrives carrying ice
                    blocks. Answered by FIRE_AURA_PLANTS, which gates
                    Frostbite Caves.
-         air       `ChooseToSpawnOnNonDeckRows`, `BalloonToughness` or
-                   `BugToughness` -- flies over ground plants. No counter list
-                   models this yet, so it is pinned rather than gated.
+         air       `ChooseToSpawnOnNonDeckRows`, `BalloonToughness`,
+                   `BugToughness`, `PlantsToFlyOver`, `WalkSpeedMultFlying`,
+                   `FlyingSpeed`, `FlyDuration` or `FlyingSpeedScale` -- travels
+                   over ground plants instead of walking into them. No counter
+                   list models this yet, so it is pinned rather than gated.
          blocker   `PlantBlockers` / `ZombieBlockers` /
                    `NumberOfArcadeCabinetsToSpawnWith` -- drops something that
                    specific plants alone can clear.

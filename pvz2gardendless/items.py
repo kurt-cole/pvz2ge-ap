@@ -10,6 +10,7 @@ from BaseClasses import Item, ItemClassification
 from .constants import (
     slot_entry_groups, UPGRADE_POOL_SHARE, slot_stretch_groups, stretch_suffixes,
     ALL_LOGIC_PLANTS, BASE_ID, CHEAP_ATTACKER_PLANTS, GAME_NAME,
+    power_draw_groups, slot_power_plants,
     KEY_NAME_TO_WORLD, KEYED_WORLDS, LOGIC_PLANTS, SUN_PRODUCER_PLANTS,
     WORLD_ENTRY_PLANTS, WORLD_REGIONS,
     progressive_count, progressive_item_name,
@@ -237,6 +238,15 @@ def _pool_floor_groups(world):
         # plant that opens the back half of a world it built.
         for suffix in stretch_suffixes(w):
             groups.extend(slot_stretch_groups(world, w, suffix))
+    # The plant-power ladder needs ONE plant reserved, not one per rung. The
+    # groups come back hardest last and a plant that clears the hardest rung the
+    # seed needs clears every level in it, so the last group is the whole floor
+    # the power rules require. The easier rungs are drawn to keep fill from
+    # believing Ancient Egypt 3 needs a Citron, which is a question of sphere
+    # depth rather than of solvability, and they cost no reservation.
+    power = power_draw_groups(world)
+    if power:
+        groups.append(power[-1])
     return groups
 
 
@@ -280,6 +290,7 @@ def slot_progression_plants(world) -> set:
         skips a world that is not in the seed, so Lily Pad gates nothing in an
         Egypt-only run
       - this slot's own cheap-attacker draw
+      - this slot's plant-power ladder, when plant_power_logic is on
     """
     # NOT the cheap attackers. Nothing has named them since 2026-08-25, when the
     # attacker half of Ancient Egypt's egypt6 checkpoint was dropped for being
@@ -294,6 +305,11 @@ def slot_progression_plants(world) -> set:
         for suffix in stretch_suffixes(w):
             for group in slot_stretch_groups(world, w, suffix):
                 plants.update(group)
+    # ...and this slot's plant-power ladder. The power rules name far more plants
+    # than these -- every plant that clears the level -- but only the drawn ones
+    # need to be progression, which is the whole point of drawing them. See
+    # POWER_DRAW_COUNT in constants.py.
+    plants.update(slot_power_plants(world))
     return plants
 
 
