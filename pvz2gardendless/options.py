@@ -531,6 +531,6 @@ OPTION_GROUPS = [
     OptionGroup("Traps",[TrapPercentage, TrapWeightLawnMower,
                          TrapWeightCostumeShuffle, TrapWeightCoins,
                          TrapWeightGems]),
-    OptionGroup("Gameplay Tweaks",[SkipTutorial,ShuffleUpgrades, StartingPlants,RandomizeConveyorPlants]),
-    OptionGroup("Experimental DANGER",[ShuffleZombies, IncludeDangerRooms, ModernDayVictory, EarlyWorldKeys])
+    OptionGroup("Gameplay Tweaks",[SkipTutorial,ShuffleUpgrades, StartingPlants,RandomizeConveyorPlants, ShuffleZombies]),
+    OptionGroup("Experimental DANGER",[IncludeDangerRooms, ModernDayVictory, EarlyWorldKeys])
 ]
