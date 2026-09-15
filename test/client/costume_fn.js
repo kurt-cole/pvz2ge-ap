@@ -45,6 +45,18 @@ const ID_TO_CN = {
     160:'perfumeshroom', 161:'solarsage', 162:'bamboozle',
     164:'cantaloupe', 165:'iceweed',
     214:'turkeypult',
+    9:'megagatling', 15:'floawerPot', 98:'marigold', 166:'pinkstarfruit',
+    167:'icebloom', 168:'zoybeanpod', 171:'pyrevine', 172:'shinevine',
+    173:'atombomb_seedling', 174:'hollyknight', 177:'aloe', 178:'caulipower',
+    179:'gumnut', 180:'reinforcemint', 181:'enlightenmint', 182:'wintermint',
+    183:'spearmint', 184:'appeasemint', 185:'enforcemint', 186:'peppermint',
+    187:'bombardmint', 188:'concealmint', 189:'ailmint', 190:'enchantmint',
+    191:'filamint', 192:'containmint', 193:'armamint', 194:'seashooter',
+    195:'shadowpeashooter', 196:'murkadamia', 197:'noctarine', 198:'snappea',
+    199:'asparagus', 200:'pineapple', 201:'anthurium', 202:'bulbkekengi',
+    203:'loquat', 204:'peacommando', 205:'wasabiwhip', 206:'poisonpeashooter',
+    208:'mirrornut', 209:'inferno', 210:'slingpea', 211:'chillypepper',
+    212:'witchhazel',
   };
 const PLANT_COSTUMES = {
     0:10, 1:8, 2:9, 3:3, 4:6, 5:3, 6:5, 7:10, 8:9, 10:2, 11:2, 12:3, 13:1, 14:1, 16:1, 17:3,
@@ -55,7 +67,9 @@ const PLANT_COSTUMES = {
     84:1, 85:1, 86:1, 87:3, 88:3, 89:3, 90:2, 96:3, 97:4, 106:1, 107:2, 108:1, 109:1, 110:1,
     114:2, 120:1, 127:2, 128:1, 129:4, 130:1, 131:2, 132:3, 133:2, 134:2, 135:2, 136:2,
     137:2, 138:2, 139:2, 142:2, 143:2, 144:2, 145:2, 146:2, 148:2, 149:1, 150:2, 151:2,
-    152:2, 153:2, 154:2, 155:1, 156:2, 157:1, 160:2, 161:1, 164:2, 165:1, 214:1
+    152:2, 153:2, 154:2, 155:1, 156:2, 157:1, 160:2, 161:1, 164:2, 165:1, 214:1,
+    9:1, 98:2, 166:2, 167:1, 168:1, 171:1, 174:1, 177:2, 178:1, 179:1, 195:1,
+    197:1, 198:1, 199:1, 200:1, 201:1, 202:1, 205:1, 206:1, 209:1, 210:1, 212:2
   };
 function ownedCostumes(pid){
     return (st.costumes || {})[pid] || [];

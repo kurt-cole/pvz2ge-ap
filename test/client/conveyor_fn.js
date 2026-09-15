@@ -42,6 +42,18 @@ const ID_TO_CN = {
     160:'perfumeshroom', 161:'solarsage', 162:'bamboozle',
     164:'cantaloupe', 165:'iceweed',
     214:'turkeypult',
+    9:'megagatling', 15:'floawerPot', 98:'marigold', 166:'pinkstarfruit',
+    167:'icebloom', 168:'zoybeanpod', 171:'pyrevine', 172:'shinevine',
+    173:'atombomb_seedling', 174:'hollyknight', 177:'aloe', 178:'caulipower',
+    179:'gumnut', 180:'reinforcemint', 181:'enlightenmint', 182:'wintermint',
+    183:'spearmint', 184:'appeasemint', 185:'enforcemint', 186:'peppermint',
+    187:'bombardmint', 188:'concealmint', 189:'ailmint', 190:'enchantmint',
+    191:'filamint', 192:'containmint', 193:'armamint', 194:'seashooter',
+    195:'shadowpeashooter', 196:'murkadamia', 197:'noctarine', 198:'snappea',
+    199:'asparagus', 200:'pineapple', 201:'anthurium', 202:'bulbkekengi',
+    203:'loquat', 204:'peacommando', 205:'wasabiwhip', 206:'poisonpeashooter',
+    208:'mirrornut', 209:'inferno', 210:'slingpea', 211:'chillypepper',
+    212:'witchhazel',
   };
 const CONVEYOR_GROUPS = {
   'attacker:mid': [

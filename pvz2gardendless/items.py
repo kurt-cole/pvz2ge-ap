@@ -16,6 +16,7 @@ from .constants import (
     progressive_count, progressive_item_name,
     UPGRADE_GROUPS,
 )
+from .plant_data import LEVEL_REQUIRED_DPS, PLANT_LAWN_DPS
 
 if TYPE_CHECKING:
     from . import PvZ2GardendlessWorld
@@ -232,7 +233,7 @@ def _pool_floor_groups(world):
     groups = [list(SUN_PRODUCER_PLANTS)]
     for w in sorted(world.enabled_worlds):
         # Narrowed, same as the rule: the floor must protect the ONE Jester
-        # counter this slot named, not any of the 36 that can hurt him.
+        # counter this slot named, not any of the 42 that can hurt him.
         groups.extend(slot_entry_groups(world, w))
         # Per-stretch requirements too, or a small seed can trim away the only
         # plant that opens the back half of a world it built.
@@ -246,7 +247,17 @@ def _pool_floor_groups(world):
     # depth rather than of solvability, and they cost no reservation.
     power = power_draw_groups(world)
     if power:
-        groups.append(power[-1])
+        # A granted plant that clears the hardest requirement this seed built
+        # already satisfies every power rule, so it joins the group and the
+        # floor reserves nothing for it. Without this the floor only noticed
+        # when the draw happened to pick the starter, which is luck.
+        hardest = max((LEVEL_REQUIRED_DPS[loc.name]
+                       for loc in world.active_locations()
+                       if loc.name in LEVEL_REQUIRED_DPS), default=0.0)
+        group = list(power[-1])
+        group += [p for p in getattr(world, "starting_plants", ())
+                  if p not in group and PLANT_LAWN_DPS.get(p, 0.0) >= hardest]
+        groups.append(group)
     return groups
 
 
@@ -312,15 +323,6 @@ def slot_progression_plants(world) -> set:
     plants.update(slot_power_plants(world))
     return plants
 
-
-# A rule naming a plant with no matching item is a rule that can never pass,
-# and it would fail silently -- state.has() just returns False forever. Checked
-# over every plant any rule COULD name, not just the always-progression ones,
-# since the per-slot draw can surface any of the 46.
-_unknown_logic_plants = ALL_LOGIC_PLANTS - {plant.name for plant in PLANT_ITEMS}
-if _unknown_logic_plants:
-    raise ValueError("access rules reference plants that have no item: "
-                     f"{sorted(_unknown_logic_plants)}")
 
 # World Key items — NO LONGER IN THE POOL as of 2026-08-23. A world is opened
 # by the first of its Progressive <World> unlocks instead, so "Wild West Key"
@@ -611,22 +613,84 @@ GOAL_ITEMS: List[PvZ2ItemData] = [
 # other group, and folded into PLANT_ITEMS afterwards -- so the pool builder,
 # the hint groups and create_item all see it as an ordinary plant.
 #
-# The other three plants 0.14.0 shipped -- Blastberry Vine, Stickybomb Rice and
-# Lotorpedo -- are unobtainable until the Arma-Mint EQ releases, so they are
-# deliberately not items yet.
+# The rest were always in the game but had no item: store and event plants,
+# Sky City's plants, the epic quest plants and the 14 Plant Power mints. None
+# of them was left out on purpose. Appended in game plant ID order; only ever
+# append.
 #
-# A plant added here cannot be named by an access rule: the LOGIC_PLANTS check
-# above has already run. Anything a rule names still belongs in `_plants`.
+# NOT items: Blastberry Vine, Stickybomb Rice and Lotorpedo. 0.14.0 ships them
+# in code and data tables but not in the game, so there is nothing to grant.
+#
+# A plant here CAN be named by an access rule. It gets the same static
+# promotion `_plants` does, and the has-an-item check below runs after this
+# block.
 _late_plants = [
     ("Turkey-pult",         ItemClassification.useful),
+    ("Mega Gatling Pea",    ItemClassification.useful),
+    ("Floawer Pot",         ItemClassification.useful),
+    ("Marigold",            ItemClassification.useful),
+    ("Angel Starfruit",     ItemClassification.useful),
+    ("Ice Bloom",           ItemClassification.useful),
+    ("Zoybean Pod",         ItemClassification.useful),
+    ("Pyre Vine",           ItemClassification.useful),
+    ("Shine Vine",          ItemClassification.useful),
+    ("Atomic Bombegranate", ItemClassification.useful),
+    ("Holly Knight",        ItemClassification.useful),
+    ("Aloe",                ItemClassification.useful),
+    ("Caulipower",          ItemClassification.useful),
+    ("Gumnut",              ItemClassification.useful),
+    ("Reinforce-mint",      ItemClassification.useful),
+    ("Enlighten-mint",      ItemClassification.useful),
+    ("Winter-mint",         ItemClassification.useful),
+    ("Spear-mint",          ItemClassification.useful),
+    ("Appease-mint",        ItemClassification.useful),
+    ("Enforce-mint",        ItemClassification.useful),
+    ("Pepper-mint",         ItemClassification.useful),
+    ("Bombard-mint",        ItemClassification.useful),
+    ("Conceal-mint",        ItemClassification.useful),
+    ("Ail-mint",            ItemClassification.useful),
+    ("Enchant-mint",        ItemClassification.useful),
+    ("Fila-mint",           ItemClassification.useful),
+    ("Contain-mint",        ItemClassification.useful),
+    ("Arma-mint",           ItemClassification.useful),
+    ("Seashooter",          ItemClassification.useful),
+    ("Shadow Peashooter",   ItemClassification.useful),
+    ("Murkadamia Nut",      ItemClassification.useful),
+    ("Noctarine",           ItemClassification.useful),
+    ("Snap Pea",            ItemClassification.useful),
+    ("Asparajet",           ItemClassification.useful),
+    ("Spinapple",           ItemClassification.useful),
+    ("Ampereum",            ItemClassification.useful),
+    ("Glowkengi",           ItemClassification.useful),
+    ("Loquanado",           ItemClassification.useful),
+    ("Pea Commando",        ItemClassification.useful),
+    ("Wasabi Whip",         ItemClassification.useful),
+    ("Goo Peashooter",      ItemClassification.useful),
+    ("Mirror-nut",          ItemClassification.useful),
+    ("Inferno",             ItemClassification.useful),
+    ("Sling Pea",           ItemClassification.useful),
+    ("Chilly Pepper",       ItemClassification.useful),
+    ("Witch Hazel",         ItemClassification.useful),
 ]
 _late_plant_base = _goal_item_base + len(GOAL_ITEMS)
 LATE_PLANT_ITEMS: List[PvZ2ItemData] = [
-    PvZ2ItemData(name, cls, _late_plant_base + i)
+    PvZ2ItemData(name,
+                 ItemClassification.progression if name in LOGIC_PLANTS else cls,
+                 _late_plant_base + i)
     for i, (name, cls) in enumerate(_late_plants)
 ]
 PLANT_ITEMS.extend(LATE_PLANT_ITEMS)
 PLANT_NAMES.update(plant.name for plant in LATE_PLANT_ITEMS)
+
+# A rule naming a plant with no matching item is a rule that can never pass,
+# and it would fail silently: state.has() just returns False forever. Checked
+# over every plant any rule COULD name, not just the always-progression ones,
+# since the per-slot draw can surface any of them. Runs here, after the late
+# plants, because a rule list may name one of those.
+_unknown_logic_plants = ALL_LOGIC_PLANTS - {plant.name for plant in PLANT_ITEMS}
+if _unknown_logic_plants:
+    raise ValueError("access rules reference plants that have no item: "
+                     f"{sorted(_unknown_logic_plants)}")
 
 ALL_ITEMS: List[PvZ2ItemData] = (PLANT_ITEMS + KEY_ITEMS + FILLER_ITEMS
                                  + TRAP_ITEMS + UPGRADE_ITEMS + COSTUME_ITEMS

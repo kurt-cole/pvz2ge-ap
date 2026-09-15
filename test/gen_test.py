@@ -2183,18 +2183,18 @@ print(f"trap mix at 50%: {dict(_cnt(_tw))}, "
 
 # ── the Jester counter is drawn per slot ──────────────────────────────────────
 #
-# 36 plants can damage the Dark Ages Jester; the entrance names ONE of them,
-# drawn per slot, so each seed asks for a different plant. The other 35 are
-# ordinary useful plants. Naming all 36 would promote all 36 to progression,
+# 42 plants can damage the Dark Ages Jester; the entrance names ONE of them,
+# drawn per slot, so each seed asks for a different plant. The other 41 are
+# ordinary useful plants. Naming all 42 would promote all 42 to progression,
 # which is the exact cost LOGIC_ATTACKER_COUNT was introduced to avoid.
 
 from apstub import ItemClassification as _IC_j
 
-# Literals: 36 is the derived list, 1 is the design decision. Reading either off
+# Literals: 42 is the derived list, 1 is the design decision. Reading either off
 # the constant under test would agree with whatever the constant said.
 assert C.JESTER_DRAW_COUNT == 1, C.JESTER_DRAW_COUNT
-assert len(C.JESTER_COUNTER_PLANTS) == 36, len(C.JESTER_COUNTER_PLANTS)
-assert len(set(C.JESTER_COUNTER_PLANTS)) == 36, "duplicate Jester counters"
+assert len(C.JESTER_COUNTER_PLANTS) == 42, len(C.JESTER_COUNTER_PLANTS)
+assert len(set(C.JESTER_COUNTER_PLANTS)) == 42, "duplicate Jester counters"
 
 # Neither of the two plants removed for dealing no damage may come back, and
 # neither may Magnifying Grass, whose only projectile the Jester catches.

@@ -244,7 +244,7 @@ class PvZ2GardendlessWorld(World):
     # satisfied by anything in the pool.
     logic_attackers: frozenset = frozenset()
 
-    # This slot's Jester counter, one of the 36 that can damage him. Same
+    # This slot's Jester counter, one of the 42 that can damage him. Same
     # reasoning, same hazard: slot_entry_groups reads it through
     # slot_progression_plants.
     logic_jesters: frozenset = frozenset()
@@ -384,9 +384,9 @@ class PvZ2GardendlessWorld(World):
         self.logic_attackers = frozenset(
             [starter] + self.random.sample(_rest, LOGIC_ATTACKER_COUNT - 1))
 
-        # This slot's Jester counter, on the same principle: 36 plants can hurt
+        # This slot's Jester counter, on the same principle: 42 plants can hurt
         # him, the Dark Ages entrance names JESTER_DRAW_COUNT of them, and only
-        # those are progression. Naming all 36 would promote all 36 and squeeze
+        # those are progression. Naming all 42 would promote all 42 and squeeze
         # a small seed exactly as naming all 46 attackers did.
         #
         # Drawn for EVERY slot, not just seeds with Dark Ages: create_item and
@@ -428,7 +428,7 @@ class PvZ2GardendlessWorld(World):
         # The slot's own drawn cheap attackers are NOT excluded: the starter
         # already satisfies that gate, so granting another changes nothing.
         #
-        # The Jester group is NOT excluded wholesale: 36 plants can hurt him and
+        # The Jester group is NOT excluded wholesale: 42 plants can hurt him and
         # only the one this slot drew is named by any rule, so excluding all of
         # them would take a quarter of the roster out of the draw to protect a
         # gate that asks for one plant. The drawn one is excluded, like any

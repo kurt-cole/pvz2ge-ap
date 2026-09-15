@@ -170,6 +170,14 @@ INTERVALS = ("ShootInterval", "ThrowInterval", "AttackInterval",
 # Projectile-naming fields whose projectile is NOT the normal attack.
 NOT_NORMAL = re.compile(r"Plantfood|PlantFood|PF|Mint|Mega|Giant|Ultra|Upgraded")
 
+# The Plant Power mints are free, one-use boosts to a plant family. Several
+# name a projectile or an explosion, but none is a lawn attacker.
+MINT_EXCLUSION = "Plant Power mint, a one-use family boost (unverified)"
+# Consumables with no _PLANTPROPERTIES sheet, so no IsConsumable flag to read.
+# Chilly Pepper is a cold Jalapeno, an instant, and would otherwise read as
+# eight persistent copies.
+CONSUMABLE_BY_HAND = {"Chilly Pepper"}
+
 
 def num(value):
     """A damage field as a float. Some are lists (one entry per upgrade)."""
@@ -389,6 +397,11 @@ class Game:
             return float(costs[0])
         return None
 
+    def consumable(self, codename):
+        """IsConsumable in either table: the plant is used up when it acts."""
+        return bool(self.sheet(codename).get("IsConsumable")
+                    or (self.plant_props.get(codename) or {}).get("IsConsumable"))
+
     def recharge(self, codename):
         props = self.plant_props.get(codename) or {}
         cooldown = props.get("Cooldown")
@@ -428,6 +441,9 @@ def plant_lawn_dps(game, bridge, single_use, non_damaging):
     for name, codename in sorted(bridge.items()):
         if name in non_damaging:
             excluded[name] = "no attack"
+            continue
+        if name.endswith("-mint"):
+            excluded[name] = MINT_EXCLUSION
             continue
         if game.water_only(codename):
             # A water plant cannot answer a dry level, and most levels are dry.
@@ -690,7 +706,9 @@ EXCLUSIONS. A plant with no lawn dps is not an answer to anything and is left
 out of every requirement list, which is the conservative direction: a rule can
 only ask for a plant the model is sure about. Support, defence and sun state no
 damage; water plants are out because most levels are dry; a few real attackers
-are out because the reimplementation keeps their damage in code.
+are out because the reimplementation keeps their damage in code. The Plant Power
+mints are left out by hand in the generator, a judgement rather than a reading
+of the data.
 
 LEVELS WITH NO REQUIREMENT. A level whose SeedBank is `preset`, one carrying a
 ConveyorBelt module, and one with no wave manager at all (the Zomboss fights)
@@ -813,9 +831,13 @@ def main() -> int:
     for level, data in pressure.items():
         if data["own_plants"] and level in tracked:
             required[level] = round(data["pressure"] / WAVE_SECONDS, 1)
+    # SINGLE_USE_PLANTS only covers the cheap attackers, so the game's own
+    # IsConsumable flag supplies the rest. Adding it moved no plant that was
+    # already priced; it catches the consumables added with the new items.
+    single_use = (set(constants.SINGLE_USE_PLANTS) | CONSUMABLE_BY_HAND
+                  | {name for name, cn in bridge.items() if game.consumable(cn)})
     plants, excluded = plant_lawn_dps(
-        game, bridge, set(constants.SINGLE_USE_PLANTS),
-        set(constants.NON_DAMAGING_PLANTS))
+        game, bridge, single_use, set(constants.NON_DAMAGING_PLANTS))
 
     # Clamp: no level may ask for more than the ANSWER_FLOOR-th best plant can
     # do. See ANSWER_FLOOR for why.

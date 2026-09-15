@@ -185,7 +185,7 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     for w in WORLD_ENTRY_PLANTS:
         if w not in world.enabled_worlds:
             continue  # not in this seed: no entrance to rule on
-        # Not WORLD_ENTRY_PLANTS[w] directly: the Jester group is 36 plants and
+        # Not WORLD_ENTRY_PLANTS[w] directly: the Jester group is 42 plants and
         # this slot named only the one it drew. items.py and the pool floor call
         # the same helper, so all three agree on that plant.
         requirements = slot_entry_groups(world, w)

@@ -7,19 +7,36 @@
   177.3,
   220.4,
   298.0,
-  389.2
+  400.0
  ],
  "excluded": {
+  "Ail-mint": "Plant Power mint, a one-use family boost (unverified)",
+  "Aloe": "no damage stated",
+  "Ampereum": "no damage stated",
+  "Appease-mint": "Plant Power mint, a one-use family boost (unverified)",
+  "Arma-mint": "Plant Power mint, a one-use family boost (unverified)",
+  "Atomic Bombegranate": "no PlantProps entry",
   "Bamboozle": "no damage stated",
   "Blover": "no damage stated",
+  "Bombard-mint": "Plant Power mint, a one-use family boost (unverified)",
+  "Caulipower": "no damage stated",
   "Chard Guard": "no attack",
+  "Conceal-mint": "Plant Power mint, a one-use family boost (unverified)",
+  "Contain-mint": "Plant Power mint, a one-use family boost (unverified)",
   "E.M. Peach": "no attack",
+  "Enchant-mint": "Plant Power mint, a one-use family boost (unverified)",
+  "Enforce-mint": "Plant Power mint, a one-use family boost (unverified)",
+  "Enlighten-mint": "Plant Power mint, a one-use family boost (unverified)",
   "Explode-O-Nut": "no attack",
+  "Fila-mint": "Plant Power mint, a one-use family boost (unverified)",
   "Fire Gourd": "no damage stated",
+  "Floawer Pot": "no damage stated",
   "Garlic": "no damage stated",
+  "Glowkengi": "no damage stated",
   "Gold Bloom": "no damage stated",
   "Gold Leaf": "no damage stated",
   "Grave Buster": "no damage stated",
+  "Gumnut": "no damage stated",
   "Heavenly Peach": "no damage stated",
   "Hot Potato": "no damage stated",
   "Hurrikale": "no damage stated",
@@ -30,22 +47,29 @@
   "Infi-nut": "no damage stated",
   "Intensive Carrot": "no attack",
   "Lily Pad": "water only",
+  "Loquanado": "no damage stated",
   "Magnet-shroom": "no damage stated",
+  "Marigold": "no damage stated",
   "Meteor Flower": "no damage stated",
+  "Mirror-nut": "no attack",
   "Moon Bean": "no damage stated",
   "Moonflower": "no attack",
+  "Murkadamia Nut": "no damage stated",
+  "Pepper-mint": "Plant Power mint, a one-use family boost (unverified)",
   "Perfume-shroom": "no damage stated",
   "Plantern": "no damage stated",
   "Power Lily": "no damage stated",
   "Primal Sunflower": "no damage stated",
   "Primal Wall-nut": "no damage stated",
   "Pumpkin": "no damage stated",
+  "Reinforce-mint": "Plant Power mint, a one-use family boost (unverified)",
   "Resistant Radish": "no damage stated",
-  "Rotobaga": "no PlantProps entry",
   "Sap-fling": "no attack",
   "Shrinking Violet": "no attack",
   "Solar Sage": "no damage stated",
   "Solar Tomato": "no damage stated",
+  "Spear-mint": "Plant Power mint, a one-use family boost (unverified)",
+  "Spinapple": "no damage stated",
   "Stallia": "no damage stated",
   "Stunion": "no damage stated",
   "Sun Bean": "no damage stated",
@@ -58,7 +82,8 @@
   "Tile Turnip": "no damage stated",
   "Twin Sunflower": "no damage stated",
   "Umbrella Leaf": "no damage stated",
-  "Wall-nut": "no damage stated"
+  "Wall-nut": "no damage stated",
+  "Winter-mint": "Plant Power mint, a one-use family boost (unverified)"
  },
  "levels": {
   "appease1_5": {
@@ -68,7 +93,7 @@
    "required_dps": 163.7
   },
   "atombomb4": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "beach1": {
    "required_dps": 198.4
@@ -125,7 +150,7 @@
    "required_dps": 378.0
   },
   "beach37": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "beach38": {
    "required_dps": 377.5
@@ -137,7 +162,7 @@
    "required_dps": 246.9
   },
   "beach40": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "beach6": {
    "required_dps": 218.2
@@ -152,7 +177,7 @@
    "required_dps": 311.5
   },
   "bloominghearts4": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "buttercup3": {
    "required_dps": 239.4
@@ -161,7 +186,7 @@
    "required_dps": 265.8
   },
   "conceal10": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "conceal5": {
    "required_dps": 217.7
@@ -281,13 +306,13 @@
    "required_dps": 265.4
   },
   "dark25": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "dark27": {
    "required_dps": 334.9
   },
   "dark28": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "dark3": {
    "required_dps": 200.9
@@ -362,10 +387,10 @@
    "required_dps": 314.6
   },
   "dino33": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "dino36": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "dino37": {
    "required_dps": 353.6
@@ -389,13 +414,13 @@
    "required_dps": 164.9
   },
   "doomshroom2": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "doomshroom4": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "doomshroom5": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "egypt10": {
    "required_dps": 117.7
@@ -473,7 +498,7 @@
    "required_dps": 173.3
   },
   "eighties13": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "eighties15": {
    "required_dps": 234.6
@@ -599,7 +624,7 @@
    "required_dps": 190.6
   },
   "future29": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "future3": {
    "required_dps": 126.4
@@ -629,19 +654,19 @@
    "required_dps": 187.6
   },
   "ghostpepper3": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "gloomshroom2": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "gloomshroom3": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "gloomshroom5": {
    "required_dps": 342.1
   },
   "gloomshroom6": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "goldbloom0": {
    "required_dps": 158.3
@@ -704,16 +729,16 @@
    "required_dps": 142.6
   },
   "iceage31": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "iceage32": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "iceage35": {
    "required_dps": 359.7
   },
   "iceage36": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "iceage38": {
    "required_dps": 294.8
@@ -737,7 +762,7 @@
    "required_dps": 215.1
   },
   "iceshroom2": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "iceshroom5": {
    "required_dps": 312.5
@@ -881,7 +906,7 @@
    "required_dps": 220.4
   },
   "lostcity35": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "lostcity38": {
    "required_dps": 312.3
@@ -902,7 +927,7 @@
    "required_dps": 147.4
   },
   "meteorflower2": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "mirrornut2": {
    "required_dps": 262.1
@@ -968,7 +993,7 @@
    "required_dps": 219.3
   },
   "modern37": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "modern38": {
    "required_dps": 173.6
@@ -998,7 +1023,7 @@
    "required_dps": 211.0
   },
   "parsnip2": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "pepper6": {
    "required_dps": 90.6
@@ -1085,16 +1110,16 @@
    "required_dps": 301.7
   },
   "plantern3": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "poisonpeashooter5": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "reinforce4": {
    "required_dps": 378.7
   },
   "reinforce6": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "reinforcemint_try1": {
    "required_dps": 72.1
@@ -1103,7 +1128,7 @@
    "required_dps": 48.7
   },
   "sapfling3": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "sky1": {
    "required_dps": 93.5
@@ -1136,7 +1161,7 @@
    "required_dps": 317.5
   },
   "sky29": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "sky30": {
    "required_dps": 379.9
@@ -1163,7 +1188,7 @@
    "required_dps": 238.9
   },
   "strawburst3": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "strawburst4": {
    "required_dps": 341.5
@@ -1172,25 +1197,25 @@
    "required_dps": 362.8
   },
   "sweetpotato3": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "sweetpotato4": {
    "required_dps": 216.4
   },
   "umbrellaleaf10": {
-   "required_dps": 389.2
+   "required_dps": 390.9
   },
   "umbrellaleaf3": {
    "required_dps": 330.5
   },
   "umbrellaleaf5": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "umbrellaleaf6": {
    "required_dps": 219.5
   },
   "umbrellaleaf8": {
-   "required_dps": 389.2
+   "required_dps": 400.0
   },
   "vamporcini2": {
    "required_dps": 180.7
@@ -1206,12 +1231,26 @@
    "lawn": 102.6,
    "sun": 175.0
   },
+  "Angel Starfruit": {
+   "codename": "pinkstarfruit",
+   "dps": 21.05,
+   "from": "props:PeaType",
+   "lawn": 84.2,
+   "sun": 225.0
+  },
   "Apple Mortar": {
    "codename": "applemortar",
    "dps": 48.0,
    "from": "props:CabbageType",
    "lawn": 192.0,
    "sun": 250.0
+  },
+  "Asparajet": {
+   "codename": "asparagus",
+   "dps": 10.96,
+   "from": "props:Damage",
+   "lawn": 43.8,
+   "sun": 225.0
   },
   "Bamboo Shoot": {
    "codename": "bambooshoot",
@@ -1303,6 +1342,13 @@
    "from": "sheet:special",
    "lawn": 25.0,
    "sun": 50.0
+  },
+  "Chilly Pepper": {
+   "codename": "chillypepper",
+   "dps": 48.0,
+   "from": "props:Damage",
+   "lawn": 48.0,
+   "sun": 125.0
   },
   "Chomper": {
    "codename": "chomper",
@@ -1451,6 +1497,13 @@
    "lawn": 400.0,
    "sun": 250.0
   },
+  "Goo Peashooter": {
+   "codename": "poisonpeashooter",
+   "dps": 21.05,
+   "from": "props:PeaType",
+   "lawn": 126.3,
+   "sun": 150.0
+  },
   "Grapeshot": {
    "codename": "grapeshot",
    "dps": 17.14,
@@ -1472,6 +1525,13 @@
    "lawn": 112.3,
    "sun": 125.0
   },
+  "Holly Knight": {
+   "codename": "hollyknight",
+   "dps": 60.0,
+   "from": "sheet:projectile",
+   "lawn": 360.0,
+   "sun": 150.0
+  },
   "Homing Thistle": {
    "codename": "homingthistle",
    "dps": 28.07,
@@ -1486,12 +1546,26 @@
    "lawn": 240.0,
    "sun": 175.0
   },
+  "Ice Bloom": {
+   "codename": "icebloom",
+   "dps": 5.0,
+   "from": "sheet:explode",
+   "lawn": 5.0,
+   "sun": 200.0
+  },
   "Iceweed": {
    "codename": "iceweed",
    "dps": 60.0,
    "from": "sheet:special",
    "lawn": 360.0,
    "sun": 150.0
+  },
+  "Inferno": {
+   "codename": "inferno",
+   "dps": 20.17,
+   "from": "props:TornadoType",
+   "lawn": 100.8,
+   "sun": 200.0
   },
   "Jalapeno": {
    "codename": "jalapeno",
@@ -1542,6 +1616,13 @@
    "lawn": 19819.8,
    "sun": 50.0
   },
+  "Mega Gatling Pea": {
+   "codename": "megagatling",
+   "dps": 14.04,
+   "from": "props:PeaType",
+   "lawn": 28.1,
+   "sun": 450.0
+  },
   "Melon-Pult": {
    "codename": "melonpult",
    "dps": 86.49,
@@ -1563,12 +1644,26 @@
    "lawn": 444.4,
    "sun": 75.0
   },
+  "Noctarine": {
+   "codename": "noctarine",
+   "dps": 1.33,
+   "from": "sheet:explode",
+   "lawn": 1.3,
+   "sun": 150.0
+  },
   "Parsnip": {
    "codename": "parsnip",
    "dps": 87.5,
    "from": "sheet:special",
    "lawn": 525.0,
    "sun": 150.0
+  },
+  "Pea Commando": {
+   "codename": "peacommando",
+   "dps": 30.0,
+   "from": "props:PeaType",
+   "lawn": 60.0,
+   "sun": 450.0
   },
   "Pea Pod": {
    "codename": "peapod",
@@ -1640,6 +1735,13 @@
    "lawn": 336.8,
    "sun": 0.0
   },
+  "Pyre Vine": {
+   "codename": "pyrevine",
+   "dps": 3.33,
+   "from": "props:DPS",
+   "lawn": 26.7,
+   "sun": 125.0
+  },
   "Red Stinger": {
    "codename": "redstinger",
    "dps": 16.0,
@@ -1653,6 +1755,13 @@
    "from": "props:PeaType",
    "lawn": 70.2,
    "sun": 200.0
+  },
+  "Rotobaga": {
+   "codename": "xshot",
+   "dps": 21.05,
+   "from": "props:PeaType",
+   "lawn": 126.3,
+   "sun": 150.0
   },
   "Scaredy-shroom": {
    "codename": "scaredyshroom",
@@ -1668,12 +1777,33 @@
    "lawn": 168.4,
    "sun": 0.0
   },
+  "Seashooter": {
+   "codename": "seashooter",
+   "dps": 14.04,
+   "from": "props:PeaType",
+   "lawn": 42.1,
+   "sun": 275.0
+  },
+  "Shadow Peashooter": {
+   "codename": "shadowpeashooter",
+   "dps": 14.04,
+   "from": "props:PeaType",
+   "lawn": 56.1,
+   "sun": 225.0
+  },
   "Shadow-shroom": {
    "codename": "shadowshroom",
    "dps": 3.0,
    "from": "props:PoisonDPS",
    "lawn": 3.0,
    "sun": 50.0
+  },
+  "Shine Vine": {
+   "codename": "shinevine",
+   "dps": 1.67,
+   "from": "sheet:special",
+   "lawn": 20.0,
+   "sun": 75.0
   },
   "Shooting Starfruit": {
    "codename": "shootingstarfruit",
@@ -1689,12 +1819,26 @@
    "lawn": 126.3,
    "sun": 150.0
   },
+  "Sling Pea": {
+   "codename": "slingpea",
+   "dps": 15.0,
+   "from": "props:PeaType",
+   "lawn": 120.0,
+   "sun": 125.0
+  },
   "Snap Dragon": {
    "codename": "snapdragon",
    "dps": 15.58,
    "from": "props:Damage",
    "lawn": 93.5,
    "sun": 150.0
+  },
+  "Snap Pea": {
+   "codename": "snappea",
+   "dps": 29.63,
+   "from": "props:PeaType",
+   "lawn": 148.1,
+   "sun": 200.0
   },
   "Snow Pea": {
    "codename": "snowpea",
@@ -1801,12 +1945,33 @@
    "lawn": 20.0,
    "sun": 100.0
   },
+  "Wasabi Whip": {
+   "codename": "wasabiwhip",
+   "dps": 66.67,
+   "from": "sheet:special",
+   "lawn": 266.7,
+   "sun": 225.0
+  },
   "Winter Melon": {
    "codename": "wintermelon",
    "dps": 86.49,
    "from": "props:CabbageType",
    "lawn": 173.0,
    "sun": 500.0
+  },
+  "Witch Hazel": {
+   "codename": "witchhazel",
+   "dps": 135.21,
+   "from": "sheet:projectile",
+   "lawn": 676.1,
+   "sun": 200.0
+  },
+  "Zoybean Pod": {
+   "codename": "zoybeanpod",
+   "dps": 1.0,
+   "from": "almanac grade median",
+   "lawn": 5.0,
+   "sun": 200.0
   }
  },
  "sun_budget": 1000.0,

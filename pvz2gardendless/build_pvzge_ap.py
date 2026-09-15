@@ -1090,11 +1090,23 @@ window.electron = electron;
     BloomingHeart:153, ShrinkingViolet:154, HotDate:155, FireGourd:156, BambooShoot:157,
     Snowdrop:158, Lychee:159, PerfumeShroom:160, SolarSage:161, Bamboozle:162,
     Cantaloupe:164, Iceweed:165,
-    // Added in game 0.14.0. The other three plants that update shipped
-    // (Blastberry Vine, Stickybomb Rice, Lotorpedo) are OBTAINWORLD "epic"
-    // and the patch notes call them unobtainable until the Arma-Mint EQ, so
-    // only this one is an item.
+    // Added in game 0.14.0.
     TurkeyPult:214,
+    // Plants the game already had that no item granted until now: store and
+    // event plants, Sky City, the epic quests and the Plant Power mints.
+    // Blastberry Vine (213), Stickybomb Rice (215) and Lotorpedo (216) are in
+    // the code and tables but not yet in the game, so they are not items.
+    MegaGatling:9, FloawerPot:15, Marigold:98, AngelStarfruit:166, IceBloom:167,
+    ZoybeanPod:168, PyreVine:171, ShineVine:172, AtomicBombegranate:173,
+    HollyKnight:174, Aloe:177, Caulipower:178, Gumnut:179,
+    ReinforceMint:180, EnlightenMint:181, WinterMint:182, SpearMint:183,
+    AppeaseMint:184, EnforceMint:185, PepperMint:186, BombardMint:187,
+    ConcealMint:188, AilMint:189, EnchantMint:190, FilaMint:191,
+    ContainMint:192, ArmaMint:193,
+    Seashooter:194, ShadowPeashooter:195, Murkadamia:196, Noctarine:197,
+    SnapPea:198, Asparajet:199, Spinapple:200, Ampereum:201, Glowkengi:202,
+    Loquanado:203, PeaCommando:204, WasabiWhip:205, GooPeashooter:206,
+    MirrorNut:208, Inferno:209, SlingPea:210, ChillyPepper:211, WitchHazel:212,
     // Dragonbruit (26) is CUT CONTENT: it has a plant class, props and an
     // almanac page, but its codename is absent from SEEDCHOOSERDEFAULTORDER,
     // and getObtainedPlantIDs() skips any plant not in that list. Owning it is
@@ -1150,6 +1162,18 @@ window.electron = electron;
     160:'perfumeshroom', 161:'solarsage', 162:'bamboozle',
     164:'cantaloupe', 165:'iceweed',
     214:'turkeypult',
+    9:'megagatling', 15:'floawerPot', 98:'marigold', 166:'pinkstarfruit',
+    167:'icebloom', 168:'zoybeanpod', 171:'pyrevine', 172:'shinevine',
+    173:'atombomb_seedling', 174:'hollyknight', 177:'aloe', 178:'caulipower',
+    179:'gumnut', 180:'reinforcemint', 181:'enlightenmint', 182:'wintermint',
+    183:'spearmint', 184:'appeasemint', 185:'enforcemint', 186:'peppermint',
+    187:'bombardmint', 188:'concealmint', 189:'ailmint', 190:'enchantmint',
+    191:'filamint', 192:'containmint', 193:'armamint', 194:'seashooter',
+    195:'shadowpeashooter', 196:'murkadamia', 197:'noctarine', 198:'snappea',
+    199:'asparagus', 200:'pineapple', 201:'anthurium', 202:'bulbkekengi',
+    203:'loquat', 204:'peacommando', 205:'wasabiwhip', 206:'poisonpeashooter',
+    208:'mirrornut', 209:'inferno', 210:'slingpea', 211:'chillypepper',
+    212:'witchhazel',
   };
 
   // Reverse map exposed for the plantProps Proxy in the SystemJS hook IIFE above.
@@ -1159,7 +1183,8 @@ window.electron = electron;
   // How many costumes each plant has, from the game's PlantFeatures table
   // (its COSTUME field). Costume indices for a plant run 0..count-1, which is
   // how getAvailablePlantCostumeList() enumerates them. Only the plants
-  // Archipelago manages are listed: 121 of them, 312 costumes between them.
+  // Archipelago manages that have a costume are listed: 143 of them, 338
+  // costumes between them. A managed plant absent here has none.
   // Re-read from game 0.14.0, which gave Jack O' Lantern a fourth costume and
   // Fire Gourd a second, and added Turkey-pult (one costume).
   const PLANT_COSTUMES = {
@@ -1171,7 +1196,9 @@ window.electron = electron;
     84:1, 85:1, 86:1, 87:3, 88:3, 89:3, 90:2, 96:3, 97:4, 106:1, 107:2, 108:1, 109:1, 110:1,
     114:2, 120:1, 127:2, 128:1, 129:4, 130:1, 131:2, 132:3, 133:2, 134:2, 135:2, 136:2,
     137:2, 138:2, 139:2, 142:2, 143:2, 144:2, 145:2, 146:2, 148:2, 149:1, 150:2, 151:2,
-    152:2, 153:2, 154:2, 155:1, 156:2, 157:1, 160:2, 161:1, 164:2, 165:1, 214:1
+    152:2, 153:2, 154:2, 155:1, 156:2, 157:1, 160:2, 161:1, 164:2, 165:1, 214:1,
+    9:1, 98:2, 166:2, 167:1, 168:1, 171:1, 174:1, 177:2, 178:1, 179:1, 195:1,
+    197:1, 198:1, 199:1, 200:1, 201:1, 202:1, 205:1, 206:1, 209:1, 210:1, 212:2
   };
 
   // Conveyor swap groups. A belt entry is traded for a plant that plays the
@@ -1557,7 +1584,24 @@ window.electron = electron;
     'Hot Date':P.HotDate,'Fire Gourd':P.FireGourd,'Bamboo Shoot':P.BambooShoot,
     'Snowdrop':P.Snowdrop,'Lychee':P.Lychee,'Perfume-shroom':P.PerfumeShroom,
     'Solar Sage':P.SolarSage,'Bamboozle':P.Bamboozle,'Cantaloupe-pult':P.Cantaloupe,
-    'Iceweed':P.Iceweed,'Turkey-pult':P.TurkeyPult
+    'Iceweed':P.Iceweed,'Turkey-pult':P.TurkeyPult,
+    'Mega Gatling Pea':P.MegaGatling,'Floawer Pot':P.FloawerPot,'Marigold':P.Marigold,
+    'Angel Starfruit':P.AngelStarfruit,'Ice Bloom':P.IceBloom,'Zoybean Pod':P.ZoybeanPod,
+    'Pyre Vine':P.PyreVine,'Shine Vine':P.ShineVine,
+    'Atomic Bombegranate':P.AtomicBombegranate,'Holly Knight':P.HollyKnight,
+    'Aloe':P.Aloe,'Caulipower':P.Caulipower,'Gumnut':P.Gumnut,
+    'Reinforce-mint':P.ReinforceMint,'Enlighten-mint':P.EnlightenMint,
+    'Winter-mint':P.WinterMint,'Spear-mint':P.SpearMint,'Appease-mint':P.AppeaseMint,
+    'Enforce-mint':P.EnforceMint,'Pepper-mint':P.PepperMint,'Bombard-mint':P.BombardMint,
+    'Conceal-mint':P.ConcealMint,'Ail-mint':P.AilMint,'Enchant-mint':P.EnchantMint,
+    'Fila-mint':P.FilaMint,'Contain-mint':P.ContainMint,'Arma-mint':P.ArmaMint,
+    'Seashooter':P.Seashooter,'Shadow Peashooter':P.ShadowPeashooter,
+    'Murkadamia Nut':P.Murkadamia,'Noctarine':P.Noctarine,'Snap Pea':P.SnapPea,
+    'Asparajet':P.Asparajet,'Spinapple':P.Spinapple,'Ampereum':P.Ampereum,
+    'Glowkengi':P.Glowkengi,'Loquanado':P.Loquanado,'Pea Commando':P.PeaCommando,
+    'Wasabi Whip':P.WasabiWhip,'Goo Peashooter':P.GooPeashooter,
+    'Mirror-nut':P.MirrorNut,'Inferno':P.Inferno,'Sling Pea':P.SlingPea,
+    'Chilly Pepper':P.ChillyPepper,'Witch Hazel':P.WitchHazel
   };
 
   // World Key gates: [keysNeeded, [worldIds]]

@@ -342,8 +342,8 @@ UPGRADE_POOL_SHARE = 20
 LOGIC_ATTACKER_COUNT = 10
 
 # How many Jester counters each slot's Dark Ages entrance names. ONE: the
-# rule only ever needed one to be findable, and naming all 36 would promote
-# all 36 to progression, which is the exact cost LOGIC_ATTACKER_COUNT exists
+# rule only ever needed one to be findable, and naming all 42 would promote
+# all 42 to progression, which is the exact cost LOGIC_ATTACKER_COUNT exists
 # to avoid. Drawn per slot, so each seed asks for a different plant.
 JESTER_DRAW_COUNT = 1
 
@@ -434,6 +434,7 @@ NON_DAMAGING_PLANTS = [
     "Explode-O-Nut",    # a wall; only hurts what is already eating it
     "Hypno-shroom",     # converts a zombie, Damage 0
     "Intensive Carrot", # revives a destroyed plant, no attack at all
+    "Mirror-nut",       # a wall; fires back damage its neighbours absorb
     "Moonflower",       # shadow support, powers other plants
     "Shrinking Violet", # shrinks zombies, no damage
 ]
@@ -512,9 +513,15 @@ if _unknown_excluded:
 # whose ordinary shot is reversible and whose flagged projectile is the child
 # it leaves behind, and Iceweed, whose flagged one is its plant food.
 #
-# Six plants qualify and are in the item pool. Others do in the game --
-# Caulipower, Holly Knight, Anthurium, Dark Matter Dragonfruit -- but have no
-# item, so naming them would gate on something the multiworld cannot send.
+# ADDED with the plants that had no item before: Holly Knight (flagged
+# projectile with damage fields), Inferno (flagged projectile with damage),
+# Wasabi Whip (melee AttackDamage, no projectile), Chilly Pepper (Damage, no
+# projectile, same shape as Jalapeno), Pyre Vine (flame DPS, no projectile,
+# same shape as Gloom Vine) and Snap Pea (its pea is reversible, its snap is
+# not; confirmed in play). Caulipower's projectile is flagged but states no
+# damage, the Sap-fling case, so it is out. Ice Bloom, Noctarine, Asparajet,
+# Loquanado, Shine Vine, Ampereum and Mirror-nut carry some damage evidence
+# but are unverified, and stay out until checked in play.
 #
 # Deliberately NOT included: the 62 plants that damage without a projectile at
 # all, which he also has nothing to reverse. Most are melee, one-shots or
@@ -545,7 +552,7 @@ if _unknown_excluded:
 # that can damage him, with one drawn per slot (JESTER_DRAW_COUNT). That makes
 # each seed ask for a different plant instead of the same five every time, and
 # it is why the list can be this big without making the gate free: only the ONE
-# drawn plant is progression, the other 35 are ordinary useful plants.
+# drawn plant is progression, the other 41 are ordinary useful plants.
 #
 # A plant qualifies if it deals damage the Jester cannot confiscate:
 #   - a projectile the game flags CannotBeReversedByJester (it pops normally),
@@ -581,7 +588,7 @@ if _unknown_excluded:
 #     though separate `strawburst0/1/2` entries in the projectile table ARE
 #     flagged. The projectile table is sparse and evidently inherits, so which
 #     entry a Strawburst shot really uses is unresolved. Left out until it is.
-# 36 plants, one of which each slot draws (see JESTER_DRAW_COUNT). Derived,
+# 42 plants, one of which each slot draws (see JESTER_DRAW_COUNT). Derived,
 # not curated: see the two-condition rule above.
 JESTER_COUNTER_PLANTS = [
     "Bamboo Shoot",
@@ -592,6 +599,7 @@ JESTER_COUNTER_PLANTS = [
     "Celery Stalker",
     "Cherry Bomb",
     "Chili Bean",
+    "Chilly Pepper",
     "Chomper",
     "Cold Snapdragon",
     "Doom-shroom",
@@ -603,7 +611,9 @@ JESTER_COUNTER_PLANTS = [
     "Ghost Pepper",
     "Gloom Vine",
     "Grapeshot",
+    "Holly Knight",
     "Iceweed",
+    "Inferno",
     "Jalapeno",
     "Laser Bean",
     "Lava Guava",
@@ -614,12 +624,15 @@ JESTER_COUNTER_PLANTS = [
     "Potato Mine",
     "Primal Potato Mine",
     "Primal Wall-nut",
+    "Pyre Vine",
     "Shadow-shroom",
     "Snap Dragon",
+    "Snap Pea",
     "Spikerock",
     "Spikeweed",
     "Squash",
     "Torchwood",
+    "Wasabi Whip",
 ]
 
 # Every one of these must actually DEAL DAMAGE, or it is not an answer. See the
@@ -638,8 +651,10 @@ if _no_damage_counters:
 # and applies "thaw_whole_stage" to plants. That property is the mechanic, so
 # it is the definition used here.
 #
-# Six plants have it; Wasabi Whip is the one with no Archipelago item, so it
-# is left out. Deliberately absent are Hot Potato and Pepper-pult, which the
+# Eight plants have it, all of them items now: Wasabi Whip, Pyre Vine and
+# Inferno were added with the plants that had none (the same WarmingRadius
+# block; Pyre Vine pulses every 3 seconds, the rest every 6). Deliberately
+# absent are Hot Potato and Pepper-pult, which the
 # old version of this rule accepted: neither has a warming radius. Hot Potato
 # thaws one plant once and is gone, and Pepper-pult only deals fire damage.
 # Both help, but neither keeps a lawn warm, which is what the world asks for.
@@ -649,6 +664,9 @@ FIRE_AURA_PLANTS = [
     "Jack O' Lantern",
     "Lava Guava",
     "Torchwood",
+    "Wasabi Whip",
+    "Pyre Vine",
+    "Inferno",
 ]
 
 # Plants a world needs on top of its unlock, as a list of requirements: the

@@ -519,12 +519,12 @@ if "Dark Ages" in w.enabled_worlds:
     if _open("Dark Ages", [_da, _SUN1, "Sap-fling"]):
         _named.append("Dark Ages opens on Sap-fling, which deals no damage")
 
-    # EXACTLY ONE of the 36 is named. The whole point of the draw is that the
-    # other 35 are ordinary useful plants, so holding one must NOT open the
+    # EXACTLY ONE of the 42 is named. The whole point of the draw is that the
+    # other 41 are ordinary useful plants, so holding one must NOT open the
     # world -- if it did, the group would be back to being free.
     assert len(w.logic_jesters) == 1, sorted(w.logic_jesters)
     _undrawn = sorted(set(C.JESTER_COUNTER_PLANTS) - set(w.logic_jesters))
-    assert len(_undrawn) == 35, len(_undrawn)
+    assert len(_undrawn) == 41, len(_undrawn)
     _wrongly_open = [p for p in _undrawn if _open("Dark Ages", [_da, _SUN1, p])]
     if _wrongly_open:
         _named.append(f"Dark Ages opens on {len(_wrongly_open)} counters it did "
