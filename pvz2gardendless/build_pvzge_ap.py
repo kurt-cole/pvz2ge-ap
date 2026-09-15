@@ -586,7 +586,7 @@ window.electron = electron;
           // and the shadow roll has to count slots the same way the swap does.
           // Same test the swap below applies, so the two paths touch exactly the
           // same slots: a real plant, in a group, not locked to its belt or its
-          // terrain. glaciershroom and rotobaga are in no group and so are left
+          // terrain. glaciershroom and xshot (Rotobaga) are in no group and so are left
           // alone by both.
           const swappableAt = list.map(e => !!(e && known && known.has(e.PlantType) &&
                                                swaps[e.PlantType] &&
@@ -1113,7 +1113,10 @@ window.electron = electron;
     8:'repeater', 10:'scaredyshroom', 11:'fumeshroom',
     12:'gravebuster', 13:'pumpkin', 14:'pvine',
     16:'firepeashooter', 17:'threepeater', 18:'primalpeashooter',
-    19:'rotobaga', 20:'homingthistle', 21:'starfruit', 22:'shootingstarfruit',
+    // Rotobaga's codename is 'xshot', not 'rotobaga'. The old key matched no
+    // plant, so the item granted nothing; a stray 'rotobaga' left in a save is
+    // dropped by the authorized-plant sweep like any other unknown key.
+    19:'xshot', 20:'homingthistle', 21:'starfruit', 22:'shootingstarfruit',
     23:'lilypad', 24:'sunshroom', 25:'twinsunflower', 26:'dragonbruit',
     207:'darkmatterdragonfruit',
     27:'moonflower', 28:'snowpea', 29:'lightningreed', 30:'kernelpult',
@@ -1198,7 +1201,7 @@ window.electron = electron;
   //
   // Plants deliberately in no group are never swapped, in either direction:
   // glaciershroom, whose damage is not in any table the game loads, and
-  // rotobaga, which has no sun cost anywhere. An unknown is not a zero.
+  // xshot (Rotobaga), which has no sun cost anywhere. An unknown is not a zero.
   //
   // goldbloom is here for a different reason (Kurt, 2026-09-09). It costs 0 sun
   // and so banded as instant:budget, but the only thing it does is produce sun
@@ -1312,7 +1315,7 @@ window.electron = electron;
     ],
     'Nope': [
       'goldleaf', 'imitater', 'lilypad', 'perfumeshroom', 'powerlily',
-      'rotobaga', 'thymewarp'
+      'thymewarp', 'xshot'
     ],
     'Peashooter': [
       'bowlingbulb', 'dandelion', 'gatling', 'peapod', 'peashooter',
