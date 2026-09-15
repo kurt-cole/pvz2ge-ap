@@ -51,7 +51,7 @@ The tier key joins these with "-":
      per-level cost inside 0.78-1.21 (p5-p95) while per-level HP ran
      0.56-2.51, with 34 levels at 3x or worse -- pirate1 fielded eighteen
      10000 HP shields in place of its basic pirates. With the band, HP lands
-     at 0.95-1.05. See ZOMBIE_RANDO_DEV.md.
+     at 0.95-1.05. See .claude/ZOMBIE_RANDO_DEV.md.
 
 That fourth partition is the reason this option needs no new access rule.
 Threat mechanics cannot be created or destroyed by a shuffle, so every world's
@@ -373,7 +373,7 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
 
 # codename -> effective HP (Toughness plus every StartingArmors entry). Sent to
 # the client as slot_data so its per-level budget guard can weigh a level's
-# roster before and after a shuffle; see ZOMBIE_RANDO_DEV.md. Only the tiered
+# roster before and after a shuffle; see .claude/ZOMBIE_RANDO_DEV.md. Only the tiered
 # zombies are here -- an untiered one never moves, so nothing needs to weigh
 # it.
 ZOMBIE_HP: Dict[str, int] = {
