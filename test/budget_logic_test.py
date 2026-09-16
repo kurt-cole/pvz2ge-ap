@@ -26,7 +26,7 @@ from pvz2gardendless.items import ITEM_NAME_GROUPS  # noqa: E402
 from pvz2gardendless.plant_data import LEVEL_REQUIRED_DPS, PLANT_LAWN_DPS  # noqa: E402
 from opts import Opts  # noqa: E402
 
-BUDGET = dict(shuffle_zombies=1, zombie_budget_roll=1, travelling_dinos=1)
+BUDGET = dict(shuffle_zombies=1, travelling_dinos=1)
 EVERY = dict(world_count=13, enabled_worlds=list(C.SELECTABLE_WORLDS),
              include_levels_past_goal=1)
 SEEDS = [1, 2, 3, 4]
@@ -71,11 +71,9 @@ def reachable(mw, names):
 print("\n=== budget roll off ===")
 _, w_off, sd_off = build(seed=1, **EVERY)
 _, w_tier, sd_tier = build(seed=1, shuffle_zombies=1, **EVERY)
-_, w_lone, _ = build(seed=1, zombie_budget_roll=1, **EVERY)
-# [user] The budget roll replaced the tier shuffle: shuffle_zombies alone turns
-# it on, and the deprecated zombie_budget_roll does nothing by itself.
-if w_off.budget_mode or w_lone.budget_mode or not w_tier.budget_mode:
-    fail("budget mode does not follow shuffle_zombies alone")
+# [user] The budget roll replaced the tier shuffle: shuffle_zombies turns it on.
+if w_off.budget_mode or not w_tier.budget_mode:
+    fail("budget mode does not follow shuffle_zombies")
 elif B.slot_level_hazard_groups(w_off):
     fail("hazard rules exist outside budget mode")
 elif not sd_tier["zombie_budget_roll"]:
@@ -83,7 +81,7 @@ elif not sd_tier["zombie_budget_roll"]:
 elif (sd_off["zombie_budget_roll"], sd_off["travelling_dinos"], sd_off["logic_jester_power"]) != (False, False, []):
     fail("slot data claims budget mode with it off")
 else:
-    ok("shuffle_zombies alone is the budget roll; off and the deprecated option alone keep today's logic")
+    ok("shuffle_zombies is the budget roll, and off keeps today's logic")
 
 # ── on ───────────────────────────────────────────────────────────────────────
 print("\n=== budget roll on, every world ===")
@@ -170,7 +168,7 @@ for seed in SEEDS:
            f"{len(mw.itempool)} items, hazard floor {B.slot_hazard_floor_groups(w)}")
 
 # ── travelling dinos off ─────────────────────────────────────────────────────
-_, w_nodino, sd_nodino = build(seed=1, **EVERY, shuffle_zombies=1, zombie_budget_roll=1)
+_, w_nodino, sd_nodino = build(seed=1, **EVERY, shuffle_zombies=1)
 if any(plan and plan["dinos"] for plan in w_nodino.budget_plans.values()):
     fail("travelling_dinos off, but a level gained dinos")
 elif sd_nodino["travelling_dinos"]:
@@ -196,7 +194,8 @@ for seed in SEEDS:
                for p in w.starting_plants):
         problems.append(f"no granted starter carries Egypt 1-5 at {floor}")
     power = power_draw_groups(w)
-    if power and _pool_floor_groups(w)[-1] != list(power[-1]):
+    # The DPS ladder only sets the floor without a loadout selection.
+    if w.power_selection is None and power and _pool_floor_groups(w)[-1] != list(power[-1]):
         problems.append("the pool floor still lets a granted plant stand in for power")
 
     strong = sorted(B.strong_plants(w))
@@ -262,7 +261,10 @@ for seed in SEEDS:
         if B._jester_short(w, loc.name) and not any(
                 B.lawn_at(p, budget) >= B.jester_need(w, loc.name) for p in w.logic_jester_power):
             problems.append(f"{loc.name}: Jester class need not covered by the power draw")
-    for plant in {p for _, g in w.logic_budget_power for p in g}:
+    # Per-budget draws feed rules (and so must be progression) only without a
+    # loadout selection, which replaces them.
+    for plant in ({p for _, g in w.logic_budget_power for p in g}
+                  if w.power_selection is None else ()):
         if w.create_item(plant).classification != IC.progression:
             problems.append(f"budget power plant {plant} is not progression")
     if problems:

@@ -1527,9 +1527,12 @@ assert set(_ENTRY_WORLDS) <= _wE.enabled_worlds, _wE.enabled_worlds
 _unlock_room = (sum(C.progressive_count(_x) for _x in _wE.enabled_worlds)
                 + (C.UPGRADE_ITEM_COUNT if _wE.options.shuffle_upgrades else 0)
                 + (GEM_GRANT_COUNT if _wE.options.shopsanity else 0))
-_squeezed = W.items.create_item_pool(_wE, _unlock_room + 12)
+# At least the floor itself, which since 2026-09-16 includes the plant-power
+# selection's loadouts and can exceed a dozen plants.
+_room_E = max(12, len(W.items._pool_floor_names(_wE)))
+_squeezed = W.items.create_item_pool(_wE, _unlock_room + _room_E)
 _names_E = {i.name for i in _squeezed}
-assert len(_squeezed) == _unlock_room + 12, len(_squeezed)
+assert len(_squeezed) == _unlock_room + _room_E, len(_squeezed)
 
 for _plant, _world in (("Lily Pad", "Big Wave Beach"),
                        ("Blover", "Far Future"),
@@ -1553,15 +1556,17 @@ assert _wEgypt.enabled_worlds == {"Ancient Egypt"}, _wEgypt.enabled_worlds
 # is off so there is no gem grant, and the upgrades take 20% of one location,
 # which is none -- so whatever plant survives IS what the floor forced.
 #
-# ONE plant, not two, since 2026-08-25. Egypt's egypt6 checkpoint used to want a
-# sun producer AND a cheap attacker, but the attacker half was dropped: the
-# precollected starter always satisfied it, and naming it made trackers demand
-# an attacker the seed need not contain.
-_egypt_pool = {i.name for i in W.items.create_item_pool(_wEgypt, 1)}
+# Since 2026-09-16 the floor is whatever the plant-power loadouts need
+# (power_logic.floor_groups) plus the sun producer, so it is squeezed to exactly
+# that size rather than to a literal: every floor plant must survive, and one of
+# them must be a sun producer.
+_egypt_floor = W.items._pool_floor_names(_wEgypt)
+_egypt_pool = {i.name for i in W.items.create_item_pool(_wEgypt, len(_egypt_floor))}
 _egypt_plants = _egypt_pool & {p.name for p in W.items.PLANT_ITEMS}
-assert len(_egypt_plants) == 1, f"floor is {sorted(_egypt_plants)}, expected 1 plant"
+assert _egypt_floor <= _egypt_plants, \
+    f"a squeezed pool dropped floor plants: {sorted(_egypt_floor - _egypt_plants)}"
 assert set(C.SUN_PRODUCER_PLANTS) & _egypt_plants, \
-    f"the one forced plant is not a sun producer: {sorted(_egypt_plants)}"
+    f"no forced plant is a sun producer: {sorted(_egypt_plants)}"
 # The attacker half is covered by the precollected starter, not by the pool.
 assert set(C.CHEAP_ATTACKER_PLANTS) & set(_wEgypt.starting_plants), \
     "the starter is not a cheap attacker, so a run could begin with nothing placeable"
@@ -1768,7 +1773,13 @@ for _n in (1, 10):
     for _i in _wS.multiworld.precollected: _st.collect(_i.name)
     _st.sweep()
     _s1 = len(_st.reachable_locations())
-    assert _s1 == 9, f"starting_plants={_n} makes sphere 1 {_s1}, expected 9"
+    # [user] 2026-09-16: the loadout simulation finds egypt2 unbeatable with a
+    # lone starter and no sun producer (playtest agrees), and producers are
+    # withheld, so sphere 1 is at least tutorial1-4 and egypt1 and at most the
+    # old 9, when enough granted plants form a loadout that needs no producer.
+    _names1 = {l.name for l in _st.reachable_locations()}
+    assert {"tutorial1", "tutorial2", "tutorial3", "tutorial4", "egypt1"} <= _names1 \
+        and _s1 <= 9, f"starting_plants={_n} makes sphere 1 {sorted(_names1)}"
 
 # ...and the count really is the option, not a constant: 10 must differ from 1.
 _w1, _ = run("start 1: draw", starting_plants=1)
@@ -1870,11 +1881,15 @@ for _name in ("Progressive Ancient Egypt", "Sky Shield", "100 Coins",
 _wE2, _ = run("classification: Egypt-only progression set", world_count=1)
 assert _wE2.enabled_worlds == {"Ancient Egypt"}, _wE2.enabled_worlds
 _egypt_prog = W.items.slot_progression_plants(_wE2)
-# Since 2026-09-16 the power part is every plant a built power rule names, not
-# only the drawn ladder: AP never counts a useful plant toward a rule. It takes
-# no room from filler or traps, which create_item_pool adds only after every
-# plant, progression or useful.
-_power_egypt = C.slot_power_plants(_wE2) | W.budget_logic.power_rule_plants(_wE2)
+# Since 2026-09-16 the power part is the plants the slot's power selection
+# names (power_logic.select): every plant a built loadout or counter rule
+# names, and no more. The DPS ladder only applies without the loadout table.
+if W.power_logic.available():
+    _power_egypt = W.power_logic.promoted_plants(_wE2)
+    assert _power_egypt <= set(_wE2.power_selection) | set(_wE2.starting_plants), \
+        "power rules name plants outside the selection"
+else:
+    _power_egypt = C.slot_power_plants(_wE2) | W.budget_logic.power_rule_plants(_wE2)
 _want_egypt = set(C.SUN_PRODUCER_PLANTS) | _power_egypt
 assert _egypt_prog == _want_egypt, (
     f"an Egypt-only seed's progression plants are {sorted(_egypt_prog - _want_egypt)} "
@@ -1888,7 +1903,10 @@ assert len(C.slot_power_plants(_wE2)) <= 2 * C.POWER_DRAW_COUNT, \
 # level, so they are counted directly rather than as what the power set leaves.
 assert len(set(C.SUN_PRODUCER_PLANTS)) == 5 and set(C.SUN_PRODUCER_PLANTS) <= _egypt_prog, \
     sorted(_egypt_prog)
-assert not ({"Lily Pad", "Blover", "Perfume-shroom", "Torchwood"} & _egypt_prog), \
+# ...except where the power selection itself chose one as an Egypt loadout plant
+# (Torchwood can be a utility), which is progression for Egypt's own levels.
+assert not ({"Lily Pad", "Blover", "Perfume-shroom", "Torchwood"} & _egypt_prog
+            - set(_wE2.power_selection or ())), \
     "an Egypt-only seed still carries entry plants for worlds it does not have"
 print(f"per-slot classification: {len(_egypt_prog)} progression plants in an "
       f"Egypt-only seed, {len(W.items.PLANT_ITEMS) - len(_egypt_prog)} useful")
@@ -2071,14 +2089,14 @@ _og_flat = [o for g in _OG for o in g.options]
 _og_declared = [f.type for f in _dc_og.fields(W.PvZ2Options)]
 
 # Literals, not len(OPTION_GROUPS) / len(fields) -- an expectation read from the
-# thing under test passes whatever that thing says. 25 is every option in
-# PvZ2Options as of 2026-09-16 (24 before power_loadouts_per_level, 22 before
-# zombie_budget_roll and
+# thing under test passes whatever that thing says. 24 is every option in
+# PvZ2Options as of 2026-09-16 (zombie_budget_roll removed and
+# power_loadouts_per_level added that day, 22 before zombie_budget_roll and
 # travelling_dinos, 21 before plant_power_logic, 20 before
 # include_levels_past_goal); 7 is the groups options.py declares.
 assert len(_OG) == 7, f"expected 7 option groups, got {len(_OG)}"
-assert len(_og_declared) == 25, \
-    f"PvZ2Options declares {len(_og_declared)} options, not 25 -- if that is " \
+assert len(_og_declared) == 24, \
+    f"PvZ2Options declares {len(_og_declared)} options, not 24 -- if that is " \
     "intended, update this literal AND put the new option in a group"
 
 _og_missing = [o.__name__ for o in _og_declared if o not in _og_flat]
@@ -2245,7 +2263,8 @@ for _other in sorted(set(C.JESTER_COUNTER_PLANTS) - set(_drawn)):
     # and a Frostbite Caves warming plant.
     if (_other in _jw.logic_attackers or _other in C.SUN_PRODUCER_PLANTS
             or _other in _OTHER_ENTRY or _other in C.slot_power_plants(_jw)
-            or _other in W.budget_logic.power_rule_plants(_jw)):
+            or _other in W.budget_logic.power_rule_plants(_jw)
+            or _other in W.power_logic.promoted_plants(_jw)):
         continue
     assert _jw.create_item(_other).classification == _IC_j.useful, \
         f"undrawn counter {_other} is progression; the draw is not narrowing"
@@ -2277,6 +2296,7 @@ _je_prog = [n for n in C.JESTER_COUNTER_PLANTS
             # own levels do name.
             and n not in C.slot_power_plants(_je)
             and n not in W.budget_logic.power_rule_plants(_je)
+            and n not in W.power_logic.promoted_plants(_je)
             and _je.create_item(n).classification == _IC_j.progression]
 assert not _je_prog, \
     f"Egypt-only seed marks Jester counters progression for a world it never built: {_je_prog}"
@@ -2420,7 +2440,8 @@ _eprog = [i.name for i in _ew.multiworld.itempool
 assert _eprog, "no progression item at all, so egypt8 would be unreachable"
 _enonsun = sorted(set(_eprog) - set(C.SUN_PRODUCER_PLANTS)
                   - C.slot_power_plants(_ew)
-                  - W.budget_logic.power_rule_plants(_ew))
+                  - W.budget_logic.power_rule_plants(_ew)
+                  - W.power_logic.promoted_plants(_ew))
 assert not _enonsun, f"progression items that are not sun producers: {_enonsun}"
 assert _esd["goal_locations"] == ["egypt8"], _esd["goal_locations"]
 print(f"Egypt-only world_key: {len(_enames)} locations, {len(_eprog)} progression "
@@ -2562,25 +2583,18 @@ assert _gn.create_item("Grave Buster").classification == _IC_j.progression, \
 # precollected starter.
 _gf, _ = run("grave: small seed floor", world_count=1,
              include_levels_past_goal=1, worlds_required=1)
-# Squeezed to the floor itself: five slots, because this seed keeps the levels
-# past the goal and so ships Ancient Egypt's two unlocks; 20% of five locations
-# is no upgrade and shopsanity is off, so the other three slots are exactly the
-# floor and whatever survives IS what it forced.
-_gf_pool = {i.name for i in W.items.create_item_pool(_gf, 5)}
+# Squeezed to the floor itself: the unlocks this seed ships (the levels past the
+# goal are kept, so Ancient Egypt's two), plus exactly the plants the floor
+# reserves (_pool_floor_names). Since 2026-09-16 that floor includes the loadouts
+# the plant-power selection needs, so it is read rather than written as a
+# literal; what matters is that every floor plant, Grave Buster and a sun
+# producer survive the squeeze.
+_gf_unlocks = sum(1 for _i in _gf.multiworld.itempool if _i.name.startswith("Progressive "))
+_gf_floor = W.items._pool_floor_names(_gf)
+_gf_pool = {i.name for i in W.items.create_item_pool(_gf, _gf_unlocks + len(_gf_floor))}
 _gf_plants = _gf_pool & {p.name for p in W.items.PLANT_ITEMS}
-# ...unless the starter already clears the hardest level this seed built, in
-# which case _pool_floor_groups lets it stand in for the power plant and the
-# floor is two. That depends on which starter the seed drew, so the test states
-# which case it is in rather than trusting one seed. The budget zombie roll
-# removes this shortcut (budget_logic.starter_candidates).
-_gf_hardest = max((W.items.LEVEL_REQUIRED_DPS[_l.name] for _l in _gf.active_locations()
-                   if _l.name in W.items.LEVEL_REQUIRED_DPS), default=0.0)
-_gf_starter_covers = any(W.items.PLANT_LAWN_DPS.get(_p, 0.0) >= _gf_hardest
-                         for _p in _gf.starting_plants)
-_gf_want = 2 if _gf_starter_covers else 3
-assert len(_gf_plants) == _gf_want, \
-    f"floor is {sorted(_gf_plants)}, expected {_gf_want} plants " \
-    f"(starter covers the hardest level: {_gf_starter_covers})"
+assert _gf_floor <= _gf_plants, \
+    f"the squeezed pool dropped floor plants: {sorted(_gf_floor - _gf_plants)}"
 assert "Grave Buster" in _gf_plants, (
     f"the floor dropped Grave Buster, which Egypt Mid needs: {sorted(_gf_plants)}")
 assert set(C.SUN_PRODUCER_PLANTS) & _gf_plants, "floor has no sun producer"

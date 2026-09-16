@@ -35,6 +35,13 @@ def ok(m):
     print("  ok    " + m)
 
 
+# [user] 2026-09-16: the loadout power rules make a level need a real loadout,
+# so the gate-structure checks below (which hold a few hand-picked plants) build
+# with plant power logic off and test the region gates alone. The power-on shape
+# of sphere 1 is checked on its own, right after the unreachable-levels check.
+GATES = dict(plant_power_logic=0)
+
+
 def build(**kw):
     """A seed for the sphere checks.
 
@@ -180,6 +187,27 @@ if _bad2:
 else:
     ok("...and none is built into a region at all")
 
+# ── sphere 1 under the loadout power rules ──────────────────────────────────
+# [user] egypt2 is not beatable with a lone starter and no sun producer, and
+# producers are withheld, so sphere 1 is at least tutorial1-4 and egypt1. Every
+# way past Egypt's opening still runs through a sun producer: holding the whole
+# pool except them reaches nothing beyond egypt1-5 and the tutorial.
+_mwP, _wP = build()
+_preP = [i.name for i in _mwP.precollected]
+_s1P = {l.name for l in state_with(_mwP, _preP).reachable_locations()}
+_nosunP = {l.name for l in state_with(
+    _mwP, _preP + [i.name for i in _mwP.itempool
+                   if i.name not in set(C.SUN_PRODUCER_PLANTS)]).reachable_locations()}
+_openingP = {f"tutorial{k}" for k in range(1, 6)} | {f"egypt{k}" for k in range(1, 6)}
+_beyondP = sorted(_nosunP - _openingP)
+if not {"tutorial1", "tutorial2", "tutorial3", "tutorial4", "egypt1"} <= _s1P:
+    fail(f"power logic shut part of the tutorial or egypt1 out of sphere 1: {sorted(_s1P)}")
+elif _beyondP:
+    fail(f"reachable past Egypt's opening without a sun producer: {_beyondP[:5]}")
+else:
+    ok(f"power logic: sphere 1 is {len(_s1P)} locations, and nothing past egypt5 "
+       "opens without a sun producer")
+
 # ── a Danger Room is never in logic before the level that unlocks it ────────
 # In game the room's map node reads its own level progress, which nothing
 # raises except beating the level whose FirstRewardParam names its trophy
@@ -204,7 +232,7 @@ import random as _rndD
 from pvz2gardendless.constants import DANGER_ROOM_UNLOCK, SUN_PRODUCER_PLANTS as _SUND
 
 print("\n=== danger rooms wait for their unlock level ===")
-_mwD, _wD = build(include_danger_rooms=1)
+_mwD, _wD = build(include_danger_rooms=1, **GATES)
 _preD = [i.name for i in _mwD.precollected]
 _keysD = [i.name for i in _mwD.itempool if i.name.endswith(" Key")]
 _placedD = {l.name for r in _mwD.regions for l in r.locations}
@@ -261,7 +289,7 @@ print("\n=== side paths wait for the level that reveals them ===")
 from pvz2gardendless.constants import (
     SIDE_PATH_CHAIN as _CHAIN, SIDE_PATH_UNLOCK as _UNLOCK,
 )
-_mwS, _wS = build(include_side_paths=1, include_danger_rooms=1)
+_mwS, _wS = build(include_side_paths=1, include_danger_rooms=1, **GATES)
 _preS = [i.name for i in _mwS.precollected]
 _keysS = [i.name for i in _mwS.itempool if i.name.endswith(" Key")]
 
@@ -338,7 +366,7 @@ else:
 # until Modern Day 14 or floawerPot until Aerial Fortress 31.
 print("\n=== shop cards wait for the level that stocks them ===")
 from pvz2gardendless.locations import SHOP_LOC_UNLOCK as _UNLOCKC
-_mwC, _wC = build(shopsanity=1)
+_mwC, _wC = build(shopsanity=1, **GATES)
 _preC = [i.name for i in _mwC.precollected]
 _keysC = [i.name for i in _mwC.itempool if i.name.endswith(" Key")]
 _placedC = {l.name for r in _mwC.regions for l in r.locations}
@@ -409,7 +437,7 @@ report("12 worlds, completion goal", goal_type=GoalType.option_completion,
 # "unlock + sun + plants opens it" would pass with any of the three rules
 # deleted, since dropping a requirement only makes the world easier to open.
 print("\n=== world entry ===")
-mw, w = build()
+mw, w = build(**GATES)
 _pre_only = [i.name for i in mw.precollected]
 _SUN1 = C.SUN_PRODUCER_PLANTS[0]
 
@@ -541,31 +569,6 @@ else:
     ok("Lily Pad, Blover, Perfume-shroom, a Jester answer and a warming plant "
        "each open their world on top of unlock+sun, and Pirate Seas needs none")
 
-# The deprecated zombie_budget_roll option alone must not move a single location
-# between spheres: it is ignored now. The sphere shape is a design target
-# (sphere 1 is deliberately ~7% of locations), so a silent shift is the failure
-# mode worth catching.
-def sphere_shape(**kw):
-    mw, w = build(**kw)
-    pre = [i.name for i in mw.precollected]
-    out = []
-    for extra in ([], ["Sunflower"], [C.progressive_item_name(n) for n in
-                       ("Pirate Seas", "Wild West", "Dark Ages")]):
-        st = state_with(mw, pre + extra)
-        out.append(sorted(l.name for l in st.reachable_locations()))
-    return out
-
-
-# [user] shuffle_zombies is now the budget roll, which adds hazard rules, so
-# only the deprecated tier-swap path could hold this. Kept on zombies off vs
-# the deprecated zombie_budget_roll alone, which must still change nothing.
-_off, _on = sphere_shape(shuffle_zombies=0), sphere_shape(zombie_budget_roll=1)
-if _off != _on:
-    _diff = next(sorted(set(a) ^ set(b)) for a, b in zip(_off, _on) if a != b)
-    fail(f"zombie_budget_roll alone moved {len(_diff)} locations between spheres: {_diff[:5]}")
-else:
-    ok(f"zombie_budget_roll alone leaves every sphere identical "
-       f"({', '.join(str(len(s)) for s in _off)} locations at 3 depths)")
 
 # ── Egypt's opening is egypt1-8, and egypt9 is behind the first unlock ──────
 # Ancient Egypt's opening runs to its World Key level, egypt8, and is playable
@@ -580,7 +583,7 @@ else:
 _PROG_EGYPT = 'Progressive Ancient Egypt'
 from pvz2gardendless.constants import SUN_PRODUCER_PLANTS
 
-_mw, _w = build()
+_mw, _w = build(**GATES)
 _pre = [i.name for i in _mw.precollected]
 # Egypt's gated stretches want the sun rule and, past egypt8, an unlock. The
 # plant counts they used to stack on top went with every other plant
@@ -694,7 +697,7 @@ else:
 #
 # Built with shopsanity on, since with it off the region holds no locations and
 # the probe would pass vacuously -- the same trap the early_world_keys probe hit.
-_mws, _ws = build(shopsanity=1)
+_mws, _ws = build(shopsanity=1, **GATES)
 _pres = [i.name for i in _mws.precollected]
 _shop_locs = [l.name for l in _ws.active_locations() if l.is_shop]
 if not _shop_locs:

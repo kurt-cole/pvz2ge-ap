@@ -1,6 +1,9 @@
 """Run the whole offline test suite.
 
-    python test/run.py
+    python test/run.py [-j N] [suite ...]
+
+Suites run in parallel, one per CPU by default; each suite's output prints
+whole when it finishes.
 
 Archipelago is not importable outside a full AP checkout, so generation is
 exercised against apstub.py, a hand-written stand-in for BaseClasses, Options,
@@ -10,7 +13,8 @@ source, or a built apworld -- it is all pure logic.
 Node is optional: the JS suites are skipped with a warning if it is missing,
 since the Python suites cover generation on their own.
 """
-import os, shutil, subprocess, sys
+import argparse, os, shutil, subprocess, sys, time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CLIENT = os.path.join(HERE, "client")
@@ -51,30 +55,68 @@ JS_SUITES = [
 
 
 def run(label, cmd, cwd, blurb):
-    # flush before handing the terminal to the child, or our headers buffer up
-    # and print after all the subprocess output.
-    print(f"\n{'=' * 70}\n  {label}  --  {blurb}\n{'=' * 70}", flush=True)
-    result = subprocess.run(cmd, cwd=cwd)
-    return result.returncode == 0
+    """One suite, output captured so parallel suites do not interleave."""
+    start = time.time()
+    result = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True)
+    return label, blurb, result.returncode == 0, result.stdout, time.time() - start
+
+
+def report(entry):
+    label, blurb, ok, output, secs = entry
+    print(f"\n{'=' * 70}\n  {label} ({secs:.0f}s): {blurb}\n{'=' * 70}")
+    print(output, end="", flush=True)
 
 
 def main():
-    results = []
-    for label, script, blurb in PY_SUITES:
-        results.append((label, run(label, [sys.executable, script], HERE, blurb)))
+    ap = argparse.ArgumentParser(description="Run the offline test suite in parallel.")
+    ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 4,
+                    help="suites run at once (default: one per CPU)")
+    ap.add_argument("only", nargs="*", help="suite labels to run (default: all)")
+    args = ap.parse_args()
 
+    def wanted(label):
+        return not args.only or label in args.only
+
+    jobs = [(label, [sys.executable, script], HERE, blurb)
+            for label, script, blurb in PY_SUITES if wanted(label)]
     node = shutil.which("node")
     if not node:
-        print("\n  WARNING: node not on PATH -- skipping the client JS suites.")
-        print("  The Python suites above still cover generation.")
+        print("\n  WARNING: node not on PATH, skipping the client JS suites.")
+        print("  The Python suites still cover generation.")
     else:
-        for label, script, blurb in JS_SUITES:
-            results.append((label, run(label, [node, script], CLIENT, blurb)))
+        js = [(label, [node, script], CLIENT, blurb)
+              for label, script, blurb in JS_SUITES if wanted(label)]
+        # The load suite runs alone and first: a client that dies on load makes
+        # every other JS result meaningless.
+        if js and js[0][0] == "load":
+            first = run(*js[0])
+            report(first)
+            if not first[2]:
+                print("\n  load FAILED, skipping the other JS suites.")
+                js = []
+            results_first = [first]
+            js = js[1:]
+        else:
+            results_first = []
+        jobs += js
+
+    start = time.time()
+    results = list(results_first if node else [])
+    with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
+        futures = [pool.submit(run, *job) for job in jobs]
+        for future in as_completed(futures):
+            entry = future.result()
+            report(entry)
+            results.append(entry)
 
     print(f"\n{'=' * 70}")
-    failed = [label for label, ok in results if not ok]
-    for label, ok in results:
-        print(f"  {'PASS' if ok else 'FAIL'}  {label}")
+    order = {label: i for i, (label, _, _) in enumerate(JS_SUITES + PY_SUITES)}
+    results.sort(key=lambda e: order.get(e[0], 0))
+    failed = [e[0] for e in results if not e[2]]
+    for label, _, ok, _, secs in results:
+        print(f"  {'PASS' if ok else 'FAIL'}  {label:12s} {secs:5.0f}s")
+    print(f"  wall clock {time.time() - start:.0f}s")
     if failed:
         print(f"\n{len(failed)} SUITE(S) FAILED: {', '.join(failed)}")
         return 1

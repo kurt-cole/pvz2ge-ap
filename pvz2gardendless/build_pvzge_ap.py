@@ -1049,7 +1049,7 @@ window.electron = electron;
     try { if (window._AP_log) window._AP_log(msg); } catch (e) { /* no panel */ }
   }
 
-  // ── Budget zombie roll (zombie_budget_roll, experimental) ───────────────────
+  // ── Budget zombie roll (shuffle_zombies) ─────────────────────────────────────
   // The client half of pvz2gardendless/zombie_roll.py. Generation rolled every
   // level from zombie_seed and built its logic from the result; this re-rolls
   // the identical plan from the level's own objects and writes it into

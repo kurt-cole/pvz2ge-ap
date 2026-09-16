@@ -192,7 +192,7 @@ check("slot data sends the value generate_early drew",
 # shows in logic. A tracker that rolled the same seed but built different rules
 # would still show a level as reachable without the counter its zombies need.
 print("\n=== budget-mode requirements ===")
-BUDGET = dict(shuffle_zombies=1, zombie_budget_roll=1, travelling_dinos=1,
+BUDGET = dict(shuffle_zombies=1, travelling_dinos=1,
               world_count=13, enabled_worlds=list(C.SELECTABLE_WORLDS),
               include_levels_past_goal=1)
 bz_server = build(seed=31, **BUDGET)

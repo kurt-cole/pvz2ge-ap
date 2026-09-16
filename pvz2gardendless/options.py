@@ -289,15 +289,6 @@ class ShuffleZombies(Toggle):
     display_name = "Shuffle Zombies"
 
 
-class ZombieBudgetRoll(Toggle):
-    """
-    Deprecated: Shuffle Zombies now always uses the budget roll. Kept so older
-    YAMLs still load; its value is ignored.
-    """
-    display_name = "Zombie Budget Roll (deprecated)"
-    visibility = Visibility.none
-
-
 class TravellingDinos(Toggle):
     """
     Only applies when Shuffle Zombies is on. Dinosaurs may appear in any level
@@ -517,7 +508,6 @@ class PvZ2Options(PerGameCommonOptions):
     shuffle_upgrades: ShuffleUpgrades
     randomize_conveyor_plants: RandomizeConveyorPlants
     shuffle_zombies:  ShuffleZombies
-    zombie_budget_roll: ZombieBudgetRoll
     travelling_dinos: TravellingDinos
     plant_power_logic: PlantPowerLogic
     power_loadouts_per_level: PowerLoadoutsPerLevel
@@ -541,6 +531,5 @@ OPTION_GROUPS = [
                          TrapWeightGems]),
     OptionGroup("Gameplay Tweaks",[SkipTutorial,ShuffleUpgrades, StartingPlants,RandomizeConveyorPlants, ShuffleZombies,
                                    TravellingDinos]),
-    OptionGroup("Experimental DANGER",[IncludeDangerRooms, ModernDayVictory, EarlyWorldKeys,
-                                       ZombieBudgetRoll])
+    OptionGroup("Experimental DANGER",[IncludeDangerRooms, ModernDayVictory, EarlyWorldKeys])
 ]

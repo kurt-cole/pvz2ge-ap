@@ -355,7 +355,6 @@ class PvZ2GardendlessWorld(World):
         # The zombie options decide every budget-roll rule, so a tracker run
         # without the YAML must build them from the seed's values.
         set_value("shuffle_zombies", "shuffle_zombies")
-        set_value("zombie_budget_roll", "zombie_budget_roll")
         set_value("travelling_dinos", "travelling_dinos")
 
     def generate_early(self) -> None:

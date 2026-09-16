@@ -1,7 +1,7 @@
 """
 PvZ2 Gardendless: generation logic for the budget zombie roll.
 
-Active whenever shuffle_zombies is on (zombie_budget_roll is deprecated). generate_early calls compute(), which rolls every
+Active whenever shuffle_zombies is on. generate_early calls compute(), which rolls every
 built level from zombie_seed exactly as the client will, and records each
 level's plan and hazards. Everything else reads those through the helpers here,
 so the access rules, the progression promote and the item-pool floor cannot
@@ -51,8 +51,7 @@ POWER_CEILING = max(LEVEL_REQUIRED_DPS.values())
 
 def enabled(world) -> bool:
     options = world.options
-    # [user] The budget roll replaced the tier shuffle: zombie_budget_roll is
-    # deprecated and ignored.
+    # [user] The budget roll replaced the tier shuffle outright.
     return bool(options.shuffle_zombies)
 
 

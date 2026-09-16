@@ -285,14 +285,16 @@ def _pool_floor_names(world) -> set:
     """
     granted = set(getattr(world, "starting_plants", ()))
     names = set()
-    for group in _pool_floor_groups(world):
+    # Narrowest first, and a group a reserved plant already satisfies reserves
+    # nothing more: "any sun producer" is met by the Sunflower a loadout needs.
+    for group in sorted(_pool_floor_groups(world), key=len):
         # A group with a granted member needs NOTHING reserved: the rule naming
         # it is already satisfied by a plant the player holds before the seed
         # starts. The cheap-attacker group is always in this case, because the
         # starter is drawn from it and precollected in every seed -- which is
         # why Ancient Egypt alone needs exactly one progression item, a sun
         # producer, and not two.
-        if granted & set(group):
+        if (granted | names) & set(group):
             continue
         eligible = sorted(n for n in group if n not in granted)
         if eligible:
@@ -973,11 +975,11 @@ def create_item_pool(world: "PvZ2GardendlessWorld", pool_size: int) -> List[Item
         groups = _pool_floor_groups(world)
         prog_names = {p.name for p in prog_plants}
         floor_names = set()
-        for group in groups:
-            # Already satisfied by a granted plant: reserve nothing. See
-            # _pool_floor_names, which has to agree with this exactly or the
+        for group in sorted(groups, key=len):
+            # Already satisfied by a granted or reserved plant: reserve nothing.
+            # See _pool_floor_names, which has to agree with this exactly or the
             # upgrade trim reserves a different amount than the plant trim uses.
-            if _granted & set(group):
+            if (_granted | floor_names) & set(group):
                 continue
             eligible = sorted(n for n in group if n in prog_names)
             if eligible:

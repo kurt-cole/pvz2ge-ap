@@ -380,6 +380,7 @@ def floor_loadouts(world) -> List[Tuple[Optional[str], str, Optional[str]]]:
     """
     reqs = built_requirements(world)
     uncovered = set(reqs)
+    granted = set(getattr(world, "starting_plants", ()))
     chosen = []
     while uncovered:
         counts: Dict[int, int] = {}
@@ -391,7 +392,8 @@ def floor_loadouts(world) -> List[Tuple[Optional[str], str, Optional[str]]]:
 
         def key(i):
             p, a, u = unpack(i)
-            return (-counts[i], (p is not None) + (u is not None), p or "", a, u or "")
+            new = sum(1 for x in (p, a, u) if x and x not in granted)
+            return (-counts[i], new, p or "", a, u or "")
         pick = min(counts, key=key)
         chosen.append(unpack(pick))
         uncovered = {lv for lv in uncovered if pick not in reqs[lv]}
