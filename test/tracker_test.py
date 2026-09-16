@@ -29,11 +29,13 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 sys.path.insert(0, os.path.dirname(_HERE))
 import apstub
-from apstub import MultiWorld
+from apstub import CollectionState, MultiWorld
 
 import pvz2gardendless as W
+from pvz2gardendless import budget_logic as B
+from pvz2gardendless import constants as C
 from pvz2gardendless.constants import GAME_NAME, SELECTABLE_WORLDS
-from pvz2gardendless.items import slot_progression_plants
+from pvz2gardendless.items import ITEM_NAME_GROUPS, slot_progression_plants
 from opts import Opts
 
 FAILURES = []
@@ -183,6 +185,42 @@ check("the tracker adopts the seed's zombie_seed",
       zs_tracked.zombie_seed == zs_server.zombie_seed)
 check("slot data sends the value generate_early drew",
       zs_sd["zombie_seed"] == zs_server.zombie_seed)
+
+
+# ── ...and so do the rules the roll builds ───────────────────────────────────
+# The seed alone is not the promise: what the player sees is whether a level
+# shows in logic. A tracker that rolled the same seed but built different rules
+# would still show a level as reachable without the counter its zombies need.
+print("\n=== budget-mode requirements ===")
+BUDGET = dict(shuffle_zombies=1, zombie_budget_roll=1, travelling_dinos=1,
+              world_count=13, enabled_worlds=list(C.SELECTABLE_WORLDS),
+              include_levels_past_goal=1)
+bz_server = build(seed=31, **BUDGET)
+bz_sd = bz_server.fill_slot_data()
+bz_tracked = build(seed=32, passthrough=bz_sd, **BUDGET)
+check("the tracker is in budget mode too", bz_tracked.budget_mode)
+check("every level's hazards come back identical",
+      bz_server.budget_hazards == bz_tracked.budget_hazards)
+srv = {n: [sorted(g) for g, _ in B.level_hazard_groups(bz_server, n)]
+       for n in bz_server.budget_hazards}
+trk = {n: [sorted(g) for g, _ in B.level_hazard_groups(bz_tracked, n)]
+       for n in bz_tracked.budget_hazards}
+check("and so does every counter rule built from them", srv == trk,
+      detail=str([n for n in srv if srv[n] != trk.get(n)][:3]))
+# The reported symptom, as a case: a level the roll gave dinosaurs is not in
+# logic until Perfume-shroom is, on the tracker's side as much as the server's.
+dino_levels = sorted(n for n, groups in trk.items() if ["Perfume-shroom"] in groups)
+check("some level asks for Perfume-shroom (control)", bool(dino_levels))
+if dino_levels:
+    state = CollectionState(bz_tracked.multiworld, ITEM_NAME_GROUPS)
+    for item in bz_tracked.multiworld.itempool:
+        if item.name != "Perfume-shroom":
+            state.collect(item.name)
+    state.sweep()
+    reach = {l.name for l in state.reachable_locations()}
+    check("a level with dinosaurs is out of logic without Perfume-shroom",
+          not (reach & set(dino_levels)),
+          detail=str(sorted(reach & set(dino_levels))[:3]))
 
 print()
 if FAILURES:

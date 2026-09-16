@@ -62,6 +62,9 @@ const APB = {
   // OPENING_LEVELS in zombie_roll.py.
   OPENING_LEVELS: ['tutorial1', 'tutorial2', 'tutorial3', 'tutorial4', 'tutorial5',
                    'egypt1', 'egypt2', 'egypt3', 'egypt4', 'egypt5'],
+  // [user] A rocket imp reaches the house before the player can plant, so it
+  // never opens a level. Wave 1 only. Mirrors FIRST_WAVE_BANNED.
+  FIRST_WAVE_BANNED: ['kongfu_rocket_imp'],
   // Level objclass -> how many lanes the lawn really has. The tutorial lawn
   // rolls its sod out a strip at a time and disables the rest; tutorial4 is
   // absent because it sets five lanes before it animates, and nothing else in
@@ -510,7 +513,8 @@ function _apbEnsureCarriers(t, entries, need, pools) {
     .map(function (c) { return [c, counts[c]]; });
 }
 
-function _apbAttempt(t, seed, levelId, level, attempt, scale, vanilla, pools) {
+function _apbAttempt(t, seed, levelId, level, attempt, scale, vanilla, pools,
+                     poolsFirst) {
   const rng = _apbStream(_apHash(String(seed) + '|' + levelId + '|budget|' + attempt));
   const groups = [];
   const done = Object.create(null);
@@ -526,6 +530,8 @@ function _apbAttempt(t, seed, levelId, level, attempt, scale, vanilla, pools) {
       if (_apbHas(prev, 'p')) out.p = prev.p;
       if (_apbHas(g, 'bring')) out.bring = g.bring;
     } else if (rolls) {
+      // Wave 1 draws from the pool that has no level-opening zombie in it.
+      const gp = (g.w === 1 && poolsFirst) ? poolsFirst : pools;
       const buckets = Object.create(null), fixed = [];
       for (const e of g.z) {
         const key = _apbBucket(t, e[0]);
@@ -543,7 +549,7 @@ function _apbAttempt(t, seed, levelId, level, attempt, scale, vanilla, pools) {
         rolled = rolled.concat(_apbRollBucket(
           t, rng, key, buckets[key], vanilla, scale,
           APB.FIELD_KINDS.indexOf(kind) >= 0 ? kind : null,
-          Math.max(1, Math.floor(groupCap * n0 / swappable)), pools));
+          Math.max(1, Math.floor(groupCap * n0 / swappable)), gp));
       }
       const merged = Object.create(null);
       for (const e of rolled) merged[e[0]] = (merged[e[0]] || 0) + e[1];
@@ -552,7 +558,7 @@ function _apbAttempt(t, seed, levelId, level, attempt, scale, vanilla, pools) {
       // around, so they are left alone: a swap could name something the
       // field may not hold.
       if (APB.LIST_KINDS.indexOf(kind) >= 0) {
-        out.z = _apbEnsureCarriers(t, out.z, g.pf || 0, pools);
+        out.z = _apbEnsureCarriers(t, out.z, g.pf || 0, gp);
       }
       if (APB.FIELD_KINDS.indexOf(kind) >= 0 && out.z.length) out.p = out.z[0][0];
       if (_apbHas(g, 'bring')) out.bring = g.bring;
@@ -592,14 +598,32 @@ function _apbRoll(t, seed, levelId, level, dinos, goal) {
   // exactly what a preset seed bank does.
   const opening = APB.OPENING_LEVELS.indexOf(levelId) >= 0;
   const bring = level.own_plants && !opening;
-  if (!bring || narrow) {
+  // [user] A level that picks the player's plants for them may field nothing
+  // tougher than its own toughest zombie: the budget is still spent, as more
+  // bodies rather than bigger ones.
+  let ceiling = 0;
+  if (!level.own_plants) {
+    for (const c of Object.keys(vanilla)) ceiling = Math.max(ceiling, t.hp[c] || 0);
+  }
+  if (!bring || narrow || ceiling) {
     for (const b of APB.BUCKETS) {
       const names = t.pools[b].filter(function (c) {
         return vanilla[c] || ((bring || !t.hazard[c])
-                              && (!narrow || !t.multilane[c]));
+                              && (!narrow || !t.multilane[c])
+                              && (!ceiling || t.hp[c] <= ceiling));
       });
       pools[b] = [names, names.map(function (c) { return t.hp[c]; })];
     }
+  }
+  // Wave 1 rolls out of a pool of its own. Same draws, one fewer candidate.
+  const poolsFirst = {};
+  let cutFirst = false;
+  for (const b of APB.BUCKETS) {
+    const names = pools[b][0].filter(function (c) {
+      return vanilla[c] || APB.FIRST_WAVE_BANNED.indexOf(c) < 0;
+    });
+    if (names.length !== pools[b][0].length) cutFirst = true;
+    poolsFirst[b] = [names, names.map(function (c) { return t.hp[c]; })];
   }
   const share0 = _apbMaxShare(level.groups);
   const knee = Math.min(1000, (share0[1] ? Math.floor(share0[0] * 1000 / share0[1]) : 0) + APB.SHARE_KNEE);
@@ -614,7 +638,8 @@ function _apbRoll(t, seed, levelId, level, dinos, goal) {
   const scale = added.length ? 1000 - APB.DINO_BUDGET_PERMILLE : 1000;
   let best = null;
   for (let attempt = 0; attempt < APB.TRIES; attempt++) {
-    const a = _apbAttempt(t, seed, levelId, level, attempt, scale, vanilla, pools);
+    const a = _apbAttempt(t, seed, levelId, level, attempt, scale, vanilla, pools,
+                          cutFirst ? poolsFirst : pools);
     let total = _apbGroupsHp(t, a.groups) + _apbDynamicHp(t, level, a.mapping) + graves;
     if (added.length) total = Math.floor(total * 1000 / (1000 - APB.DINO_BUDGET_PERMILLE));
     const ratio = budget ? Math.floor(total * 1000 / budget) : 1000;

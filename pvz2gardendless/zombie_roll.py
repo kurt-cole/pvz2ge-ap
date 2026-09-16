@@ -120,6 +120,11 @@ HAZARD_TAGS = ("jester", "iceblock", "air")
 # for a warming plant and egypt3 for Perfume-shroom, which put the first level
 # of the run in sphere 11. Everything from egypt6 on keeps the full travelling
 # hazard set.
+# [user] A rocket imp reaches the house before the player can plant anything, so
+# it never opens a level. Wave 1 only: from wave 2 on there has been time to
+# build, and a level that ships one in its own first wave keeps it.
+FIRST_WAVE_BANNED = frozenset({"kongfu_rocket_imp"})
+
 OPENING_LEVELS = frozenset({
     "tutorial1", "tutorial2", "tutorial3", "tutorial4", "tutorial5",
     "egypt1", "egypt2", "egypt3", "egypt4", "egypt5",
@@ -433,7 +438,7 @@ def _ensure_carriers(t: _Tables, entries, need: int, pools):
 
 
 def _attempt(t: _Tables, seed: int, level_id: str, level, attempt: int,
-             scale: int, vanilla: set, pools):
+             scale: int, vanilla: set, pools, pools_first=None):
     rng = Stream(ap_hash(f"{seed}|{level_id}|budget|{attempt}"))
     groups = []
     done: Dict[str, Dict[str, Any]] = {}
@@ -454,6 +459,8 @@ def _attempt(t: _Tables, seed: int, level_id: str, level, attempt: int,
             if "bring" in g:
                 out["bring"] = g["bring"]
         elif kind in LIST_KINDS or kind in FIELD_KINDS:
+            # Wave 1 draws from the pool that has no level-opening zombie in it.
+            gp = pools_first if (g["w"] == 1 and pools_first is not None) else pools
             entries = g["z"]
             buckets: Dict[Any, list] = {}
             fixed = []
@@ -471,7 +478,7 @@ def _attempt(t: _Tables, seed: int, level_id: str, level, attempt: int,
                     n0 = sum(n for _, n in buckets[key])
                     rolled += _roll_bucket(t, rng, key, buckets[key], vanilla, scale,
                                            kind if kind in FIELD_KINDS else None,
-                                           max(1, group_cap * n0 // swappable), pools)
+                                           max(1, group_cap * n0 // swappable), gp)
             merged: Counter = Counter()
             for c, n in rolled:
                 merged[c] += n
@@ -480,7 +487,7 @@ def _attempt(t: _Tables, seed: int, level_id: str, level, attempt: int,
                 # Field sources name one codename in a field the spawner is
                 # written around, so they are left alone: swapping one for a
                 # carrier could name something the field may not hold.
-                out["z"] = _ensure_carriers(t, out["z"], g.get("pf", 0), pools)
+                out["z"] = _ensure_carriers(t, out["z"], g.get("pf", 0), gp)
             if kind in FIELD_KINDS and out["z"]:
                 out["p"] = out["z"][0][0]
             if "bring" in g:
@@ -496,6 +503,15 @@ def _attempt(t: _Tables, seed: int, level_id: str, level, attempt: int,
             if pick != c:
                 mapping[c] = pick
     return rng, groups, mapping
+
+
+def _cut(t: _Tables, drop: set):
+    """The bucket pools without `drop`, in the same (hp, name) order."""
+    out = {}
+    for k in BUCKET_ORDER:
+        names = [c for c in t.pools[k] if c not in drop]
+        out[k] = (names, [t.hp[c] for c in names])
+    return out
 
 
 def roll_level(seed: int, level_id: str, dinos: bool = False,
@@ -515,6 +531,16 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
         # only hazards the level already shipped with may appear. Before egypt6
         # the player HAS no counter yet, which comes to the same thing.
         drop |= t.hazard_names - vanilla
+    if not level["own_plants"]:
+        # [user] ...and nothing tougher than the level's own toughest zombie. A
+        # level that picks the plants picks them for what it ships with:
+        # tutorial1 hands the player one Peashooter against a 190 HP zombie, and
+        # the roll was free to answer that with a 700 HP hunter. The budget is
+        # still spent in full, so this reads as more bodies rather than bigger
+        # ones.
+        ceiling = max((t.hp[c] for c in vanilla), default=0)
+        if ceiling:
+            drop |= {c for c in t.hp if t.hp[c] > ceiling} - vanilla
     if level.get("lanes", 5) < 5:
         # A narrower lawn than the game's five lanes, which only the tutorial
         # levels have. A chicken thrower or a barrel puts bodies into the lanes
@@ -523,9 +549,10 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
         # planted [user]. A level that ships one keeps it, as with hazards.
         drop |= t.multilane_names - vanilla
     if drop:
-        for k in BUCKET_ORDER:
-            names = [c for c in t.pools[k] if c not in drop]
-            pools[k] = (names, [t.hp[c] for c in names])
+        pools = _cut(t, drop)
+    # Wave 1 rolls out of a pool of its own. Same draws, one fewer candidate.
+    first_drop = drop | (FIRST_WAVE_BANNED - vanilla)
+    pools_first = pools if first_drop == drop else _cut(t, first_drop)
     top, count = _max_share(level["groups"])
     knee = min(1000, (top * 1000 // count if count else 0) + SHARE_KNEE)
 
@@ -547,7 +574,7 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
     best = None
     for attempt in range(TRIES):
         rng, groups, mapping = _attempt(t, seed, level_id, level, attempt, scale,
-                                        vanilla, pools)
+                                        vanilla, pools, pools_first)
         total = _groups_hp(t, groups) + _dynamic_hp(t, level, mapping) + graves
         if added:
             total = total * 1000 // (1000 - DINO_BUDGET_PERMILLE)

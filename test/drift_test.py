@@ -91,7 +91,12 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # setLevelKey instead, and _apLog records instead of writing to the
          # console and the client's panel. Every _apb* function,
          # installBudgetHook and syncBudgetConfig ARE copies and are checked.
-         "budget_fn.js:_apLevelKey", "setLevelKey", "budget_fn.js:_apLog"}
+         "budget_fn.js:_apLevelKey", "setLevelKey", "budget_fn.js:_apLog",
+         # tutorial_fn.js harness: setSave() stands in for the game's save, so a
+         # case can put the player at any point of the tutorial. isFinished,
+         # isTutorialDone and isTutorialComplete themselves ARE copies and are
+         # checked.
+         "tutorial_fn.js:setSave"}
 
 _ws = re.compile(r"\s+")
 norm = lambda s: _ws.sub(" ", s).strip()
