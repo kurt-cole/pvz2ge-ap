@@ -14698,15 +14698,15 @@
   },
   "easter_armor1": {
    "cost": 200,
-   "hp": 190
+   "hp": 560
   },
   "easter_armor2": {
    "cost": 400,
-   "hp": 190
+   "hp": 1290
   },
   "easter_armor4": {
    "cost": 700,
-   "hp": 190
+   "hp": 2390
   },
   "easter_camel_manyhump": {
    "cost": 1200,
@@ -14830,11 +14830,11 @@
   },
   "feastivus_armor1": {
    "cost": 200,
-   "hp": 190
+   "hp": 560
   },
   "feastivus_armor2": {
    "cost": 400,
-   "hp": 190
+   "hp": 1290
   },
   "feastivus_camel_manyhump": {
    "cost": 1200,
@@ -14890,11 +14890,11 @@
   },
   "foodfight_armor1": {
    "cost": 200,
-   "hp": 190
+   "hp": 560
   },
   "foodfight_armor2": {
    "cost": 400,
-   "hp": 190
+   "hp": 1290
   },
   "foodfight_chefster": {
    "cost": 450,
@@ -15222,11 +15222,11 @@
   },
   "lunar_armor1": {
    "cost": 200,
-   "hp": 190
+   "hp": 560
   },
   "lunar_armor2": {
    "cost": 400,
-   "hp": 190
+   "hp": 1290
   },
   "lunar_camel_manyhump": {
    "cost": 1200,
@@ -15486,11 +15486,11 @@
   },
   "sportzball_armor1": {
    "cost": 200,
-   "hp": 190
+   "hp": 560
   },
   "sportzball_armor2": {
    "cost": 400,
-   "hp": 190
+   "hp": 1290
   },
   "sportzball_balloon": {
    "cost": 400,
@@ -15514,11 +15514,11 @@
   },
   "stpatrick_armor1": {
    "cost": 200,
-   "hp": 190
+   "hp": 560
   },
   "stpatrick_armor2": {
    "cost": 400,
-   "hp": 190
+   "hp": 1290
   },
   "stpatrick_dodo": {
    "cost": 600,
@@ -15606,7 +15606,7 @@
   },
   "valentines_armor4": {
    "cost": 700,
-   "hp": 190
+   "hp": 2390
   },
   "valentines_gargantuar": {
    "cost": 1500,

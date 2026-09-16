@@ -70,7 +70,7 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from gen_zombie_tiers import (BESPOKE_MODULES, RTID, Bundle, Zombies,  # noqa: E402
-                              alias_map, find_table)
+                              alias_map, find_armor_types, find_table)
 from gen_plant_power import tracked_levels  # noqa: E402
 
 OUT_PY = os.path.join(REPO, "pvz2gardendless", "level_model.py")
@@ -458,7 +458,7 @@ def main() -> int:
     packed = PackedLevels(root)
     zombies = Zombies(find_table(root, "ZombieTypes"),
                       find_table(root, "ZombieProps"),
-                      find_table(root, "ArmorProps"))
+                      find_table(root, "ArmorProps"), find_armor_types(root))
     tombstones = alias_map(find_table(root, "TombstoneProps"))
     grid_types = alias_map(find_table(root, "GridItemTypes"))
 

@@ -40,7 +40,7 @@ The tier key joins these with "-":
          shield    `ShieldToughness` / `ProjectileAbsorbingFactor` -- absorbs
                    shots from the front, so a straight shooter stops being an
                    answer.
-         summon    `ZombiesToSummon` and friends -- fields zombies of its own,
+         summon    `ZombiesToSummon`, `SkunkType` and friends -- fields zombies of its own,
                    which a level's wave budget never accounted for.
   5. `h{n}`, an effective-HP band: floor(log(hp) / log(1.35)), where hp is
      `Toughness`, every `StartingArmors` entry's toughness, and the toughness
@@ -106,7 +106,7 @@ than being handled here: the camel matching games, the cannon levels,
 Beghouled, bowling, Last Stand and the other set pieces. See
 AP_BESPOKE_MODULES in build_pvzge_ap.py.
 
-262 zombies over 77 tiers, 232 of them (88%) with somebody to trade with.
+262 zombies over 76 tiers, 231 of them (88%) with somebody to trade with.
 Worst intra-tier HP ratio 1.33. 62 codenames excluded.
 """
 
@@ -175,10 +175,9 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
         'eighties_boombox',
     ],  # 1
     't2-land-h17': [
-        'chicken_farmer', 'easter_armor1', 'feastivus_armor1',
-        'foodfight_armor1', 'foodfight_gobbler_king', 'iceage_weaselhoarder',
-        'lunar_armor1', 'prospector', 'sportzball_armor1', 'stpatrick_armor1',
-    ],  # 10
+        'chicken_farmer', 'foodfight_gobbler_king', 'iceage_weaselhoarder',
+        'prospector',
+    ],  # 4
     't2-land-h18': [
         'eighties_breakdancer', 'eighties_mc', 'eighties_punk', 'explorer',
         'kongfu_torch', 'lunar_superfanimp', 'modern_superfanimp',
@@ -193,11 +192,13 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
     't2-land-h21': [
         'abbot_armor1', 'abbot_fan', 'beach_armor1', 'beach_fem_armor1',
         'birthday_armor1', 'cowboy_armor1', 'dark_armor1', 'dino_armor1',
-        'eighties_8bit_armor1', 'eighties_armor1', 'future_armor1',
+        'easter_armor1', 'eighties_8bit_armor1', 'eighties_armor1',
+        'feastivus_armor1', 'foodfight_armor1', 'future_armor1',
         'halloween_armor1', 'iceage_armor1', 'kongfu_armor1', 'kongfu_hammer',
-        'monk_armor1', 'monk_nunchaku', 'mummy_armor1', 'pirate_armor1',
+        'lunar_armor1', 'monk_armor1', 'monk_nunchaku', 'mummy_armor1',
+        'pirate_armor1', 'sportzball_armor1', 'stpatrick_armor1',
         'tutorial_armor1', 'valentines_armor1', 'zoybean_armor1',
-    ],  # 22
+    ],  # 28
     't2-land-h23': [
         'bobsled_team',
     ],  # 1
@@ -241,10 +242,6 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
     't3-land-blocker-h22': [
         'abbot_3section_staff',
     ],  # 1
-    't3-land-h17': [
-        'easter_armor2', 'feastivus_armor2', 'foodfight_armor2',
-        'lunar_armor2', 'sportzball_armor2', 'stpatrick_armor2',
-    ],  # 6
     't3-land-h18': [
         'lostcity_crystalskull',
     ],  # 1
@@ -252,8 +249,8 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
         'lostcity_impporter',
     ],  # 1
     't3-land-h20': [
-        'eighties_punk_veteran', 'kongfu_bomb', 'pirate_captain',
-    ],  # 3
+        'kongfu_bomb', 'pirate_captain',
+    ],  # 2
     't3-land-h21': [
         'iceage_hunter', 'kongfu_drink', 'monk_drink',
     ],  # 3
@@ -263,11 +260,12 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
     't3-land-h23': [
         'beach_armor2', 'beach_fem_armor2', 'birthday_armor2',
         'cowboy_armor2', 'dark_armor2', 'dino_armor2', 'dino_bully',
-        'eighties_8bit_armor2', 'eighties_armor2', 'future_armor2',
-        'halloween_armor2', 'iceage_armor2', 'kongfu_armor2', 'monk_armor2',
-        'mummy_armor2', 'pirate_armor2', 'tutorial_armor2',
-        'valentines_armor2',
-    ],  # 18
+        'easter_armor2', 'eighties_8bit_armor2', 'eighties_armor2',
+        'feastivus_armor2', 'foodfight_armor2', 'future_armor2',
+        'halloween_armor2', 'iceage_armor2', 'kongfu_armor2', 'lunar_armor2',
+        'monk_armor2', 'mummy_armor2', 'pirate_armor2', 'sportzball_armor2',
+        'stpatrick_armor2', 'tutorial_armor2', 'valentines_armor2',
+    ],  # 24
     't3-land-h24': [
         'abbot_armor2', 'barrelroller', 'birthday_barrelroller',
         'birthday_pharaoh', 'dark_armor3', 'iceage_armor3', 'monk_armor3',
@@ -294,6 +292,9 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
     't3-land-shield-h21': [
         'abbot_imp',
     ],  # 1
+    't3-land-summon-h20': [
+        'eighties_punk_veteran',
+    ],  # 1
     't3-water-h20': [
         'future_protector',
     ],  # 1
@@ -312,9 +313,6 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
     't4-land-blocker-h19': [
         'beach_surfer',
     ],  # 1
-    't4-land-h17': [
-        'easter_armor4', 'valentines_armor4',
-    ],  # 2
     't4-land-h20': [
         'dark_wizard', 'easter_wizard', 'modern_newspaper',
         'sportzball_wizard',
@@ -331,9 +329,10 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
     ],  # 3
     't4-land-h25': [
         'abbot_chi', 'beach_armor4', 'cowboy_armor4', 'dark_armor4',
-        'dino_armor4', 'eighties_armor4', 'future_armor4', 'iceage_armor4',
-        'monk_armor4', 'mummy_armor4', 'pirate_armor4', 'tutorial_armor4',
-    ],  # 12
+        'dino_armor4', 'easter_armor4', 'eighties_armor4', 'future_armor4',
+        'iceage_armor4', 'monk_armor4', 'mummy_armor4', 'pirate_armor4',
+        'tutorial_armor4', 'valentines_armor4',
+    ],  # 14
     't4-land-h26': [
         'abbot_armor4', 'dino_bully_veteran',
     ],  # 2
@@ -461,9 +460,9 @@ ZOMBIE_HP: Dict[str, int] = {
     'duckytube_armor2': 1290,
     'duckytube_armor4': 2390,
     'easter': 190,
-    'easter_armor1': 190,
-    'easter_armor2': 190,
-    'easter_armor4': 190,
+    'easter_armor1': 560,
+    'easter_armor2': 1290,
+    'easter_armor4': 2390,
     'easter_gargantuar': 3791,
     'easter_gargantuar_af': 4291,
     'easter_poncho': 190,
@@ -488,8 +487,8 @@ ZOMBIE_HP: Dict[str, int] = {
     'explorer': 250,
     'explorer_veteran': 650,
     'feastivus': 190,
-    'feastivus_armor1': 190,
-    'feastivus_armor2': 190,
+    'feastivus_armor1': 560,
+    'feastivus_armor2': 1290,
     'feastivus_flag': 190,
     'feastivus_gargantuar': 3790,
     'feastivus_piano': 840,
@@ -498,8 +497,8 @@ ZOMBIE_HP: Dict[str, int] = {
     'feastivus_poncho_plate': 190,
     'feastivus_swashbuckler': 190,
     'foodfight': 190,
-    'foodfight_armor1': 190,
-    'foodfight_armor2': 190,
+    'foodfight_armor1': 560,
+    'foodfight_armor2': 1290,
     'foodfight_chefster': 420,
     'foodfight_flag': 190,
     'foodfight_gobbler_king': 190,
@@ -568,8 +567,8 @@ ZOMBIE_HP: Dict[str, int] = {
     'lostcity_lostpilot': 350,
     'lostcity_relichunter': 760,
     'lunar': 190,
-    'lunar_armor1': 190,
-    'lunar_armor2': 190,
+    'lunar_armor1': 560,
+    'lunar_armor2': 1290,
     'lunar_superfanimp': 270,
     'mech_cone': 2500,
     'modern_allstar': 1100,
@@ -613,14 +612,14 @@ ZOMBIE_HP: Dict[str, int] = {
     'seagull': 270,
     'sky_dronemaker': 2000,
     'sportzball': 190,
-    'sportzball_armor1': 190,
-    'sportzball_armor2': 190,
+    'sportzball_armor1': 560,
+    'sportzball_armor2': 1290,
     'sportzball_balloon': 250,
     'sportzball_gargantuar': 3790,
     'sportzball_wizard': 490,
     'stpatrick': 190,
-    'stpatrick_armor1': 190,
-    'stpatrick_armor2': 190,
+    'stpatrick_armor1': 560,
+    'stpatrick_armor2': 1290,
     'stpatrick_dodo': 490,
     'summer_armor1': 560,
     'summer_armor2': 1290,
@@ -639,7 +638,7 @@ ZOMBIE_HP: Dict[str, int] = {
     'valentines': 190,
     'valentines_armor1': 560,
     'valentines_armor2': 1290,
-    'valentines_armor4': 190,
+    'valentines_armor4': 2390,
     'valentines_gargantuar': 3790,
     'west_bull': 1490,
     'west_bull_veteran': 1590,

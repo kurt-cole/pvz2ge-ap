@@ -125,6 +125,10 @@ HAZARD_TAGS = ("jester", "iceblock", "air")
 # it never opens a level. Wave 1 only: from wave 2 on there has been time to
 # build, and a level that ships one in its own first wave keeps it.
 FIRST_WAVE_BANNED = frozenset({"kongfu_rocket_imp"})
+# [user] Nor does a summoner: anything that fields bodies of its own (the
+# "-summon" tier tag) or throws them into the lanes beside it (multilane:
+# weasel hoarder, chicken farmer, gobbler king, barrel roller). Same wave-1-only
+# rule, applied by tables().first_wave_banned.
 
 OPENING_LEVELS = frozenset({
     "tutorial1", "tutorial2", "tutorial3", "tutorial4", "tutorial5",
@@ -206,6 +210,9 @@ class _Tables:
                                 - {"noswallow"}}
         self.multilane_names = {c for c, z in self.zombies.items()
                                 if z.get("multilane")}
+        self.first_wave_banned = (set(FIRST_WAVE_BANNED) | self.multilane_names
+                                  | {c for c in self.zombies
+                                     if "-summon" in (self.tier.get(c) or "")})
         # A count-field source may only name a codename the game itself names in
         # that field somewhere: the spawner is written around what it drops.
         self.field_names: Dict[str, set] = {k: set() for k in FIELD_KINDS}
@@ -562,7 +569,7 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
     if drop:
         pools = _cut(t, drop)
     # Wave 1 rolls out of a pool of its own. Same draws, one fewer candidate.
-    first_drop = drop | (FIRST_WAVE_BANNED - vanilla)
+    first_drop = drop | (t.first_wave_banned - vanilla)
     pools_first = pools if first_drop == drop else _cut(t, first_drop)
     top, count = _max_share(level["groups"])
     knee = min(1000, (top * 1000 // count if count else 0) + SHARE_KNEE)

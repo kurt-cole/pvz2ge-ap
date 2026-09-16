@@ -24,7 +24,7 @@ A level is in logic when the player holds some **loadout** that passes that
 level's simulation:
 
 - one sun producer type, or none (sky sun only),
-- a producer count: the fewest (0-8) that pass,
+- a producer count: the best of 1-10 (`PRODUCERS_MAX`, two columns on a five-lane lawn),
 - one attacker type,
 - optionally one utility type (walls, slow, stun, knockback).
 
@@ -53,15 +53,16 @@ Per level:
   `ProduceInterval + ProduceIntervalAdditional / 2` s after
   `ProduceCountdownStart + ProduceCountdownStartAdditional / 2`.
 - **Purchases.** A packet is usable when its recharge (`Cooldown`, starting at
-  `CooldownFrom`) is ready and sun covers `SunCost`. Order: producers, then one
-  attacker per lane, then one utility per lane, then more attackers up to the
-  per-lane tile cap.
+  `CooldownFrom`) is ready and sun covers `SunCost`. Order: producers, then
+  attackers, then one utility per lane. Copies are BOUGHT on this schedule but
+  PLANTED when a zombie calls for them (below). Per-lane cap
+  `lane_cap = tiles - producer columns - 1`.
 - **Waves.** Wave 1 at `ZombieCountdownFirstWaveSecs` (default 15). Next wave at
   the earlier of the timer (27.5 s, +10 after a flag wave) and the moment the
   current wave is down to its next-wave health threshold (mean of
   `Min/MaxNextWaveHealthPercentage`), but not before 4.5 s.
 - **Lanes.** A zombie with a fixed row keeps it; others are dealt heaviest first
-  to the lane holding the least HP in that wave.
+  to the lane holding the least HP in that wave, ties to the least cumulative HP.
 - **Fights.** Per lane, zombies are killed front to back. A zombie walks at
   `WalkSPS` from the right edge; the lane fails when one reaches the front
   attacker. Walls in front add eat time (`Toughness / EatDPS`), slows and stuns
@@ -69,6 +70,14 @@ Per level:
   inside its range (full lane, `AttackDistance`, or its own tile for contact
   plants). Instants spend a use (sun and a recharge shared across lanes) on the
   front zombie in range.
+- **Reactive planting (`_Lawn`).** A lane plants the earliest bought, unplanted,
+  unexpired copy when its current plants cannot kill the zombie before it
+  arrives, up to the cap; a new copy changes its neighbours' rates (spread
+  attackers). Chill and freeze are read from the copies alive halfway through
+  the zombie's walk.
+- **Backlog.** Each lane keeps a queue of (start, HP still to deal) across
+  waves, replayed at the current rate, so a copy planted later also speeds up
+  zombies already on the lawn. Sunburn plants pay per shot from the economy.
 
 A level passes when no lane fails. Mowers and plant food are not modelled, on
 purpose, as a safety margin.
@@ -105,13 +114,19 @@ Zombies that disable plants get counter rules wherever they spawn [user]:
 | kongfu_bomb | something that kills it fast enough (an instant counts) |
 | sky_drone, eighties_breakdancer | an instant kill |
 
+[user] The roll never adds a nullifier to an opening level (tutorial1-5, egypt1-5)
+unless the level ships it (`zombie_roll.OPENING_LEVELS`, mirrored in the client).
+Tagged `noswallow` zombies only change which chomp plants count and are not
+nullifiers.
+
 ## Offline table and generation
 
 Exhaustive search is per level over every loadout, done once per game version by
 `tools/gen_power_table.py` with multiprocessing (no numpy: Archipelago installs
 cannot be assumed to have it). Exact pruning only:
 
-- the producer count search stops at the first count that passes;
+- every producer count is tried, skipping a count that cannot beat what an
+  earlier count reached;
 - utilities are tried only where the attacker fails without one;
 - a producer or utility matched or beaten on every stat by another is skipped.
 
@@ -134,6 +149,15 @@ At generation no simulation runs by default:
 Known approximation: the break-even multiplier treats a roll as a scaling of the
 vanilla roster. A roll that trades many weak zombies for few strong ones is not a
 scaling; the toughest-zombie check covers the dangerous direction.
+
+Levels without a table row get no power rule: preset or conveyor seed banks
+(`own_plants` false), bespoke levels and levels generated at runtime. 341 of 813
+tracked levels have one.
+
+The table reuses a per-level cache keyed by the simulator and data hash
+(`build/power_cache/<fingerprint>`). A full run takes about 105 minutes on 12
+workers; when only zombie HP changes, only the levels fielding those zombies
+need re-simulating.
 
 ## Calibration
 

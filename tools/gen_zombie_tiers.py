@@ -134,6 +134,45 @@ def alias_map(objects):
     return out
 
 
+def find_armor_types(root: str):
+    """{armor codename: ArmorProps sheet} from the ARMORS feature list.
+
+    Like PlantFeatures, ARMORS is not an asset of its own but a list inside one
+    large bundle json whose name changes every version, so it is grepped for.
+    """
+    imports = os.path.join(root, "import")
+    for dirpath, _, files in os.walk(imports):
+        for fn in sorted(files):
+            if not fn.endswith(".json"):
+                continue
+            path = os.path.join(dirpath, fn)
+            with open(path, "rb") as fh:
+                raw = fh.read()
+            if b'"ARMORS"' not in raw or b"@ArmorProps)" not in raw:
+                continue
+            found = {}
+
+            def walk(node):
+                if isinstance(node, dict):
+                    armors = node.get("ARMORS")
+                    if isinstance(armors, list):
+                        for entry in armors:
+                            if not isinstance(entry, dict):
+                                continue
+                            match = RTID.match(entry.get("PROPS") or "")
+                            if entry.get("CODENAME") and match:
+                                found[entry["CODENAME"]] = match.group(1)
+                    for value in node.values():
+                        walk(value)
+                elif isinstance(node, list):
+                    for value in node:
+                        walk(value)
+            walk(json.loads(raw))
+            if found:
+                return found
+    raise SystemExit(f"could not find the ARMORS list under {imports}")
+
+
 def find_table(root: str, table_name: str):
     """Locate a named PvZ2 table (ZombieProps, ArmorProps, ZombieTypes...).
 
@@ -173,10 +212,17 @@ def find_table(root: str, table_name: str):
 # ── the zombie model ─────────────────────────────────────────────────────────
 
 class Zombies:
-    def __init__(self, types, props, armors):
+    def __init__(self, types, props, armors, armor_types=None):
         self.types = alias_map(types)
         self.props = alias_map(props)
         self.armors = alias_map(armors)
+        # StartingArmors names an armor TYPE, which points at its props sheet.
+        # Most types share a sheet's name, but event reskins do not
+        # (easter_armor4 -> modern_armor4), and reading those by name alone
+        # costed every one of them at 0 HP.
+        for codename, sheet in (armor_types or {}).items():
+            if codename not in self.armors and sheet in self.armors:
+                self.armors[codename] = self.armors[sheet]
 
     def prop(self, codename: str) -> dict:
         """The property sheet a codename spawns from.
@@ -411,7 +457,7 @@ class Zombies:
             key += "-shield"
         if any(prop.get(k) is not None for k in
                ("ZombiesToSummon", "ZombieCountToSummon",
-                "ZombieTypesToSummonBecomingFlag")):
+                "ZombieTypesToSummonBecomingFlag", "SkunkType")):
             # Fields zombies of its own. A swap that creates a summoner adds
             # spawns the level's wave budget never accounted for.
             key += "-summon"
@@ -539,7 +585,7 @@ The tier key joins these with "-":
          shield    `ShieldToughness` / `ProjectileAbsorbingFactor` -- absorbs
                    shots from the front, so a straight shooter stops being an
                    answer.
-         summon    `ZombiesToSummon` and friends -- fields zombies of its own,
+         summon    `ZombiesToSummon`, `SkunkType` and friends -- fields zombies of its own,
                    which a level's wave budget never accounted for.
   5. `h{{n}}`, an effective-HP band: floor(log(hp) / log({hp_band})), where hp is
      `Toughness`, every `StartingArmors` entry's toughness, and the toughness
@@ -733,7 +779,7 @@ def main() -> int:
     bundle = Bundle(root)
     zombies = Zombies(find_table(root, "ZombieTypes"),
                       find_table(root, "ZombieProps"),
-                      find_table(root, "ArmorProps"))
+                      find_table(root, "ArmorProps"), find_armor_types(root))
     print(f"  {len(zombies.types)} zombie types, {len(zombies.props)} property "
           f"sheets, {len(zombies.armors)} armors")
 

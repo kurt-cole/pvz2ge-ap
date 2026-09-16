@@ -1087,7 +1087,8 @@ window.electron = electron;
     OPENING_LEVELS: ['tutorial1', 'tutorial2', 'tutorial3', 'tutorial4', 'tutorial5',
                      'egypt1', 'egypt2', 'egypt3', 'egypt4', 'egypt5'],
     // [user] A rocket imp reaches the house before the player can plant, so it
-    // never opens a level. Wave 1 only. Mirrors FIRST_WAVE_BANNED.
+    // never opens a level. Wave 1 only. Mirrors FIRST_WAVE_BANNED; summoners are
+    // banned alongside it where the pool is cut (tables().first_wave_banned).
     FIRST_WAVE_BANNED: ['kongfu_rocket_imp'],
     // Level objclass -> how many lanes the lawn really has. The tutorial lawn
     // rolls its sod out a strip at a time and disables the rest; tutorial4 is
@@ -1649,7 +1650,9 @@ window.electron = electron;
     let cutFirst = false;
     for (const b of APB.BUCKETS) {
       const names = pools[b][0].filter(function (c) {
-        return vanilla[c] || APB.FIRST_WAVE_BANNED.indexOf(c) < 0;
+        // [user] Summoners too: the "-summon" tier tag or a multilane thrower.
+        return vanilla[c] || (APB.FIRST_WAVE_BANNED.indexOf(c) < 0 && !t.multilane[c]
+                              && (t.tier[c] || '').indexOf('-summon') < 0);
       });
       if (names.length !== pools[b][0].length) cutFirst = true;
       poolsFirst[b] = [names, names.map(function (c) { return t.hp[c]; })];

@@ -43,7 +43,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
-from gen_zombie_tiers import Bundle, Zombies, alias_map, find_table  # noqa: E402
+from gen_zombie_tiers import Bundle, Zombies, alias_map, find_armor_types, find_table  # noqa: E402
 from gen_plant_power import Game, ap_name_to_codename, tracked_levels  # noqa: E402
 import gen_level_model as GLM  # noqa: E402
 
@@ -66,7 +66,8 @@ NULLIFIERS = {
     "wizard": lambda c, p: "wizard" in c,
     "garg": lambda c, p: p.get("ZombieSort") == "Gargantuar" or bool(p.get("SmashDamage")),
     "boombox": lambda c, p: bool(p.get("PlantFreezeRadius")),
-    "skunk": lambda c, p: bool(p.get("FartStunDuration")),
+    # The skunk itself, and the Skunk Punk that summons skunks around it.
+    "skunk": lambda c, p: bool(p.get("FartStunDuration") or p.get("SkunkType")),
     "excavator": lambda c, p: bool(p.get("ShovelDamage")),
     "bomb": lambda c, p: bool(p.get("ExplodeDamageToPlants")),
     "drone": lambda c, p: bool(p.get("PlantEatingRangeRadius")),
@@ -457,7 +458,7 @@ def main() -> int:
     plants = plant_records(game, bridge)
 
     zombies_src = Zombies(find_table(root, "ZombieTypes"), find_table(root, "ZombieProps"),
-                          find_table(root, "ArmorProps"))
+                          find_table(root, "ArmorProps"), find_armor_types(root))
     sys.path.insert(0, REPO)
     import importlib.util
     spec = importlib.util.spec_from_file_location(

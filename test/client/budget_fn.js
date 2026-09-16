@@ -625,7 +625,9 @@ function _apbRoll(t, seed, levelId, level, dinos, goal) {
   let cutFirst = false;
   for (const b of APB.BUCKETS) {
     const names = pools[b][0].filter(function (c) {
-      return vanilla[c] || APB.FIRST_WAVE_BANNED.indexOf(c) < 0;
+      // [user] Summoners too: the "-summon" tier tag or a multilane thrower.
+      return vanilla[c] || (APB.FIRST_WAVE_BANNED.indexOf(c) < 0 && !t.multilane[c]
+                            && (t.tier[c] || '').indexOf('-summon') < 0);
     });
     if (names.length !== pools[b][0].length) cutFirst = true;
     poolsFirst[b] = [names, names.map(function (c) { return t.hp[c]; })];
@@ -656,9 +658,12 @@ function _apbRoll(t, seed, levelId, level, dinos, goal) {
     if (ratio >= APB.LEVEL_OK[0] && ratio <= APB.LEVEL_OK[1]) return plan;
     if (best === null || Math.abs(ratio - 1000) < Math.abs(best.ratio - 1000)) best = plan;
   }
-  if (best !== null && best.ratio >= APB.LEVEL_HARD[0] && best.ratio <= APB.LEVEL_HARD[1]) return best;
+  if (best !== null) {
+    if (!level.own_plants && best.ratio >= APB.LEVEL_OK[0] && best.ratio <= APB.LEVEL_OK[1]) return best;
+    else if (level.own_plants && best.ratio >= APB.LEVEL_HARD[0] && best.ratio <= APB.LEVEL_HARD[1]) return best;
+  }
   return { attempt: -1, vanilla: true, budget: budget, ratio: 1000,
-           groups: level.groups, dynamic: {}, dinos: [] };
+                groups: level.groups, dynamic: {}, dinos: [] };
 }
 
 // Rewrite a list source's Zombies[] to the rolled composition. A rolled
