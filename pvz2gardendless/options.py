@@ -319,9 +319,8 @@ class ShuffleZombies(Toggle):
 
 class ZombieBudgetRoll(Toggle):
     """
-    EXPERIMENTAL AND IN DEVELOPMENT. Generation logic is live, but the game
-    client does not reproduce the roll yet, so until a client update the
-    zombies you meet will not match what logic expects.
+    EXPERIMENTAL. The client reproduces generation's roll level for level; what
+    is still being calibrated is how the result plays.
 
     Only applies when Shuffle Zombies is also on. Instead of trading each
     zombie for one of the same tier, each level's zombie health is re-spent:
@@ -329,6 +328,10 @@ class ZombieBudgetRoll(Toggle):
     the level beatable. Zombies with a hard counter (Jester, flyers, ice-block
     carriers) can appear outside their home worlds, and the logic asks for
     their counter wherever they land.
+
+    Nothing new arrives before Ancient Egypt 6: the levels up to there field
+    only the hazards they ship with, so the opening of a run never waits on a
+    counter the multiworld has not handed over yet.
 
     Set pieces (camels, the cannon levels, bowling, Last Stand and the rest)
     are never touched. Intended to replace the tier shuffle once proven.
@@ -338,12 +341,11 @@ class ZombieBudgetRoll(Toggle):
 
 class TravellingDinos(Toggle):
     """
-    EXPERIMENTAL AND IN DEVELOPMENT. Generation logic is live; the game client
-    does not place the dinosaurs yet.
+    EXPERIMENTAL. The client places the dinosaurs generation rolled.
 
     Only applies when Zombie Budget Roll is on. Dinosaurs may appear in any
-    level zombie randomization is allowed to change and that you bring your
-    own plants to, about as often as Jurassic Marsh's share of the levels your
+    level zombie randomization is allowed to change, from Ancient Egypt 6 on,
+    that you bring your own plants to, about as often as Jurassic Marsh's share of the levels your
     goal builds, shaped like a Jurassic Marsh level of the same difficulty.
     They take part of that level's zombie budget, and any level that gains
     dinosaurs requires Perfume-shroom.

@@ -8,12 +8,13 @@ const AP_BESPOKE_MODULES = /Minigame|Beghouled|Rhythm/;
 const _AP_RTID = /^RTID\(([^@()]+)@([^()]*)\)$/;
 
 // Harness stubs. _apLevelKey reads the game's LevelPlay statics in the client;
-// here the test sets the level id directly. log writes to the AP panel.
+// here the test sets the level id directly. _apLog writes to the console and,
+// once the client's panel exists, to window._AP_log; here it just records.
 let _levelKey = '';
 function setLevelKey(id) { _levelKey = id; }
 function _apLevelKey() { return _levelKey; }
 const logs = [];
-function log(msg) { logs.push(msg); }
+function _apLog(msg) { logs.push(msg); }
 
 function _apHash(str) {
   let h = 2166136261 >>> 0;
@@ -55,6 +56,12 @@ const APB = {
   FIELD_KINDS: ['raid', 'beach', 'spider', 'parachute'],
   BUCKETS: ['generic|land', 'generic|water', 'skycity|land'],
   HAZARD_TAGS: ['jester', 'iceblock', 'air'],
+  // [user] Nothing new before egypt6: a run's opening is played with
+  // whatever the multiworld has handed over by then, so these levels field
+  // only the hazards they shipped with, and never gain dinos. Mirrors
+  // OPENING_LEVELS in zombie_roll.py.
+  OPENING_LEVELS: ['tutorial1', 'tutorial2', 'tutorial3', 'tutorial4', 'tutorial5',
+                   'egypt1', 'egypt2', 'egypt3', 'egypt4', 'egypt5'],
   // Level objclass -> how many lanes the lawn really has. The tutorial lawn
   // rolls its sod out a strip at a time and disables the rest; tutorial4 is
   // absent because it sets five lanes before it animates, and nothing else in
@@ -581,10 +588,14 @@ function _apbRoll(t, seed, levelId, level, dinos, goal) {
   // its own without asking whether they are playable, and on the tutorial
   // lawn they are not. A level that ships one keeps it, either way.
   const narrow = (level.lanes || 5) < 5;
-  if (!level.own_plants || narrow) {
+  // Before egypt6 the player has no counter yet, which asks of the pool
+  // exactly what a preset seed bank does.
+  const opening = APB.OPENING_LEVELS.indexOf(levelId) >= 0;
+  const bring = level.own_plants && !opening;
+  if (!bring || narrow) {
     for (const b of APB.BUCKETS) {
       const names = t.pools[b].filter(function (c) {
-        return vanilla[c] || ((level.own_plants || !t.hazard[c])
+        return vanilla[c] || ((bring || !t.hazard[c])
                               && (!narrow || !t.multilane[c]));
       });
       pools[b] = [names, names.map(function (c) { return t.hp[c]; })];
@@ -594,8 +605,10 @@ function _apbRoll(t, seed, levelId, level, dinos, goal) {
   const knee = Math.min(1000, (share0[1] ? Math.floor(share0[0] * 1000 / share0[1]) : 0) + APB.SHARE_KNEE);
   const dinoRng = _apbStream(_apHash(String(seed) + '|' + levelId + '|dinos'));
   let added = [];
+  // The draw runs first whatever the answer, so a level that cannot gain
+  // dinos still leaves the stream where generation expects it.
   if (dinoRng.below(1000) < (APB.DINO_LEVEL_PERMILLE_BY_GOAL[goal] || 0) &&
-      dinos && _apbDinosAllowed(level)) {
+      dinos && !opening && _apbDinosAllowed(level)) {
     added = _apbDinoEvents(dinoRng, level, budget);
   }
   const scale = added.length ? 1000 - APB.DINO_BUDGET_PERMILLE : 1000;
@@ -741,11 +754,24 @@ function _apbPrepareLevel(lc) {
     _apbTableCache = _apbTables(cfg.data);
     _apbTableSrc = cfg.data;
   }
-  const plan = _apbRoll(_apbTableCache, cfg.seed, levelId, _apbModel(objs), cfg.dinos, cfg.goal);
-  if (!plan || plan.vanilla) return;
+  // Every field generation rolled from, so a log line from a real run says
+  // whether the client rolled the same level, the same key and the same
+  // model as generation did. A silent hook is what made a diverging roll
+  // look like a logic bug rather than a parity one.
+  const model = _apbModel(objs);
+  const plan = _apbRoll(_apbTableCache, cfg.seed, levelId, model, cfg.dinos, cfg.goal);
+  const shape = ' key=' + JSON.stringify(levelId) + ' seed=' + cfg.seed +
+      ' own=' + (model.own_plants ? 1 : 0) + ' waves=' + model.waves +
+      ' groups=' + model.groups.length + ' dyn=' + model.dynamic.length;
+  // The vanilla fallback used to return in silence, which is the one outcome
+  // a player can see (the level plays as authored) and could not report.
+  if (!plan || plan.vanilla) {
+    _apLog('[AP] zombie budget roll: left vanilla,' + shape);
+    return;
+  }
   _apbApply(_apbTableCache, objs, plan);
-  log('[AP] zombie budget roll: ' + levelId + ' at ' + plan.ratio + '/1000 HP' +
-      (plan.dinos.length ? ', ' + plan.dinos.length + ' dino events' : ''));
+  _apLog('[AP] zombie budget roll: ' + plan.ratio + '/1000 HP, attempt=' + plan.attempt +
+      ', ' + plan.dinos.length + ' dino events,' + shape);
 }
 
 // Fails OPEN to vanilla: if anything here throws, the level plays as
@@ -756,7 +782,7 @@ function installBudgetHook(LC) {
   const _origSetLevelDefinition = LC.prototype.module_SetLevelDefinition;
   LC.prototype.module_SetLevelDefinition = function () {
     try { _apbPrepareLevel(this); } catch (e) {
-      try { log('[AP] zombie budget roll skipped: ' + e); } catch (e2) { /* no panel yet */ }
+      try { _apLog('[AP] zombie budget roll skipped: ' + e); } catch (e2) { /* unreachable */ }
     }
     return _origSetLevelDefinition.apply(this, arguments);
   };

@@ -110,6 +110,21 @@ FAR_FUTURE_FLYERS = frozenset({"future_jetpack", "future_jetpack_disco",
                                "future_jetpack_veteran"})
 HAZARD_TAGS = ("jester", "iceblock", "air")
 
+# [user] Nothing new before egypt6. A run's opening is played with whatever the
+# multiworld has handed over by then, which in a multi-slot seed is close to
+# nothing, so these levels may only field the hazards they shipped with -- the
+# same restriction conveyor and preset levels carry, for the same reason. It
+# rules out dino events here too: a dino is a hazard the level did not ship.
+#
+# Measured at the seed that prompted this (3283499693, 12 worlds): egypt1 asked
+# for a warming plant and egypt3 for Perfume-shroom, which put the first level
+# of the run in sphere 11. Everything from egypt6 on keeps the full travelling
+# hazard set.
+OPENING_LEVELS = frozenset({
+    "tutorial1", "tutorial2", "tutorial3", "tutorial4", "tutorial5",
+    "egypt1", "egypt2", "egypt3", "egypt4", "egypt5",
+})
+
 
 # ── the PRNG ─────────────────────────────────────────────────────────────────
 
@@ -495,9 +510,10 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
     vanilla = {c for g in level["groups"] for c, _ in g["z"]}
     pools = {k: (t.pools[k], t.pool_hp[k]) for k in BUCKET_ORDER}
     drop = set()
-    if not level["own_plants"]:
+    if not level["own_plants"] or level_id in OPENING_LEVELS:
         # Conveyor or preset seed bank: the player cannot bring a counter, so
-        # only hazards the level already shipped with may appear.
+        # only hazards the level already shipped with may appear. Before egypt6
+        # the player HAS no counter yet, which comes to the same thing.
         drop |= t.hazard_names - vanilla
     if level.get("lanes", 5) < 5:
         # A narrower lawn than the game's five lanes, which only the tutorial
@@ -520,8 +536,11 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
     # One decision draw against the goal's chance, so a level that gains dinos
     # at a lower chance also gains them at every higher one.
     added = []
+    # The draw is the first operand on purpose: it is taken whatever the answer,
+    # so a level that cannot gain dinos still leaves the stream where the client
+    # expects it.
     if (dino_rng.below(1000) < DINO_LEVEL_PERMILLE_BY_GOAL[goal_type]
-            and dinos and dinos_allowed(level)):
+            and dinos and level_id not in OPENING_LEVELS and dinos_allowed(level)):
         added = _dino_events(dino_rng, level, budget)
     scale = 1000 - DINO_BUDGET_PERMILLE if added else 1000
 

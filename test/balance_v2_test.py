@@ -253,5 +253,32 @@ else:
     ok(f"dino levels per goal (world key, zomboss, completion): "
        f"{[len(g) for g in by_goal]} of {len(eligible)}, inside their bands")
 
+# [user] Nothing new before egypt6. The opening of a run is played with whatever
+# the multiworld has handed over by then, so a level there may field only the
+# hazards it shipped with, and never a dino event. Before this, one seed asked
+# for a warming plant on egypt1 and Perfume-shroom on egypt3, which put the
+# first level of that run in sphere 11 of its spoiler.
+gained, dinoed, rolled = [], [], 0
+for lid in sorted(R.OPENING_LEVELS):
+    if lid not in levels:
+        continue          # tutorial5 is not a tracked level
+    vanilla = R.hazards({"level": lid, "groups": levels[lid]["groups"],
+                         "dynamic": {}, "dinos": []})
+    for seed in SEEDS:
+        for goal in (0, 1, 2):
+            plan = R.roll_level(seed, lid, dinos=True, goal_type=goal)
+            if plan is None:
+                continue
+            rolled += 1
+            gainedset = R.hazards(plan) - vanilla
+            if gainedset:
+                gained.append(f"{lid} seed {seed} goal {goal}: {sorted(gainedset)}")
+            if plan["dinos"]:
+                dinoed.append(f"{lid} seed {seed} goal {goal}: {len(plan['dinos'])} events")
+if gained or dinoed:
+    fail(f"a level before egypt6 gained a hazard: {(gained + dinoed)[:3]}")
+else:
+    ok(f"no level before egypt6 gains a hazard or a dino, over {rolled} rolls")
+
 print(f"\n{failed} FAILURE(S)" if failed else "\nBUDGET ROLL OK")
 sys.exit(1 if failed else 0)
