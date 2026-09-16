@@ -53,6 +53,68 @@ if skipped:
 else:
     ok("no bespoke or runtime-generated level is ever rolled, cannon levels included")
 
+# Plant food. The count belongs to the wave source, but the carriers are picked
+# out of the zombies it actually spawned, and the grave spawner never comes back
+# for types that cannot carry. So a group owing plant food has to keep enough
+# zombies able to take it, or the level quietly drops less than it was authored
+# to. The client asserts the same thing against the shipped vectors.
+short, owed = [], 0
+for seed in SEEDS[:2]:
+    for lid in eligible:
+        plan = R.roll_level(seed, lid)
+        if plan["vanilla"]:
+            continue
+        need = {g["id"]: g["pf"] for g in levels[lid]["groups"] if g.get("pf")}
+        for g in plan["groups"]:
+            n = need.get(g["id"], 0)
+            if not n or g["k"] not in R.LIST_KINDS:
+                continue
+            owed += 1
+            carriers = sum(count for c, count in g["z"] if t.carry.get(c, True))
+            if carriers < n:
+                short.append(f"{lid}/{g['id']}: owes {n}, fields {carriers}")
+if short:
+    fail(f"{len(short)} of {owed} groups cannot hand out their plant food: {short[:3]}")
+else:
+    ok(f"all {owed} plant food groups keep enough carriers to hand it out")
+
+# Narrow lawns. The tutorial levels roll their sod out one strip at a time and
+# disable the lanes they have not reached, and a chicken thrower or a barrel
+# puts bodies into the lanes either side of its own without asking whether they
+# are playable. The player cannot answer a zombie in a lane they cannot plant
+# in, so the roll may not field one there.
+narrow = [lid for lid in eligible if levels[lid].get("lanes", 5) < 5]
+wide = [lid for lid in eligible if levels[lid].get("lanes", 5) >= 5]
+bad, reached = [], 0
+for seed in SEEDS:
+    for lid in narrow:
+        plan = R.roll_level(seed, lid)
+        if plan["vanilla"]:
+            continue
+        for g in plan["groups"]:
+            for c, _ in g["z"]:
+                if c in t.multilane_names:
+                    bad.append(f"{lid}/{g['id']}: {c} spawns into lanes {lid} has not got")
+    reached += sum(1 for lid in wide if any(c in t.multilane_names
+                                            for g in (R.roll_level(seed, lid) or {})["groups"]
+                                            for c, _ in g["z"]))
+if not narrow:
+    fail("no level with fewer than five lanes, so nothing was really checked")
+elif bad:
+    fail(f"{len(bad)} multi-lane spawns on a narrow lawn: {bad[:3]}")
+elif not reached:
+    fail("multi-lane spawners were kept out of every level, not just narrow ones")
+else:
+    ok(f"{len(narrow)} narrow levels field no multi-lane spawner; "
+       f"the wider lawns take them {reached} times over {len(SEEDS)} seeds")
+
+# The dynamic pool mapping is not filtered, which is only safe while no narrow
+# level has a dynamic pool for it to put a multi-lane zombie into.
+if any(levels[lid]["dynamic"] for lid in narrow):
+    fail("a narrow level grew a dynamic zombie pool, which the roll does not filter")
+else:
+    ok("no narrow level has a dynamic pool, so the unfiltered mapping cannot reach one")
+
 start = time.time()
 for seed in SEEDS:
     ratios, changed, fallback, problems = [], [], 0, []

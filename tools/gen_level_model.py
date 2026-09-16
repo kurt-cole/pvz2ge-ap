@@ -30,6 +30,7 @@ LEVEL_MODEL["levels"][level id] =
     generated   waves come from a runtime generator (WaveGeneratorProperties
                 or a DangerRoom* designer), so nothing static describes them
     own_plants  seed chooser and no conveyor
+    lanes       playable lanes, 5 unless a tutorial module narrows the lawn
     tides       carries a TidalChangeWaveActionProps
     planks      PiratePlankProperties PlankRows, [] when the level has none
     sun         {sky, no_producers, max_sun}: the level's sun economy
@@ -42,6 +43,8 @@ LEVEL_MODEL["levels"][level id] =
                 rows  distinct fixed rows, when every entry names one
                 grid  grid item types a grave spawner releases from
                 rep   WaveSchedulerProps Repeat.Max around the group, if any
+                pf    plant food the source owes, when it owes any: the most
+                      any difficulty asks of it
     dynamic     [{w, p, inc, pool}] from WaveManagerModuleProperties
     dinos       [[wave, dino type, row]]
     portals     [[wave, portal type]]
@@ -49,7 +52,7 @@ LEVEL_MODEL["levels"][level id] =
                  "spawned": [[wave, {type: n}]]}
     events      other wave objclasses, for reference
 
-LEVEL_MODEL["zombies"][codename] = {hp, cost, tier, excluded}
+LEVEL_MODEL["zombies"][codename] = {hp, cost, tier, excluded, carry, multilane}
 LEVEL_MODEL["grave_hp"][grid item type] = Toughness
 """
 import argparse
@@ -92,6 +95,17 @@ KINDS = {
 RAID_DEFAULT = "swashbuckler"
 
 GENERATORS = re.compile(r"^(WaveGeneratorProperties|DangerRoom\w+)$")
+
+# The tutorial lawn rolls its sod out one strip at a time, and its DisabledLanes
+# getter reads the strip count: rowCount 1 disables lanes 0, 1, 3 and 4, and
+# rowCount 3 disables 0 and 4. PlayTutorialLevel4 sets rowCount to 5 before it
+# animates, so tutorial4 is a full lawn and is not here. Nothing else in the
+# game overrides DisabledLanes, so every other level is five lanes wide.
+TUTORIAL_LANES = {
+    "TutorialLevel1Properties": 1,
+    "TutorialLevel2Properties": 3,
+    "TutorialLevel3Properties": 3,
+}
 
 
 def rt(value):
@@ -197,6 +211,8 @@ class Level:
             "bespoke": any(BESPOKE_MODULES.search(c) for c in classes),
             "generated": any(GENERATORS.match(c) for c in classes),
             "own_plants": seedbank.get("SelectionMethod") == "chooser" and not conveyor,
+            "lanes": min([TUTORIAL_LANES[c] for c in classes if c in TUTORIAL_LANES]
+                         or [5]),
             "tides": "TidalChangeWaveActionProps" in classes,
             # Pirate Seas lanes that start with planks; the rest are open sea.
             # [data] the game can add or remove planks mid-level.
@@ -319,6 +335,18 @@ class Level:
             out["z"] = [e for e in out["z"] if e[0]]
             out["f"] = "DropShipShiftedProperties.ImpCount"
         out["z"] = [e for e in out.get("z", []) if e[1] > 0]
+        # Plant food this source owes. addPlantFood hands it to zombies picked
+        # at random out of the ones the wave actually spawned, so the roll has
+        # to leave enough of them able to take it. DynamicPlantfood overrides
+        # the flat count and is indexed by difficulty, so what any difficulty
+        # can ask for is what has to be fieldable.
+        dynamic_pf = data.get("DynamicPlantfood")
+        if isinstance(dynamic_pf, list) and dynamic_pf:
+            pf = max(as_int(v) for v in dynamic_pf)
+        else:
+            pf = as_int(data.get("AdditionalPlantfood"))
+        if pf > 0:
+            out["pf"] = pf
         return out
 
     def _dynamic(self):
@@ -456,12 +484,21 @@ def main() -> int:
     table = {}
     for name in sorted(names):
         if name not in zombies.types:
-            table[name] = {"hp": 0, "cost": 0, "tier": "", "excluded": "unknown"}
+            table[name] = {"hp": 0, "cost": 0, "tier": "", "excluded": "unknown",
+                           "carry": True, "multilane": False}
             continue
         reason = zombies.excluded(name)
         table[name] = {"hp": zombies.hp(name), "cost": zombies.cost(name),
                        "tier": "" if reason else zombies.tier(name),
-                       "excluded": reason}
+                       "excluded": reason,
+                       # Gargantuars, flag zombies and armor4: addPlantFood
+                       # skips these when handing out a wave's plant food, and
+                       # the grave spawner never comes back for them.
+                       "carry": not zombies.prop(name).get(
+                           "CannotCarryPlantfoodsInWaves"),
+                       # Puts bodies into the lanes either side of its own,
+                       # without asking whether those lanes are playable.
+                       "multilane": zombies.multilane(name)}
     # A grid item type names its sheet through GridItemTypes (`gravestone` is
     # gravestone_tutorial's). Sap, rails, sliders and tiles share the grid item
     # system but resolve to TileProps or TileLiquidProps: not graves, not priced.

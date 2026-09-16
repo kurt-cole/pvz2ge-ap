@@ -14374,7 +14374,7 @@
   },
   "abbot_chi": {
    "cost": 700,
-   "hp": 1100
+   "hp": 2200
   },
   "abbot_fan": {
    "cost": 300,
@@ -14390,7 +14390,7 @@
   },
   "barrelroller": {
    "cost": 500,
-   "hp": 190
+   "hp": 1670
   },
   "beach": {
    "cost": 100,
@@ -14430,7 +14430,7 @@
   },
   "beach_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "beach_imp": {
    "cost": 100,
@@ -14466,11 +14466,11 @@
   },
   "birthday_barrelroller": {
    "cost": 500,
-   "hp": 190
+   "hp": 1670
   },
   "birthday_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "birthday_jetpack": {
    "cost": 150,
@@ -14482,7 +14482,7 @@
   },
   "birthday_pharaoh": {
    "cost": 450,
-   "hp": 1200
+   "hp": 1490
   },
   "birthday_pharaoh_inner": {
    "cost": 150,
@@ -14490,15 +14490,15 @@
   },
   "birthday_troglobite": {
    "cost": 600,
-   "hp": 470
+   "hp": 1040
   },
   "birthday_troglobite_1block": {
    "cost": 400,
-   "hp": 470
+   "hp": 660
   },
   "birthday_troglobite_2block": {
    "cost": 400,
-   "hp": 470
+   "hp": 850
   },
   "bobsled": {
    "cost": 100,
@@ -14506,43 +14506,43 @@
   },
   "bobsled_team": {
    "cost": 200,
-   "hp": 390
+   "hp": 1150
   },
   "camel_manyhump": {
    "cost": 1200,
-   "hp": 250
+   "hp": 440
   },
   "camel_manyhump_touch": {
    "cost": 600,
-   "hp": 250
+   "hp": 440
   },
   "camel_onehump": {
    "cost": 600,
-   "hp": 250
+   "hp": 440
   },
   "camel_onehump_touch": {
    "cost": 300,
-   "hp": 250
+   "hp": 440
   },
   "camel_threehump": {
    "cost": 1000,
-   "hp": 250
+   "hp": 440
   },
   "camel_threehump_touch": {
    "cost": 500,
-   "hp": 250
+   "hp": 440
   },
   "camel_twohump": {
    "cost": 800,
-   "hp": 250
+   "hp": 440
   },
   "camel_twohump_touch": {
    "cost": 400,
-   "hp": 250
+   "hp": 440
   },
   "cannon": {
    "cost": 700,
-   "hp": 600
+   "hp": 790
   },
   "catapult": {
    "cost": 300,
@@ -14582,7 +14582,7 @@
   },
   "cowboy_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "dark": {
    "cost": 100,
@@ -14606,7 +14606,7 @@
   },
   "dark_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "dark_imp": {
    "cost": 100,
@@ -14666,7 +14666,7 @@
   },
   "dino_gargantuar": {
    "cost": 1800,
-   "hp": 5400
+   "hp": 5495
   },
   "dino_imp": {
    "cost": 100,
@@ -14674,7 +14674,7 @@
   },
   "disco_mech": {
    "cost": 800,
-   "hp": 2000
+   "hp": 2380
   },
   "duckytube": {
    "cost": 100,
@@ -14710,23 +14710,23 @@
   },
   "easter_camel_manyhump": {
    "cost": 1200,
-   "hp": 250
+   "hp": 440
   },
   "easter_camel_onehump": {
    "cost": 600,
-   "hp": 250
+   "hp": 440
   },
   "easter_camel_twohump": {
    "cost": 800,
-   "hp": 250
+   "hp": 440
   },
   "easter_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3791
   },
   "easter_gargantuar_af": {
    "cost": 1500,
-   "hp": 500
+   "hp": 4291
   },
   "easter_imp": {
    "cost": 100,
@@ -14746,7 +14746,7 @@
   },
   "egypt_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "egypt_imp": {
    "cost": 100,
@@ -14794,7 +14794,7 @@
   },
   "eighties_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "eighties_glitter": {
    "cost": 300,
@@ -14814,7 +14814,7 @@
   },
   "eighties_punk_veteran": {
    "cost": 500,
-   "hp": 400
+   "hp": 440
   },
   "explorer": {
    "cost": 250,
@@ -14838,19 +14838,19 @@
   },
   "feastivus_camel_manyhump": {
    "cost": 1200,
-   "hp": 250
+   "hp": 440
   },
   "feastivus_camel_onehump": {
    "cost": 600,
-   "hp": 250
+   "hp": 440
   },
   "feastivus_camel_segment": {
    "cost": 200,
-   "hp": 250
+   "hp": 440
   },
   "feastivus_camel_twohump": {
    "cost": 800,
-   "hp": 250
+   "hp": 440
   },
   "feastivus_flag": {
    "cost": 100,
@@ -14858,7 +14858,7 @@
   },
   "feastivus_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "feastivus_imp": {
    "cost": 100,
@@ -14938,7 +14938,7 @@
   },
   "future_gargantuar": {
    "cost": 2000,
-   "hp": 3600
+   "hp": 3870
   },
   "future_imp": {
    "cost": 150,
@@ -14982,7 +14982,7 @@
   },
   "halloween_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "halloween_imp": {
    "cost": 100,
@@ -14990,7 +14990,7 @@
   },
   "holiday_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "holiday_imp": {
    "cost": 100,
@@ -15022,7 +15022,7 @@
   },
   "iceage_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "iceage_hunter": {
    "cost": 500,
@@ -15038,19 +15038,19 @@
   },
   "iceage_troglobite": {
    "cost": 600,
-   "hp": 470
+   "hp": 1040
   },
   "iceage_troglobite_1block": {
    "cost": 400,
-   "hp": 470
+   "hp": 660
   },
   "iceage_troglobite_2block": {
    "cost": 400,
-   "hp": 470
+   "hp": 850
   },
   "iceage_troglobite_veteran": {
    "cost": 900,
-   "hp": 700
+   "hp": 3400
   },
   "iceage_weasel": {
    "cost": 10,
@@ -15078,11 +15078,11 @@
   },
   "kongfu_bronze_chi": {
    "cost": 1500,
-   "hp": 4700
+   "hp": 6239
   },
   "kongfu_bronze_chi_without_torch": {
    "cost": 1500,
-   "hp": 4700
+   "hp": 6455
   },
   "kongfu_bronze_hook": {
    "cost": 1500,
@@ -15102,7 +15102,7 @@
   },
   "kongfu_gong": {
    "cost": 350,
-   "hp": 250
+   "hp": 1750
   },
   "kongfu_hammer": {
    "cost": 200,
@@ -15194,7 +15194,7 @@
   },
   "lostcity_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "lostcity_imp": {
    "cost": 100,
@@ -15230,15 +15230,15 @@
   },
   "lunar_camel_manyhump": {
    "cost": 1200,
-   "hp": 250
+   "hp": 440
   },
   "lunar_camel_onehump": {
    "cost": 600,
-   "hp": 250
+   "hp": 440
   },
   "lunar_camel_twohump": {
    "cost": 800,
-   "hp": 250
+   "hp": 440
   },
   "lunar_superfanimp": {
    "cost": 200,
@@ -15338,11 +15338,11 @@
   },
   "pharaoh": {
    "cost": 450,
-   "hp": 1200
+   "hp": 1490
   },
   "pharaoh_weak": {
    "cost": 450,
-   "hp": 1200
+   "hp": 1490
   },
   "piano": {
    "cost": 450,
@@ -15378,7 +15378,7 @@
   },
   "pirate_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "pirate_imp": {
    "cost": 100,
@@ -15438,7 +15438,7 @@
   },
   "sky_dropship": {
    "cost": 100,
-   "hp": 1200
+   "hp": 1960
   },
   "sky_electric": {
    "cost": 300,
@@ -15450,11 +15450,11 @@
   },
   "sky_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "sky_gargantuar_armor2_thrower": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 4890
   },
   "sky_imp": {
    "cost": 100,
@@ -15462,7 +15462,7 @@
   },
   "sky_twin": {
    "cost": 1200,
-   "hp": 1500
+   "hp": 3000
   },
   "sky_twin_upper": {
    "cost": 900,
@@ -15498,7 +15498,7 @@
   },
   "sportzball_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "sportzball_imp": {
    "cost": 100,
@@ -15554,7 +15554,7 @@
   },
   "summer_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "summer_imp": {
    "cost": 100,
@@ -15586,7 +15586,7 @@
   },
   "tutorial_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "tutorial_imp": {
    "cost": 100,
@@ -15610,19 +15610,19 @@
   },
   "valentines_gargantuar": {
    "cost": 1500,
-   "hp": 3600
+   "hp": 3790
   },
   "west_bull": {
    "cost": 600,
-   "hp": 1300
+   "hp": 1490
   },
   "west_bull_veteran": {
    "cost": 1000,
-   "hp": 1400
+   "hp": 1590
   },
   "west_bull_veteran_plantern_5": {
    "cost": 1000,
-   "hp": 1400
+   "hp": 1590
   },
   "west_bullrider": {
    "cost": 100,

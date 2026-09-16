@@ -25,6 +25,24 @@ const timers = [];
 function setTimeout(fn, ms){ timers.push({ fn, ms }); return timers.length; }
 
 // ── copied verbatim from build_pvzge_ap.py ───────────────────────────────────
+function installUILoseHook(UI) {
+  if (!UI || UI._ap_hooked_ui || !UI.prototype || !UI.prototype.loseDarken) return;
+  const _origLoseDarken = UI.prototype.loseDarken;
+  UI.prototype.loseDarken = function() {
+    // Only the call that actually ends the level is a death. Every later
+    // cause calls loseDarken again -- zombies go on eating while the death
+    // screen sits there -- and the game ignores those through this very
+    // guard, so reading it here is what stops one loss sending a DeathLink
+    // every few seconds for as long as the screen is up. With LevelPlay not
+    // captured this reads as "first", which is the behaviour it had before.
+    const play = window._AP_LevelPlay && window._AP_LevelPlay.component;
+    if (!this.paused && !(play && (play.gameLost || play.gameWon))
+        && window._AP_onGameLose) window._AP_onGameLose();
+    return _origLoseDarken.apply(this, arguments);
+  };
+  UI._ap_hooked_ui = true;
+}
+
 function deathLinkActive(){ return slotDeathLink && cfg.deathLink !== false; }
 
 function applyDeathLinkPref(){
@@ -85,8 +103,23 @@ function enterLevel(){
   return calls;
 }
 
+// The game's own UI class, near enough: loseDarken ends the level once and
+// every later cause calls it again while the death screen sits there. The
+// LevelPlay component is where the game keeps the flag that says so.
+function gameUI(){
+  const play = { gameLost: false, gameWon: false };
+  window._AP_LevelPlay = { component: play };
+  window._AP_onGameLose = sendDeathLink;
+  function UI(){ this.paused = false; }
+  UI.prototype.loseDarken = function(){ play.gameLost = true; };
+  installUILoseHook(UI);
+  installUILoseHook(UI);      // idempotent, as the capture may fire twice
+  return new UI();
+}
+
 module.exports = { deathLinkActive, applyDeathLinkPref, sendDeathLink,
-                   applyRemoteDeath, reset, enterLevel, sent, toasts, timers,
+                   applyRemoteDeath, installUILoseHook, gameUI,
+                   reset, enterLevel, sent, toasts, timers,
                    advance: ms => { now += ms; },
                    setPref: v => { cfg.deathLink = v; },
                    setSeed: v => { slotDeathLink = v; },

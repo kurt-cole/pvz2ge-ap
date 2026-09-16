@@ -30,7 +30,7 @@ function canon(x) {
 }
 const same = (a, b) => JSON.stringify(canon(a)) === JSON.stringify(canon(b));
 
-const GROUP_KEYS = ['k', 'id', 'w', 'z', 'f', 'p', 'rep', 'bring'];
+const GROUP_KEYS = ['k', 'id', 'w', 'z', 'f', 'p', 'rep', 'bring', 'pf'];
 function view(plan) {
   if (!plan) return null;
   return {
@@ -155,6 +155,92 @@ const tables = B._apbTables(V.tables);
   B.syncBudgetConfig();
   if (B.window._AP_zombieBudget !== null) fail('slot_data with no budget keys did not read as off');
   else ok('slot_data with no budget keys reads as off');
+}
+
+// ── plant food ───────────────────────────────────────────────────────────────
+// A wave owing plant food has to keep enough zombies able to carry it, and a
+// collectable keyed to a zombie codename has to keep pointing at one the level
+// still fields. Both are invisible in game until something never drops.
+{
+  const bad = [];
+  let owed = 0;
+  for (const c of V.fixtures.concat(V.rolls)) {
+    const model = c.objects ? B._apbModel(clone(c.objects)) : c.model;
+    const need = {};
+    for (const g of model.groups) if (g.pf) need[g.id] = g.pf;
+    for (const p of c.plans) {
+      if (!p.plan || p.plan.vanilla) continue;
+      for (const g of p.plan.groups) {
+        const n = need[g.id];
+        if (!n || !B.APB.LIST_KINDS.includes(g.k)) continue;
+        owed++;
+        let carriers = 0;
+        for (const e of g.z) if (tables.carry[e[0]] !== false) carriers += e[1];
+        if (carriers < n) {
+          bad.push(`${c.level}/${g.id} owes ${n} plant food, fields ${carriers} carriers`);
+        }
+      }
+    }
+  }
+  if (bad.length) fail(`${bad.length} of ${owed} groups cannot hand out their plant food: ${bad[0]}`);
+  else ok(`all ${owed} plant food groups keep enough carriers to hand it out`);
+}
+
+{
+  const fx = V.fixtures.find(f => f.objects.some(o => o.objclass === 'PickupCollectableTutorialProperties'
+                                                 && (o.objdata || {}).DropperZombieType));
+  if (!fx) {
+    fail('no fixture keys a collectable to a zombie type');
+  } else {
+    const bad = [];
+    let checked = 0;
+    for (const p of fx.plans) {
+      if (!p.plan || p.plan.vanilla) continue;
+      const objs = clone(fx.objects);
+      B._apbApply(tables, objs, p.plan);
+      const fielded = new Set();
+      for (const g of p.plan.groups) for (const e of g.z) fielded.add(e[0]);
+      for (const o of objs) {
+        if (o.objclass !== 'PickupCollectableTutorialProperties') continue;
+        if (!o.objdata.DropperZombieType) continue;
+        checked++;
+        if (!fielded.has(o.objdata.DropperZombieType)) {
+          bad.push(`${fx.level}: dropper ${o.objdata.DropperZombieType} is not in the rolled level`);
+        }
+      }
+    }
+    if (bad.length) fail(bad[0]);
+    else ok(`${fx.level}: the collectable dropper follows the roll (${checked} plans)`);
+  }
+}
+
+// ── narrow lawns ─────────────────────────────────────────────────────────────
+// The tutorial levels play on part of the lawn, and a chicken thrower or a
+// barrel puts bodies into the lanes either side of its own without asking
+// whether they are playable. Nothing in game says which lane a body came from,
+// so this is invisible until a level is unwinnable.
+{
+  const bad = [];
+  let narrow = 0, wide = 0;
+  for (const c of V.fixtures.concat(V.rolls)) {
+    const model = c.objects ? B._apbModel(clone(c.objects)) : c.model;
+    const isNarrow = (model.lanes || 5) < 5;
+    if (isNarrow) narrow++;
+    for (const p of c.plans) {
+      if (!p.plan || p.plan.vanilla) continue;
+      for (const g of p.plan.groups) {
+        for (const e of g.z) {
+          if (!tables.multilane[e[0]]) continue;
+          if (isNarrow) bad.push(`${c.level} (${model.lanes} lanes) fields ${e[0]}`);
+          else wide++;
+        }
+      }
+    }
+  }
+  if (!narrow) fail('no fixture or roll level has fewer than five lanes');
+  else if (bad.length) fail(`${bad.length} multi-lane spawns on a narrow lawn: ${bad[0]}`);
+  else if (!wide) fail('multi-lane spawners appear nowhere at all, so nothing was proven');
+  else ok(`${narrow} narrow levels field no multi-lane spawner (${wide} such spawns elsewhere)`);
 }
 
 // ── never rolled ─────────────────────────────────────────────────────────────

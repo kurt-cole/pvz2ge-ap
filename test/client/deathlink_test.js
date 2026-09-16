@@ -109,6 +109,37 @@ D.sendDeathLink();
 if (bounces().length !== 2) fail('a later loss was swallowed by the debounce');
 else ok('a loss after the debounce window sends again');
 
+// ── the hook: one loss is one death ──────────────────────────────────────────
+// The death screen is not a still frame. Zombies go on eating, plants go on
+// dying, and each of those calls loseDarken again; the game ignores the repeats
+// because the level is already lost. The debounce alone only spaces them out,
+// so a player sitting on the lose screen kept firing a death into the room
+// every few seconds [user].
+D.reset({ seed: true, pref: true });
+let ui = D.gameUI();
+ui.loseDarken();
+for (let i = 0; i < 5; i++) { D.advance(4000); ui.loseDarken(); }
+if (bounces().length !== 1) fail(`one loss sent ${bounces().length} deaths`);
+else ok('a level lost once sends exactly one death, however often loseDarken fires');
+
+// The next level is a fresh loss, not a repeat of the last one.
+D.reset({ seed: true, pref: true });
+ui = D.gameUI();
+ui.loseDarken();
+D.advance(4000);
+ui = D.gameUI();               // new level, so gameLost is false again
+ui.loseDarken();
+if (bounces().length !== 2) fail(`losing two levels sent ${bounces().length} deaths`);
+else ok('losing the next level sends its own death');
+
+// Paused is the game's own guard too: loseDarken does nothing, so nor do we.
+D.reset({ seed: true, pref: true });
+ui = D.gameUI();
+ui.paused = true;
+ui.loseDarken();
+if (bounces().length) fail('sent a death for a loseDarken the game ignored');
+else ok('a loseDarken the game ignores sends no death');
+
 // ── incoming: someone else died ──────────────────────────────────────────────
 D.reset({ seed: true, pref: true });
 let calls = D.enterLevel();

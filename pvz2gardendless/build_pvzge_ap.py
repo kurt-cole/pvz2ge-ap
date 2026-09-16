@@ -255,7 +255,15 @@ window.electron = electron;
     if (!UI || UI._ap_hooked_ui || !UI.prototype || !UI.prototype.loseDarken) return;
     const _origLoseDarken = UI.prototype.loseDarken;
     UI.prototype.loseDarken = function() {
-      if (window._AP_onGameLose) window._AP_onGameLose();
+      // Only the call that actually ends the level is a death. Every later
+      // cause calls loseDarken again -- zombies go on eating while the death
+      // screen sits there -- and the game ignores those through this very
+      // guard, so reading it here is what stops one loss sending a DeathLink
+      // every few seconds for as long as the screen is up. With LevelPlay not
+      // captured this reads as "first", which is the behaviour it had before.
+      const play = window._AP_LevelPlay && window._AP_LevelPlay.component;
+      if (!this.paused && !(play && (play.gameLost || play.gameWon))
+          && window._AP_onGameLose) window._AP_onGameLose();
       return _origLoseDarken.apply(this, arguments);
     };
     UI._ap_hooked_ui = true;
@@ -1046,15 +1054,24 @@ window.electron = electron;
     SHARE_KNEE: 200, SHARE_HALF: 50, DINO_BUDGET_PERMILLE: 100,
     DINO_TYPES: ['ankylo', 'ptero', 'raptor', 'stego', 'tyranno'],
     DINO_LEVEL_PERMILLE_BY_GOAL: [262, 232, 236],
-    DINO_BANDS: [[4183, 500, 600, 3, [0, 7, 24, 8, 11]],
-                 [5331, 500, 777, 3, [3, 13, 30, 11, 5]],
-                 [6452, 583, 1000, 2, [8, 10, 39, 7, 15]],
+    DINO_BANDS: [[4192, 500, 600, 3, [0, 7, 24, 8, 11]],
+                 [5331, 500, 777, 3, [3, 12, 34, 10, 5]],
+                 [6462, 500, 1000, 2, [8, 11, 35, 8, 15]],
                  [1073741824, 777, 1400, 2, [8, 26, 51, 6, 27]]],
     DINO_TEST_BEACH: false, DINO_TEST_PIRATE: false, GRAVE_DEFAULT_HP: 700,
     LIST_KINDS: ['jittered', 'ground', 'storm', 'grave_spawn'],
     FIELD_KINDS: ['raid', 'beach', 'spider', 'parachute'],
     BUCKETS: ['generic|land', 'generic|water', 'skycity|land'],
     HAZARD_TAGS: ['jester', 'iceblock', 'air'],
+    // Level objclass -> how many lanes the lawn really has. The tutorial lawn
+    // rolls its sod out a strip at a time and disables the rest; tutorial4 is
+    // absent because it sets five lanes before it animates, and nothing else in
+    // the game narrows the lawn. Mirrors TUTORIAL_LANES in gen_level_model.py.
+    TUTORIAL_LANES: {
+      TutorialLevel1Properties: 1,
+      TutorialLevel2Properties: 3,
+      TutorialLevel3Properties: 3,
+    },
     FAR_FUTURE_FLYERS: ['future_jetpack', 'future_jetpack_disco', 'future_jetpack_veteran'],
     RAID_DEFAULT: 'swashbuckler',
     KINDS: {
@@ -1150,6 +1167,13 @@ window.electron = electron;
       out.f = 'DropShipShiftedProperties.ImpCount';
     }
     out.z = z.filter(function (e) { return e[1] > 0; });
+    let pf = 0;
+    if (Array.isArray(data.DynamicPlantfood) && data.DynamicPlantfood.length) {
+      for (const v of data.DynamicPlantfood) pf = Math.max(pf, _apbInt(v, 0));
+    } else {
+      pf = _apbInt(data.AdditionalPlantfood, 0);
+    }
+    if (pf > 0) out.pf = pf;
     return out;
   }
 
@@ -1256,6 +1280,11 @@ window.electron = electron;
         return o && /^(WaveGeneratorProperties|DangerRoom\w+)$/.test(o.objclass || '');
       }),
       own_plants: seedbank.SelectionMethod === 'chooser' && !conveyor,
+      // Playable lanes. The tutorial lawn rolls its sod out a strip at a time
+      // and disables the rest; nothing else in the game narrows the lawn.
+      lanes: Math.min.apply(null, objs.map(function (o) {
+        return (o && APB.TUTORIAL_LANES[o.objclass]) || 5;
+      }).concat([5])),
       planks: (Array.isArray(_apbFirst(objs, 'PiratePlankProperties').PlankRows)
                ? _apbFirst(objs, 'PiratePlankProperties').PlankRows.slice() : [])
         .sort(function (x, y) { return x - y; }),
@@ -1272,10 +1301,16 @@ window.electron = electron;
     const names = Object.keys(zombies).sort();
     const t = { hp: Object.create(null), cost: Object.create(null), tier: Object.create(null),
                 excluded: Object.create(null), pools: {}, poolHp: {}, tiers: Object.create(null),
-                hazard: Object.create(null), field: {}, graveHp: (data && data.grave_hp) || {} };
+                hazard: Object.create(null), field: {}, graveHp: (data && data.grave_hp) || {},
+                carry: Object.create(null), multilane: Object.create(null) };
     for (const c of names) {
       const z = zombies[c];
       t.hp[c] = z[0]; t.cost[c] = z[1]; t.tier[c] = z[2] || ''; t.excluded[c] = z[3] || '';
+      // A short entry is a seed rolled before that flag existed, and reads as
+      // what the roll assumed then: every zombie able to carry plant food, and
+      // none of them putting bodies into a neighbouring lane.
+      t.carry[c] = z.length > 4 ? !!z[4] : true;
+      t.multilane[c] = z.length > 5 ? !!z[5] : false;
     }
     for (const b of APB.BUCKETS) t.pools[b] = [];
     for (const c of names) {
@@ -1435,6 +1470,47 @@ window.electron = electron;
       .map(function (c) { return [c, picks[c]]; });
   }
 
+  // _ensure_carriers(), as the Python. addPlantFood hands a wave's plant food
+  // to zombies picked at random from the ones it spawned, skipping those that
+  // cannot carry it, and the grave spawner never comes back for them. So a
+  // group owing plant food has to field enough zombies able to take it.
+  // Nothing is drawn here, so the stream stays in step with generation.
+  function _apbEnsureCarriers(t, entries, need, pools) {
+    if (!(need > 0) || !entries.length) return entries;
+    const counts = Object.create(null);
+    for (const e of entries) counts[e[0]] = e[1];
+    let carried = 0;
+    for (const c of Object.keys(counts)) if (t.carry[c] !== false) carried += counts[c];
+    if (carried >= need) return entries;
+    const nearest = function (bucket, hp) {
+      let best = null;
+      for (const c of pools[bucket][0]) {
+        if (t.carry[c] === false) continue;
+        const d = Math.abs((t.hp[c] || 0) - hp);
+        if (best === null || d < best.d || (d === best.d && c < best.c)) best = { d: d, c: c };
+      }
+      return best && best.c;
+    };
+    while (carried < need) {
+      const swappable = Object.keys(counts).filter(function (c) {
+        return counts[c] > 0 && t.carry[c] === false && _apbBucket(t, c);
+      }).sort(function (x, y) { return (counts[y] - counts[x]) || (x < y ? -1 : (x > y ? 1 : 0)); });
+      const source = swappable.length ? swappable[0]
+        : Object.keys(counts).sort().filter(function (c) { return _apbBucket(t, c); })[0];
+      if (source === undefined) break;
+      const pick = nearest(_apbBucket(t, source), t.hp[source] || 0);
+      if (!pick) break;
+      if (swappable.length) {          // convert one body rather than add one
+        counts[source] -= 1;
+        if (counts[source] === 0) delete counts[source];
+      }
+      counts[pick] = (counts[pick] || 0) + 1;
+      carried += 1;
+    }
+    return Object.keys(counts).sort().filter(function (c) { return counts[c] > 0; })
+      .map(function (c) { return [c, counts[c]]; });
+  }
+
   function _apbAttempt(t, seed, levelId, level, attempt, scale, vanilla, pools) {
     const rng = _apbStream(_apHash(String(seed) + '|' + levelId + '|budget|' + attempt));
     const groups = [];
@@ -1473,6 +1549,12 @@ window.electron = electron;
         const merged = Object.create(null);
         for (const e of rolled) merged[e[0]] = (merged[e[0]] || 0) + e[1];
         out.z = Object.keys(merged).sort().map(function (c) { return [c, merged[c]]; });
+        // Field sources name one codename in a field the spawner is written
+        // around, so they are left alone: a swap could name something the
+        // field may not hold.
+        if (APB.LIST_KINDS.indexOf(kind) >= 0) {
+          out.z = _apbEnsureCarriers(t, out.z, g.pf || 0, pools);
+        }
         if (APB.FIELD_KINDS.indexOf(kind) >= 0 && out.z.length) out.p = out.z[0][0];
         if (_apbHas(g, 'bring')) out.bring = g.bring;
         done[g.id] = out;
@@ -1501,9 +1583,18 @@ window.electron = electron;
     for (const g of level.groups) for (const e of g.z) vanilla[e[0]] = true;
     const pools = {};
     for (const b of APB.BUCKETS) pools[b] = [t.pools[b], t.poolHp[b]];
-    if (!level.own_plants) {
+    // Conveyor or preset seed bank: the player cannot bring a counter, so only
+    // hazards the level shipped with may appear. Fewer than five lanes: a
+    // chicken thrower or a barrel drops bodies into the lanes either side of
+    // its own without asking whether they are playable, and on the tutorial
+    // lawn they are not. A level that ships one keeps it, either way.
+    const narrow = (level.lanes || 5) < 5;
+    if (!level.own_plants || narrow) {
       for (const b of APB.BUCKETS) {
-        const names = t.pools[b].filter(function (c) { return !t.hazard[c] || vanilla[c]; });
+        const names = t.pools[b].filter(function (c) {
+          return vanilla[c] || ((level.own_plants || !t.hazard[c])
+                                && (!narrow || !t.multilane[c]));
+        });
         pools[b] = [names, names.map(function (c) { return t.hp[c]; })];
       }
     }
@@ -1613,6 +1704,31 @@ window.electron = electron;
                     objdata: { DinoRow: d[2], DinoType: d[1], DinoWaveDuration: 3 } });
         waves[d[0] - 1].push('RTID(' + alias + '@CurrentLevel)');
       });
+    }
+    // A level can key a tutorial collectable to a zombie codename: egypt5's
+    // Zen Garden sprout to `ra`, tutorial4's first coin to `tutorial_armor2`.
+    // registerZombieInThisWave matches DropperZombieType against what spawned,
+    // so rolling that type out of the level means the collectable never drops
+    // and the tutorial never completes. Point it at something the level does
+    // field: the earliest wave's first codename, by name on a tie.
+    let earliest = null;
+    const fielded = Object.create(null);
+    for (const g of plan.groups) {
+      for (const e of g.z) {
+        fielded[e[0]] = true;
+        if (!earliest || g.w < earliest.w || (g.w === earliest.w && e[0] < earliest.c)) {
+          earliest = { w: g.w, c: e[0] };
+        }
+      }
+    }
+    if (earliest) {
+      for (const o of objs) {
+        if (!o || o.objclass !== 'PickupCollectableTutorialProperties') continue;
+        const d = o.objdata || (o.objdata = {});
+        if (d.DropperZombieType && !fielded[d.DropperZombieType]) {
+          d.DropperZombieType = earliest.c;
+        }
+      }
     }
   }
 

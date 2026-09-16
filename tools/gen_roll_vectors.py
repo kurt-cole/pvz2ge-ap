@@ -49,14 +49,15 @@ FIXTURES = [
     "kongfu35",     # qigong strikes (fixed)
     "egypt20_1",    # runtime-generated waves: never rolled
     "cowboy11",     # MaximumSun level, preset plants or not
+    "tutorial3",    # three lanes: no multi-lane spawner may be rolled into it
 ]
 FIXTURE_CASES = [(1, False, 2), (2 ** 31 + 5, True, 0), (424242, True, 2)]
 ROLL_STEP = 9               # every ninth eligible level, sorted
 ROLL_CASES = [(987654321, True, 1)]
 
 MODEL_KEYS = ("waves", "stage", "bespoke", "generated", "own_plants", "planks",
-              "dynamic", "dinos", "graves")
-GROUP_KEYS = ("k", "id", "w", "z", "f", "p", "rep", "bring")
+              "lanes", "dynamic", "dinos", "graves")
+GROUP_KEYS = ("k", "id", "w", "z", "f", "p", "rep", "bring", "pf")
 PLAN_KEYS = ("attempt", "vanilla", "budget", "ratio", "dynamic", "dinos")
 
 
@@ -93,7 +94,9 @@ def main() -> int:
     levels = t.model["levels"]
 
     tables = {
-        "zombies": {c: [z["hp"], z["cost"], z["tier"], z["excluded"] or ""]
+        "zombies": {c: [z["hp"], z["cost"], z["tier"], z["excluded"] or "",
+                        1 if z.get("carry", True) else 0,
+                        1 if z.get("multilane") else 0]
                     for c, z in sorted(t.zombies.items())},
         "grave_hp": dict(sorted(t.model["grave_hp"].items())),
         "field_names": {k: sorted(v) for k, v in t.field_names.items()},

@@ -41,7 +41,9 @@ plant to answer them.
                      mechanics that need a specific plant or that field extra
                      zombies, partitioned so a shuffle can neither create nor
                      destroy one
-    h{n}             effective HP band, floor(log(hp) / log(HP_BAND))
+    h{n}             effective HP band, floor(log(hp) / log(HP_BAND)), where
+                     hp counts the body, its armor and every body it brings
+                     with it (Zombies.summon_hp)
 
 WHAT IS DROPPED
 
@@ -187,8 +189,8 @@ class Zombies:
         match = RTID.match(ref) if isinstance(ref, str) else None
         return self.props.get(match.group(1) if match else codename, {})
 
-    def hp(self, codename: str) -> int:
-        """Effective HP: the body plus everything it walks on with.
+    def body_hp(self, codename: str) -> int:
+        """The zombie's own hit points: its toughness plus its armor.
 
         An armoured variant carries all of its extra HP in StartingArmors and
         none in Toughness -- mummy and mummy_armor1 are both 190 -- so a
@@ -199,6 +201,122 @@ class Zombies:
         for armor in prop.get("StartingArmors") or []:
             total += self.armors.get(armor, {}).get("Toughness") or 0
         return int(total)
+
+    def _brings(self, prop: dict):
+        """(codenames, how many of them) this zombie fields whenever it spawns.
+
+        UNCONDITIONAL ONLY [user]. Each entry below is something the game does
+        every time the zombie is fielded, so its toughness is part of what the
+        level really asks the player to kill:
+
+            ImpType         a gargantuar always throws its imp; a barrel throws
+                            one into the lane above and one below (throwImps)
+            ImpTypes        a troglobite arrives with one imp per ice block
+            ZombieInside    a pharaoh's sarcophagus opens onto its inner zombie
+            BobsledType     the sled always carries its riders
+            BarrelType      a roller always pushes its barrel
+            PartnerType, SkunkType, JetpackType, ChiType, ZombiesToSpawn,
+            ZombiesToSummon  one body each (SummonCount when it states one)
+
+        `ZombieTypesToSummonBecomingFlag` (kongfu, monk, abbot) is deliberately
+        absent: transIntoZombie only calls flagSummon when that zombie becomes
+        the wave's flag zombie, which a wave list never decides, so pricing an
+        ordinary one as four bodies would be pricing something that never
+        happens. TeammateType is absent for the same reason it has no tier --
+        the camels are a minigame, not walkers.
+        """
+        out = []
+        imp = prop.get("ImpType")
+        if imp:
+            count = prop.get("ImpCount")
+            if isinstance(count, dict):
+                n = int(count.get("Max") or count.get("Min") or 1)
+            else:
+                n = 2 if self._is_barrel(prop) else 1
+            out.append(([imp], n))
+        if prop.get("ImpTypes"):
+            out.append((list(prop["ImpTypes"]),
+                        int(prop.get("NumberOfIceblocksToSpawnWith") or 0)))
+        for key in ("ZombieInside", "PartnerType", "SkunkType", "JetpackType",
+                    "ChiType", "BarrelType"):
+            if prop.get(key):
+                out.append(([prop[key]], 1))
+        if prop.get("BobsledType"):
+            # [guess] the riders are spawn points on the sled's prefab, which is
+            # not in the data tables. Four is what the sled shows.
+            out.append(([prop["BobsledType"]], 4))
+        for key in ("ZombiesToSpawn", "ZombiesToSummon"):
+            entries = prop.get(key)
+            if not entries:
+                continue
+            names = [e.get("Type") if isinstance(e, dict) else e for e in entries]
+            names = [n for n in names if n]
+            if not names:
+                continue
+            count = prop.get("SummonCount") if key == "ZombiesToSummon" else 1
+            if isinstance(count, dict):
+                count = count.get("Max") or count.get("Min") or 1
+            out.append((names, int(count or 1)))
+        return [(names, n) for names, n in out if n > 0]
+
+    @staticmethod
+    def _is_barrel(prop: dict) -> bool:
+        """A PirateBarrelZombie, which throws its imps into the next lanes.
+
+        The barrel class is the only thing that uses these rects, and the rects
+        are in the data, so this needs no name list.
+        """
+        return any("PirateBarrel" in str(prop.get(k) or "")
+                   for k in ("HitRect", "AttackRect"))
+
+    def summon_hp(self, codename: str, depth: int = 0, seen=()) -> int:
+        """Toughness of everything this zombie brings with it. See _brings.
+
+        Recursive, because what arrives can bring its own: an easter gargantuar
+        throws an egg, and the egg hatches into an imp or a dragon. Depth capped
+        and cycle guarded so a type that names itself cannot loop.
+        """
+        if depth > 3 or codename in seen:
+            return 0
+        seen = seen + (codename,)
+        total = 0
+        for names, count in self._brings(self.prop(codename)):
+            # A pool of candidates is one body of average toughness: which one
+            # arrives is the game's own random pick, not something to model.
+            each = [self.body_hp(n) + self.summon_hp(n, depth + 1, seen) for n in names]
+            total += count * (sum(each) // len(each))
+        return total
+
+    def hp(self, codename: str) -> int:
+        """Effective HP: the body, its armor, and everything it brings along.
+
+        The summons are here because they are HP the player has to chew through
+        to clear the spawn, and leaving them out underprices exactly the zombies
+        that field the most: a bobsled team read as 390 is really five bodies,
+        and a gargantuar's imp is another 190 on top of 3600.
+        """
+        return self.body_hp(codename) + self.summon_hp(codename)
+
+    def multilane(self, codename: str, depth: int = 0, seen=()) -> bool:
+        """Whether this zombie puts bodies into lanes other than its own.
+
+        ChickenThrower (the chicken farmer, the gobbler king and the weasel
+        hoarder all use it) picks from its own lane and the two either side, and
+        PirateBarrelZombie.throwImps throws one imp up and one down. Neither
+        checks the lawn's DisabledLanes, so on a level that is not five lanes
+        wide the bodies land where the player cannot plant anything: see
+        zombie_roll.roll_level, which keeps these off such a level.
+        """
+        if depth > 3 or codename in seen:
+            return False
+        prop = self.prop(codename)
+        if prop.get("ChickenTypeName") or prop.get("WeaselTypeName"):
+            return True
+        if self._is_barrel(prop):
+            return True
+        seen = seen + (codename,)
+        return any(self.multilane(n, depth + 1, seen)
+                   for names, _ in self._brings(prop) for n in names)
 
     def cost(self, codename: str) -> int:
         return int(self.prop(codename).get("WavePointCost") or 0)
@@ -424,7 +542,14 @@ The tier key joins these with "-":
          summon    `ZombiesToSummon` and friends -- fields zombies of its own,
                    which a level's wave budget never accounted for.
   5. `h{{n}}`, an effective-HP band: floor(log(hp) / log({hp_band})), where hp is
-     `Toughness` plus every `StartingArmors` entry's toughness.
+     `Toughness`, every `StartingArmors` entry's toughness, and the toughness
+     of every body the zombie brings with it whenever it spawns -- a
+     gargantuar's imp, a troglobite's ice-block imps, a bobsled's riders, a
+     roller's barrel and the two imps that barrel throws. Those are bodies the
+     player has to kill to clear the spawn, and counting only the carrier
+     underpriced exactly the zombies that field the most. Summons the game
+     fires only in special circumstances are not counted: see
+     `Zombies._brings` in the generator.
 
      WavePointCost alone was the whole tier key until this band was added, and
      it is a budget price for a generator that re-prices what it fields, not a

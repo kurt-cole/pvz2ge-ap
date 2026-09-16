@@ -87,9 +87,9 @@ DINO_LEVEL_PERMILLE_BY_GOAL = (262, 232, 236)   # 16/61, 33/142, 44/186
 # wave falls in. Derived by derive_dino_bands(); the test holds them equal.
 DINO_BAND_COUNT = 4
 DINO_BANDS: Tuple[Tuple[int, int, int, int, Tuple[int, ...]], ...] = (
-    (4183, 500, 600, 3, (0, 7, 24, 8, 11)),
-    (5331, 500, 777, 3, (3, 13, 30, 11, 5)),
-    (6452, 583, 1000, 2, (8, 10, 39, 7, 15)),
+    (4192, 500, 600, 3, (0, 7, 24, 8, 11)),
+    (5331, 500, 777, 3, (3, 12, 34, 10, 5)),
+    (6462, 500, 1000, 2, (8, 11, 35, 8, 15)),
     (1 << 30, 777, 1400, 2, (8, 26, 51, 6, 27)),
 )
 
@@ -169,6 +169,16 @@ class _Tables:
                              if any(f"-{tag}" in z["tier"] for tag in HAZARD_TAGS)
                              or c in FAR_FUTURE_FLYERS}
         self.tiers = tiers
+        # Whether the game will hand this codename a wave's plant food. Absent
+        # from a model generated before the flag was extracted, which reads as
+        # "it can": that is what the roll assumed before this existed.
+        self.carry = {c: bool(z.get("carry", True)) for c, z in self.zombies.items()}
+        # Zombies that put bodies into the lanes either side of their own
+        # without checking whether those lanes are playable. Absent from a model
+        # generated before the flag was extracted, which reads as "it does not":
+        # that is what the roll assumed before this existed.
+        self.multilane_names = {c for c, z in self.zombies.items()
+                                if z.get("multilane")}
         # A count-field source may only name a codename the game itself names in
         # that field somewhere: the spawner is written around what it drops.
         self.field_names: Dict[str, set] = {k: set() for k in FIELD_KINDS}
@@ -363,6 +373,50 @@ def _roll_bucket(t: _Tables, rng: Stream, key, entries, vanilla: set,
     return sorted([c, n] for c, n in picks.items() if n > 0)
 
 
+def _ensure_carriers(t: _Tables, entries, need: int, pools):
+    """Keep a group able to hand out the plant food it owes.
+
+    addPlantFood picks carriers at random from the zombies the wave spawned,
+    skipping the ones flagged CannotCarryPlantfoodsInWaves; the grave spawner
+    has no second pass for them at all. So a group owing plant food has to
+    field at least that many zombies able to take it.
+
+    No draws happen here. The replacement is the nearest-HP carrier in the same
+    bucket, by name on a tie, so the stream stays in step with the client.
+    """
+    if need <= 0 or not entries:
+        return entries
+    counts = {c: n for c, n in entries}
+    carried = sum(n for c, n in counts.items() if t.carry.get(c, True))
+    if carried >= need:
+        return entries
+
+    def nearest(bucket, hp):
+        names = [c for c in pools[bucket][0] if t.carry.get(c, True)]
+        if not names:
+            return None
+        return min(names, key=lambda c: (abs(t.hp.get(c, 0) - hp), c))
+
+    while carried < need:
+        swappable = sorted((c for c, n in counts.items()
+                            if n > 0 and not t.carry.get(c, True) and t.bucket_key(c)),
+                           key=lambda c: (-counts[c], c))
+        source = swappable[0] if swappable else next(
+            (c for c in sorted(counts) if t.bucket_key(c)), None)
+        if source is None:
+            break
+        pick = nearest(t.bucket_key(source), t.hp.get(source, 0))
+        if pick is None:
+            break
+        if swappable:                    # convert one body rather than add one
+            counts[source] -= 1
+            if counts[source] == 0:
+                del counts[source]
+        counts[pick] = counts.get(pick, 0) + 1
+        carried += 1
+    return sorted([c, n] for c, n in counts.items() if n > 0)
+
+
 def _attempt(t: _Tables, seed: int, level_id: str, level, attempt: int,
              scale: int, vanilla: set, pools):
     rng = Stream(ap_hash(f"{seed}|{level_id}|budget|{attempt}"))
@@ -407,6 +461,11 @@ def _attempt(t: _Tables, seed: int, level_id: str, level, attempt: int,
             for c, n in rolled:
                 merged[c] += n
             out["z"] = sorted([c, n] for c, n in merged.items())
+            if kind in LIST_KINDS:
+                # Field sources name one codename in a field the spawner is
+                # written around, so they are left alone: swapping one for a
+                # carrier could name something the field may not hold.
+                out["z"] = _ensure_carriers(t, out["z"], g.get("pf", 0), pools)
             if kind in FIELD_KINDS and out["z"]:
                 out["p"] = out["z"][0][0]
             if "bring" in g:
@@ -435,12 +494,21 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
     budget = _groups_hp(t, level["groups"]) + _dynamic_hp(t, level, {}) + graves
     vanilla = {c for g in level["groups"] for c, _ in g["z"]}
     pools = {k: (t.pools[k], t.pool_hp[k]) for k in BUCKET_ORDER}
+    drop = set()
     if not level["own_plants"]:
         # Conveyor or preset seed bank: the player cannot bring a counter, so
         # only hazards the level already shipped with may appear.
-        keep = vanilla & t.hazard_names
+        drop |= t.hazard_names - vanilla
+    if level.get("lanes", 5) < 5:
+        # A narrower lawn than the game's five lanes, which only the tutorial
+        # levels have. A chicken thrower or a barrel puts bodies into the lanes
+        # either side of its own and never asks whether those lanes are
+        # playable, so on this level they would land where nothing can be
+        # planted [user]. A level that ships one keeps it, as with hazards.
+        drop |= t.multilane_names - vanilla
+    if drop:
         for k in BUCKET_ORDER:
-            names = [c for c in t.pools[k] if c not in t.hazard_names or c in keep]
+            names = [c for c in t.pools[k] if c not in drop]
             pools[k] = (names, [t.hp[c] for c in names])
     top, count = _max_share(level["groups"])
     knee = min(1000, (top * 1000 // count if count else 0) + SHARE_KNEE)
