@@ -41,6 +41,7 @@ from .locations import (
 from .regions import create_regions as build_regions
 from .rules import set_rules as apply_rules
 from .zombie_data import ZOMBIE_TIERS, ZOMBIE_HP
+from . import budget_logic
 
 # ── Launcher ──────────────────────────────────────────────────────────────────
 
@@ -262,6 +263,17 @@ class PvZ2GardendlessWorld(World):
     # empty default means "nothing granted" rather than an AttributeError.
     starting_plants: list = []
 
+    # Drawn first thing in generate_early. 0 only on a world that never ran it.
+    zombie_seed: int = 0
+
+    # The budget zombie roll's results (budget_logic.compute). Empty and False
+    # in every other mode, which every reader treats as "no budget rules".
+    budget_mode: bool = False
+    budget_plans: dict = {}
+    budget_hazards: dict = {}
+    logic_jester_power: tuple = ()
+    logic_budget_power: tuple = ()
+
     # ── Universal Tracker ─────────────────────────────────────────────────
 
     @property
@@ -338,11 +350,25 @@ class PvZ2GardendlessWorld(World):
         set_value("include_side_paths", "include_side_paths")
         set_value("include_danger_rooms", "include_danger_rooms")
         set_value("include_levels_past_goal", "include_levels_past_goal")
+        # The zombie options decide every budget-roll rule, so a tracker run
+        # without the YAML must build them from the seed's values.
+        set_value("shuffle_zombies", "shuffle_zombies")
+        set_value("zombie_budget_roll", "zombie_budget_roll")
+        set_value("travelling_dinos", "travelling_dinos")
 
     def generate_early(self) -> None:
         passthrough = self.tracker_passthrough
         if passthrough:
             self._apply_passthrough(passthrough)
+
+        # Drawn before every other roll: the budget zombie roll reproduces the
+        # client's roll at generation time, so the seed must exist before any
+        # rule is built from it. Always drawn, so the rest of self.random's
+        # stream is the same on the server and under UT, and under UT the
+        # seed's real value then replaces it.
+        self.zombie_seed = self.random.getrandbits(32)
+        if passthrough and isinstance(passthrough.get("zombie_seed"), int):
+            self.zombie_seed = passthrough["zombie_seed"]
 
         self.enabled_worlds  = self._choose_worlds()
         self.enabled_regions = {region for world in self.enabled_worlds
@@ -357,7 +383,15 @@ class PvZ2GardendlessWorld(World):
         # only worth something if the plant can hold a lane, and the wider
         # list includes single-use plants (Potato Mine, Chili Bean) and
         # non-damaging support. Those still count for the Egypt logic gate.
-        starter = self.random.choice(STARTER_PLANTS)
+        #
+        # The budget zombie roll (experimental) runs first: it rolls every built
+        # level from zombie_seed, as the client will, and records what each asks
+        # for. The starter draw reads it (a budget-mode starter may not clear
+        # every level), and so does the starting-plant draw below. It needs
+        # active_locations, so the worlds above must be settled, and it
+        # consumes no RNG, so nothing after it shifts.
+        budget_logic.compute(self)
+        starter = self.random.choice(budget_logic.starter_candidates(self))
 
         # This slot's cheap attackers: the LOGIC_ATTACKER_COUNT of the 46 that
         # rules.py's Egypt 6 gate will name, and therefore the only ones
@@ -393,8 +427,22 @@ class PvZ2GardendlessWorld(World):
         # the pool floor both consult it, and a world-conditional draw would
         # take a different number of values off world.random and shift every
         # later draw in the seed. Cheap, and it keeps the RNG stream stable.
-        self.logic_jesters = frozenset(
-            self.random.sample(JESTER_COUNTER_PLANTS, JESTER_DRAW_COUNT))
+        #
+        # Never the starter. Several starters (Iceweed among them) can hurt the
+        # Jester, and a drawn counter that is also the precollected starter
+        # makes the Dark Ages gate decorative, which is exactly what the
+        # starting-plant exclusion below exists to prevent. Found by the
+        # 40-seed sweep in gen_test.py once the zombie_seed draw moved.
+        # jester_draw_pool is JESTER_COUNTER_PLANTS outside the budget zombie
+        # roll; under it, only counters the cheapest Jester level can afford.
+        self.logic_jesters = frozenset(self.random.sample(
+            [p for p in budget_logic.jester_draw_pool(self) if p != starter],
+            JESTER_DRAW_COUNT))
+
+        # The budget roll's Jester class-power draw. Before the starting-plant
+        # draw, which may not grant a plant a rule names. No RNG outside budget
+        # mode.
+        self.logic_jester_power = budget_logic.draw_jester_power(self, {starter})
 
         # Extra starting plants, when the option asks for them. The cheap
         # attacker above is always the first, so the guarantee it exists for
@@ -433,13 +481,15 @@ class PvZ2GardendlessWorld(World):
         # them would take a quarter of the roster out of the draw to protect a
         # gate that asks for one plant. The drawn one is excluded, like any
         # other rule-named plant.
-        _no_grant = (LOGIC_PLANTS - set(JESTER_COUNTER_PLANTS)) | self.logic_jesters
+        _no_grant = ((LOGIC_PLANTS - set(JESTER_COUNTER_PLANTS)) | self.logic_jesters
+                     | budget_logic.slot_hazard_plants(self))
         extras = []
         want = self.options.starting_plants.value - 1
         if want:
             pool = [p.name for p in PLANT_ITEMS
                     if p.name != starter
-                    and p.name not in _no_grant]
+                    and p.name not in _no_grant
+                    and not budget_logic.clears_every_level(self, p.name)]
             extras = self.random.sample(pool, min(want, len(pool)))
 
         # Read by create_item_pool, which drops these from the pool. Sorted so
@@ -456,10 +506,13 @@ class PvZ2GardendlessWorld(World):
         # set_rules does. It reads active_locations(), which needs
         # enabled_regions -- set at the top of this method.
         if self.options.plant_power_logic:
-            built = [LEVEL_REQUIRED_DPS[loc.name]
+            built = [budget_logic.level_required_dps(self, loc.name)
                      for loc in self.active_locations()
                      if loc.name in LEVEL_REQUIRED_DPS]
             self.logic_power_plants = draw_power_plants(self, built)
+        # ...and, under the budget zombie roll, one draw per lower sun budget
+        # the slot builds, since the ladder is priced at the default budget.
+        self.logic_budget_power = budget_logic.draw_budget_power(self)
 
         # THE SEED'S OWN ROLLS, under Universal Tracker. All three are drawn
         # from self.random above, and a tracker's local draw is a different
@@ -484,6 +537,12 @@ class PvZ2GardendlessWorld(World):
                 # and the pool floor takes the last group.
                 self.logic_power_plants = tuple(
                     tuple(group) for group in passthrough["logic_power_plants"])
+            if "logic_jester_power" in passthrough:
+                self.logic_jester_power = tuple(passthrough["logic_jester_power"])
+            if "logic_budget_power" in passthrough:
+                self.logic_budget_power = tuple(
+                    (int(budget), tuple(group))
+                    for budget, group in passthrough["logic_budget_power"])
 
         for name in self.starting_plants:
             self.multiworld.push_precollected(self.create_item(name))
@@ -790,8 +849,18 @@ class PvZ2GardendlessWorld(World):
             # conveyor_seed exists: the belt and the waves should differ
             # between slots on one seed, and the client folds the level's own
             # zombie list into it so each level rolls differently and a retry
-            # is not a reroll.
-            "zombie_seed":       self.random.getrandbits(32),
+            # is not a reroll. Drawn in generate_early, where generation can
+            # use it too.
+            "zombie_seed":       self.zombie_seed,
+            # The budget zombie roll (experimental). A client that does not
+            # find these runs the tier shuffle, which is what every seed before
+            # them used. Also read back by Universal Tracker.
+            "zombie_budget_roll": bool(self.budget_mode),
+            "travelling_dinos":  bool(self.budget_mode and self.options.travelling_dinos),
+            # The tables the client rebuilds the roll from (~20KB), only in
+            # budget mode. See budget_logic.client_tables.
+            "zombie_budget":     (budget_logic.client_tables(self)
+                                  if self.budget_mode else {}),
             # Informational for now -- worlds left out simply never receive a
             # key, which is what keeps them locked. Sorted so the value is
             # stable for a given seed rather than varying with set order.
@@ -825,6 +894,12 @@ class PvZ2GardendlessWorld(World):
             # reading either draws nothing and sees no power requirement, which
             # is what those seeds have.
             "logic_power_plants": [list(group) for group in self.logic_power_plants],
+            # The budget roll's Jester class-power draw, same reason. Empty
+            # outside budget mode.
+            "logic_jester_power": list(self.logic_jester_power),
+            # ...and its per-sun-budget power draws, as [budget, [plants]].
+            "logic_budget_power": [[budget, list(group)]
+                                   for budget, group in self.logic_budget_power],
             # The options that decide which locations exist. goal_type,
             # shopsanity, worlds_required and skip_tutorial are above already;
             # these three were client-irrelevant and so were never sent. UT is

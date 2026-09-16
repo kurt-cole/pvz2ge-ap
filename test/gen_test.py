@@ -469,6 +469,10 @@ assert _SLOT_DATA_BEFORE_ZOMBIES <= set(_z_on), \
     f"slot_data lost keys: {sorted(_SLOT_DATA_BEFORE_ZOMBIES - set(_z_on))}"
 assert set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES == \
     {"shuffle_zombies", "zombie_tiers", "zombie_seed", "zombie_hp",
+     # Added 2026-09-15 for the experimental budget zombie roll; absent means
+     # the tier shuffle, and a tracker without them keeps its own draw.
+     "zombie_budget_roll", "travelling_dinos", "logic_jester_power",
+     "logic_budget_power", "zombie_budget",
      "modern_day_keyed",
      "world_gates", "goal_item", "goal_item_plural",
      # Added 2026-08-26 for Universal Tracker: everything generation ROLLED or
@@ -2055,12 +2059,13 @@ _og_flat = [o for g in _OG for o in g.options]
 _og_declared = [f.type for f in _dc_og.fields(W.PvZ2Options)]
 
 # Literals, not len(OPTION_GROUPS) / len(fields) -- an expectation read from the
-# thing under test passes whatever that thing says. 22 is every option in
-# PvZ2Options as of 2026-09-10 (21 before plant_power_logic, 20 before
+# thing under test passes whatever that thing says. 24 is every option in
+# PvZ2Options as of 2026-09-15 (22 before zombie_budget_roll and
+# travelling_dinos, 21 before plant_power_logic, 20 before
 # include_levels_past_goal); 7 is the groups options.py declares.
 assert len(_OG) == 7, f"expected 7 option groups, got {len(_OG)}"
-assert len(_og_declared) == 22, \
-    f"PvZ2Options declares {len(_og_declared)} options, not 22 -- if that is " \
+assert len(_og_declared) == 24, \
+    f"PvZ2Options declares {len(_og_declared)} options, not 24 -- if that is " \
     "intended, update this literal AND put the new option in a group"
 
 _og_missing = [o.__name__ for o in _og_declared if o not in _og_flat]
@@ -2547,7 +2552,19 @@ _gf, _ = run("grave: small seed floor", world_count=1,
 # floor and whatever survives IS what it forced.
 _gf_pool = {i.name for i in W.items.create_item_pool(_gf, 5)}
 _gf_plants = _gf_pool & {p.name for p in W.items.PLANT_ITEMS}
-assert len(_gf_plants) == 3, f"floor is {sorted(_gf_plants)}, expected 3 plants"
+# ...unless the starter already clears the hardest level this seed built, in
+# which case _pool_floor_groups lets it stand in for the power plant and the
+# floor is two. That depends on which starter the seed drew, so the test states
+# which case it is in rather than trusting one seed. The budget zombie roll
+# removes this shortcut (budget_logic.starter_candidates).
+_gf_hardest = max((W.items.LEVEL_REQUIRED_DPS[_l.name] for _l in _gf.active_locations()
+                   if _l.name in W.items.LEVEL_REQUIRED_DPS), default=0.0)
+_gf_starter_covers = any(W.items.PLANT_LAWN_DPS.get(_p, 0.0) >= _gf_hardest
+                         for _p in _gf.starting_plants)
+_gf_want = 2 if _gf_starter_covers else 3
+assert len(_gf_plants) == _gf_want, \
+    f"floor is {sorted(_gf_plants)}, expected {_gf_want} plants " \
+    f"(starter covers the hardest level: {_gf_starter_covers})"
 assert "Grave Buster" in _gf_plants, (
     f"the floor dropped Grave Buster, which Egypt Mid needs: {sorted(_gf_plants)}")
 assert set(C.SUN_PRODUCER_PLANTS) & _gf_plants, "floor has no sun producer"

@@ -29,8 +29,8 @@ this:
 
 HOW A TIER KEY IS BUILT
 
-Every axis is a property the game states outright. See .claude/ZOMBIE_RANDO_DEV.md for
-why each one is there; in short, a swap may only trade zombies that cost the
+Every axis is a property the game states outright. In short, a swap may only
+trade zombies that cost the
 same, die in the same lane, take about the same killing, and need the same
 plant to answer them.
 
@@ -64,7 +64,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Geometric width of an HP band. 1.35 caps the intra-tier HP ratio at 1.33
 # while still leaving 90% of the table somebody to trade with; 1.75 buys 2%
 # more swappability for a 1.67x spread, and tighter bands start stranding
-# zombies alone in a tier. See .claude/ZOMBIE_RANDO_DEV.md.
+# zombies alone in a tier.
 HP_BAND = 1.35
 
 # Levels a module drives structurally rather than merely spawning from. The
@@ -432,7 +432,7 @@ The tier key joins these with "-":
      per-level cost inside 0.78-1.21 (p5-p95) while per-level HP ran
      0.56-2.51, with 34 levels at 3x or worse -- pirate1 fielded eighteen
      10000 HP shields in place of its basic pirates. With the band, HP lands
-     at 0.95-1.05. See .claude/ZOMBIE_RANDO_DEV.md.
+     at 0.95-1.05.
 
 That fourth partition is the reason this option needs no new access rule.
 Threat mechanics cannot be created or destroyed by a shuffle, so every world's
@@ -516,7 +516,7 @@ def render(tiers, hp, excluded, summary) -> str:
     out.append('''
 # codename -> effective HP (Toughness plus every StartingArmors entry). Sent to
 # the client as slot_data so its per-level budget guard can weigh a level's
-# roster before and after a shuffle; see .claude/ZOMBIE_RANDO_DEV.md. Only the tiered
+# roster before and after a shuffle. Only the tiered
 # zombies are here -- an untiered one never moves, so nothing needs to weigh
 # it.
 ZOMBIE_HP: Dict[str, int] = {

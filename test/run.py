@@ -22,6 +22,9 @@ PY_SUITES = [
     ("zombietiers","zombie_tier_test.py", "the zombie swap tiers still partition"),
     ("levelmodel", "level_model_test.py", "the wave-level model matches hand-checked levels"),
     ("balance",    "balance_test.py", "the client's roll replayed over every level"),
+    ("balancev2",  "balance_v2_test.py", "the budget zombie roll replayed over every level"),
+    ("budget",     "budget_logic_test.py", "generation logic built from the budget roll"),
+    ("rollvectors","roll_vectors_test.py", "the budget roll's parity vectors are current"),
     ("tracker",    "tracker_test.py", "Universal Tracker rebuilds the same seed"),
 ]
 JS_SUITES = [
@@ -33,6 +36,7 @@ JS_SUITES = [
     ("store",    "store_test.js",    "bought store cards stay gone"),
     ("conveyor", "conveyor_test.js", "belt swaps stay in power band"),
     ("zombies",  "zombie_test.js",   "zombie swaps stay in tier, threats stay put"),
+    ("budgetjs", "budget_test.js",   "the client's budget roll matches the Python roll"),
     ("costumes", "costume_test.js",  "costume grants and the shuffle trap"),
     ("connect",  "connect_test.js",  "wss:// first, ws:// fallback"),
     ("features", "feature_test.js",  "opening the store from egypt6 progress"),

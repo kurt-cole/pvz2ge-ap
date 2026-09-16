@@ -80,7 +80,12 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # unlocksHeld, levelBlockedBy and installLevelGateHook themselves ARE
          # copies and are checked.
          "worldgate_fn.js:reset", "worldgate_fn.js:makeKeyListener",
-         "worldgate_fn.js:gates"}
+         "worldgate_fn.js:gates",
+         # budget_fn.js harness: _apLevelKey reads the game's LevelPlay
+         # statics in the client, so the harness sets the level id through
+         # setLevelKey instead. Every _apb* function, installBudgetHook and
+         # syncBudgetConfig ARE copies and are checked.
+         "budget_fn.js:_apLevelKey", "setLevelKey"}
 
 _ws = re.compile(r"\s+")
 norm = lambda s: _ws.sub(" ", s).strip()

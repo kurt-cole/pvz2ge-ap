@@ -169,6 +169,21 @@ check("an old seed still reproduces the worlds it did send",
 check("an empty passthrough generates without raising",
       build(seed=6, passthrough={}) is not None)
 
+# ── The zombie seed comes back too ───────────────────────────────────────────
+# The budget zombie roll rebuilds each level's requirements from zombie_seed at
+# generation time, so UT must use the seed's real value, not its own draw.
+print("\n=== zombie_seed ===")
+zs_server = build(seed=21)
+zs_sd = zs_server.fill_slot_data()
+zs_tracked = build(seed=22, passthrough=zs_sd)
+zs_local = build(seed=22)
+check("the tracker's own draw differs (control)",
+      zs_local.zombie_seed != zs_server.zombie_seed)
+check("the tracker adopts the seed's zombie_seed",
+      zs_tracked.zombie_seed == zs_server.zombie_seed)
+check("slot data sends the value generate_early drew",
+      zs_sd["zombie_seed"] == zs_server.zombie_seed)
+
 print()
 if FAILURES:
     print(f"FAILED ({len(FAILURES)}):")

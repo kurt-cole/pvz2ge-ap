@@ -756,6 +756,12 @@ WORLD_ENTRY_PLANTS = {
 # the only grave-removal plant in the Archipelago range.
 GRAVE_CLEAR_PLANTS = ["Grave Buster"]
 
+# Worlds whose WORLD_ENTRY_PLANTS answer a zombie rather than the world itself.
+# Under the budget zombie roll those requirements move to the levels that
+# actually field the zombie; Big Wave Beach (terrain) and Frostbite Caves (its
+# winds) stay on the entrance.
+ZOMBIE_BOUND_ENTRY_WORLDS = frozenset({"Dark Ages", "Far Future", "Jurassic Marsh"})
+
 STRETCH_ENTRY_PLANTS = {
     "Ancient Egypt": {" Mid": [GRAVE_CLEAR_PLANTS], " Late": [GRAVE_CLEAR_PLANTS]},
     "Dark Ages":     {" Mid": [GRAVE_CLEAR_PLANTS], " Late": [GRAVE_CLEAR_PLANTS]},
@@ -875,6 +881,11 @@ def slot_entry_groups(world, world_name):
     object the table holds, so a group that merely has the same contents is
     left alone.
     """
+    # Under the budget zombie roll these worlds' requirements follow the zombies
+    # onto the levels that field them (budget_logic.py), so the entrance asks
+    # for nothing.
+    if getattr(world, "budget_mode", False) and world_name in ZOMBIE_BOUND_ENTRY_WORLDS:
+        return []
     groups = []
     for group in WORLD_ENTRY_PLANTS.get(world_name, []):
         if group is JESTER_COUNTER_PLANTS:

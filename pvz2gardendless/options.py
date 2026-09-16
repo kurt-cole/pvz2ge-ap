@@ -317,6 +317,40 @@ class ShuffleZombies(Toggle):
     """
     display_name = "Shuffle Zombies"
 
+class ZombieBudgetRoll(Toggle):
+    """
+    EXPERIMENTAL AND IN DEVELOPMENT. Generation logic is live, but the game
+    client does not reproduce the roll yet, so until a client update the
+    zombies you meet will not match what logic expects.
+
+    Only applies when Shuffle Zombies is also on. Instead of trading each
+    zombie for one of the same tier, each level's zombie health is re-spent:
+    fewer, stronger zombies or more, weaker ones, within a budget that keeps
+    the level beatable. Zombies with a hard counter (Jester, flyers, ice-block
+    carriers) can appear outside their home worlds, and the logic asks for
+    their counter wherever they land.
+
+    Set pieces (camels, the cannon levels, bowling, Last Stand and the rest)
+    are never touched. Intended to replace the tier shuffle once proven.
+    """
+    display_name = "Zombie Budget Roll (Experimental)"
+
+
+class TravellingDinos(Toggle):
+    """
+    EXPERIMENTAL AND IN DEVELOPMENT. Generation logic is live; the game client
+    does not place the dinosaurs yet.
+
+    Only applies when Zombie Budget Roll is on. Dinosaurs may appear in any
+    level zombie randomization is allowed to change and that you bring your
+    own plants to, about as often as Jurassic Marsh's share of the levels your
+    goal builds, shaped like a Jurassic Marsh level of the same difficulty.
+    They take part of that level's zombie budget, and any level that gains
+    dinosaurs requires Perfume-shroom.
+    """
+    display_name = "Travelling Dinosaurs (Experimental)"
+
+
 class EarlyWorldKeys(Toggle):
     """
     Keep the world unlocks out of the later stretches of every world, so all of
@@ -513,6 +547,8 @@ class PvZ2Options(PerGameCommonOptions):
     shuffle_upgrades: ShuffleUpgrades
     randomize_conveyor_plants: RandomizeConveyorPlants
     shuffle_zombies:  ShuffleZombies
+    zombie_budget_roll: ZombieBudgetRoll
+    travelling_dinos: TravellingDinos
     plant_power_logic: PlantPowerLogic
     early_world_keys: EarlyWorldKeys
     include_levels_past_goal: IncludeLevelsPastGoal
@@ -532,5 +568,6 @@ OPTION_GROUPS = [
                          TrapWeightCostumeShuffle, TrapWeightCoins,
                          TrapWeightGems]),
     OptionGroup("Gameplay Tweaks",[SkipTutorial,ShuffleUpgrades, StartingPlants,RandomizeConveyorPlants, ShuffleZombies]),
-    OptionGroup("Experimental DANGER",[IncludeDangerRooms, ModernDayVictory, EarlyWorldKeys])
+    OptionGroup("Experimental DANGER",[IncludeDangerRooms, ModernDayVictory, EarlyWorldKeys,
+                                       ZombieBudgetRoll, TravellingDinos])
 ]

@@ -146,7 +146,7 @@ try {
   vm.runInNewContext(src, sandbox, { filename: 'tmpPatch.js', timeout: 10000 });
   ok('the whole client executes without throwing (no TDZ, no undefined call)');
 } catch (e) {
-  const where = (e.stack || '').split('\n').slice(0, 3).join('\n      ');
+  const where = (e.stack || '').split('\n').slice(0, 6).join('\n      ');
   fail(`the client threw while loading -- it would be dead in game:\n      ${where}`);
 }
 

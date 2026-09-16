@@ -21,6 +21,7 @@ from .constants import (
 )
 from .plant_data import LEVEL_REQUIRED_DPS
 from .items import GEM_GRANT
+from . import budget_logic
 from .locations import SHOP_LOC_UNLOCK, goal_locations_for
 
 if TYPE_CHECKING:
@@ -327,13 +328,17 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         # sweep of every fill.
         answers = {}
         for loc_data in world.active_locations():
-            required = LEVEL_REQUIRED_DPS.get(loc_data.name)
-            if required is None:
+            # (required dps, sun budget). Outside the budget zombie roll that is
+            # (LEVEL_REQUIRED_DPS, 1000) and prices exactly as it always has;
+            # under it the requirement is scaled by the level's roll and the
+            # plants are priced at the level's own sun budget.
+            need = budget_logic.power_need(world, loc_data.name)
+            if need is None:
                 continue  # a shop check, a Danger Room, or a level that hands
                           # the player its plants
-            if required not in answers:
-                answers[required] = plants_clearing(required)
-            group = answers[required]
+            if need not in answers:
+                answers[need] = budget_logic.plants_clearing_at(*need)
+            group = answers[need]
             if not group:
                 # No plant in the game clears it. The generator refuses to emit
                 # such a level, so this cannot happen -- and if it ever does, an
@@ -345,6 +350,18 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
                 continue  # not built in this seed
             add_rule(location,
                      lambda state, g=group: state.has_any(g, player))
+
+    # HAZARD COUNTERS, under the budget zombie roll. The level's own roll says
+    # which hazards it fields, so the counter goes on that level's location,
+    # the same footing as the power rule above. See budget_logic.py for what
+    # each hazard asks. Empty in every other mode.
+    for loc_name, groups in budget_logic.slot_level_hazard_groups(world).items():
+        try:
+            location = multiworld.get_location(loc_name, player)
+        except KeyError:
+            continue  # not built in this seed
+        for group in groups:
+            add_rule(location, lambda state, g=tuple(group): state.has_any(g, player))
 
     # Keys out of the late stretches, when the option asks for it. This is an
     # item rule rather than an access rule: it does not change what any
@@ -358,32 +375,60 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # Every key name is forbidden, including this seed's disabled worlds and
     # Modern Day: neither is in the pool, so naming them costs nothing and the
     # set does not have to track which worlds the seed kept.
+    # A side path is named neither " Mid" nor " Late", so is_early_region reads
+    # every one of them as early. That was true when they all hung off their
+    # world's opening; regions.py now hangs each one off the stretch holding the
+    # level that reveals it, so Ice Bloom sits behind Big Wave Beach 40 while
+    # still answering "early" by name. Resolve a side path to whatever it
+    # actually hangs off and judge that instead, following the chain for Hot
+    # Date, which hangs off another side path.
+    side_paths = set(SIDE_PATH_REGIONS)
+
+    def effective_region(name: str) -> str:
+        seen = set()
+        while name in side_paths and name not in seen:
+            seen.add(name)
+            try:
+                name = multiworld.get_entrance(f"Enter {name}",
+                                               player).parent_region.name
+            except KeyError:
+                break  # not built in this seed
+        return name
+
+    # STRONG PLANTS OUT OF EARLY REGIONS, under the budget zombie roll [user].
+    # A plant that clears the top power rung can carry most of the game, so
+    # finding one in an opening stretch flattens the run. An item rule, like
+    # early_world_keys: it changes where fill may put these, not what any
+    # location requires. The Danger Rooms and not-yet-stocked shop cards are
+    # late checks whatever their region is called, so they stay allowed.
+    #
+    # Skipped when the seed has too few late places to hold them: an Egypt-only
+    # world_key seed has no late region at all, and an item with nowhere legal
+    # to go fails fill outright. Twice the plant count leaves the other item
+    # rules room.
+    strong = budget_logic.strong_plants(world)
+    if strong:
+        late_ok = set(danger_rooms) | set(shop_gated)
+        early_locs, late_count = [], 0
+        for region in multiworld.get_regions(player):
+            early = is_early_region(effective_region(region.name))
+            for location in region.locations:
+                if location.item is not None:
+                    continue  # a locked goal McGuffin or the Victory event
+                if early and location not in late_ok:
+                    early_locs.append(location)
+                else:
+                    late_count += 1
+        if late_count >= 2 * len(strong):
+            for location in early_locs:
+                forbid_items_for_player(location, strong, player)
+
     if world.options.early_world_keys:
         # The unlocks are the keys now, and all three copies are held to the
         # same rule: the second and third are what open a world's later
         # stretches, so burying one behind another world's endgame is the same
         # problem the option was written for.
         key_names = {progressive_item_name(w) for w in WORLD_REGIONS}
-
-        # A side path is named neither " Mid" nor " Late", so is_early_region
-        # reads every one of them as early. That was true when they all hung
-        # off their world's opening; regions.py now hangs each one off the
-        # stretch holding the level that reveals it, so Ice Bloom sits behind
-        # Big Wave Beach 40 while still answering "early" by name. Resolve a
-        # side path to whatever it actually hangs off and judge that instead,
-        # following the chain for Hot Date, which hangs off another side path.
-        side_paths = set(SIDE_PATH_REGIONS)
-
-        def effective_region(name: str) -> str:
-            seen = set()
-            while name in side_paths and name not in seen:
-                seen.add(name)
-                try:
-                    name = multiworld.get_entrance(f"Enter {name}",
-                                                   player).parent_region.name
-                except KeyError:
-                    break  # not built in this seed
-            return name
 
         for region in multiworld.get_regions(player):
             if is_early_region(effective_region(region.name)):

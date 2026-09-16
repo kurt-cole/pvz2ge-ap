@@ -17,6 +17,7 @@ from .constants import (
     UPGRADE_GROUPS,
 )
 from .plant_data import LEVEL_REQUIRED_DPS, PLANT_LAWN_DPS
+from . import budget_logic
 
 if TYPE_CHECKING:
     from . import PvZ2GardendlessWorld
@@ -239,6 +240,10 @@ def _pool_floor_groups(world):
         # plant that opens the back half of a world it built.
         for suffix in stretch_suffixes(w):
             groups.extend(slot_stretch_groups(world, w, suffix))
+    # Budget zombie roll: every hazard counter a built level asks for, and one
+    # power plant per lower sun budget the slot builds.
+    groups.extend(budget_logic.slot_hazard_floor_groups(world))
+    groups.extend(list(group) for _, group in getattr(world, "logic_budget_power", ()))
     # The plant-power ladder needs ONE plant reserved, not one per rung. The
     # groups come back hardest last and a plant that clears the hardest rung the
     # seed needs clears every level in it, so the last group is the whole floor
@@ -251,12 +256,16 @@ def _pool_floor_groups(world):
         # already satisfies every power rule, so it joins the group and the
         # floor reserves nothing for it. Without this the floor only noticed
         # when the draw happened to pick the starter, which is luck.
-        hardest = max((LEVEL_REQUIRED_DPS[loc.name]
+        hardest = max((budget_logic.level_required_dps(world, loc.name)
                        for loc in world.active_locations()
                        if loc.name in LEVEL_REQUIRED_DPS), default=0.0)
         group = list(power[-1])
-        group += [p for p in getattr(world, "starting_plants", ())
-                  if p not in group and PLANT_LAWN_DPS.get(p, 0.0) >= hardest]
+        # Not under the budget zombie roll, where no granted plant may clear the
+        # hardest level at all (budget_logic.starter_candidates), so the floor
+        # always reserves a real power plant.
+        if not getattr(world, "budget_mode", False):
+            group += [p for p in getattr(world, "starting_plants", ())
+                      if p not in group and PLANT_LAWN_DPS.get(p, 0.0) >= hardest]
         groups.append(group)
     return groups
 
@@ -321,6 +330,10 @@ def slot_progression_plants(world) -> set:
     # need to be progression, which is the whole point of drawing them. See
     # POWER_DRAW_COUNT in constants.py.
     plants.update(slot_power_plants(world))
+    # ...and the budget zombie roll's hazard counters.
+    plants.update(budget_logic.slot_hazard_plants(world))
+    for _, group in getattr(world, "logic_budget_power", ()):
+        plants.update(group)
     return plants
 
 
