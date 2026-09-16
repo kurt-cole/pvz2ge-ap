@@ -219,7 +219,9 @@ class PvZ2GardendlessWorld(World):
     # set_rules() and fill_slot_data() all have to agree on one answer -- a
     # second roll would give them different seeds.
     enabled_worlds:  Set[str]
-    enabled_regions: Set[str]
+    # Empty before generate_early, like enabled_worlds below: create_item reads
+    # active_locations() through the power promotion.
+    enabled_regions: Set[str] = frozenset()
 
     # WHICH WORLDS THIS SLOT BUILT, filled in by generate_early. Declared with a
     # default for the same reason as the draws below, and this one bit for real:
