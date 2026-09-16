@@ -24,6 +24,7 @@ PY_SUITES = [
     ("balance",    "balance_test.py", "the client's roll replayed over every level"),
     ("balancev2",  "balance_v2_test.py", "the budget zombie roll replayed over every level"),
     ("budget",     "budget_logic_test.py", "generation logic built from the budget roll"),
+    ("powersel",   "power_selection_test.py", "the plant-power selection keeps logic small"),
     ("rollvectors","roll_vectors_test.py", "the budget roll's parity vectors are current"),
     ("tracker",    "tracker_test.py", "Universal Tracker rebuilds the same seed"),
 ]

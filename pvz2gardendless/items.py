@@ -243,7 +243,8 @@ def _pool_floor_groups(world):
     # Budget zombie roll: every hazard counter a built level asks for, and one
     # power plant per lower sun budget the slot builds.
     groups.extend(budget_logic.slot_hazard_floor_groups(world))
-    groups.extend(list(group) for _, group in getattr(world, "logic_budget_power", ()))
+    if getattr(world, "power_selection", None) is None:
+        groups.extend(list(group) for _, group in getattr(world, "logic_budget_power", ()))
     # The plant-power ladder needs ONE plant reserved, not one per rung. The
     # groups come back hardest last and a plant that clears the hardest rung the
     # seed needs clears every level in it, so the last group is the whole floor
@@ -336,7 +337,10 @@ def slot_progression_plants(world) -> set:
     # ladder left the rest useful, and AP never counts a useful item toward a
     # rule, so logic ignored every other plant that clears a level (the starter
     # included). The ladder is still drawn: it is the pool floor.
-    plants.update(slot_power_plants(world))
+    selected = getattr(world, "power_selection", None) is not None
+    if not selected:
+        # The DPS ladder only feeds rules without a loadout selection.
+        plants.update(slot_power_plants(world))
     if power_logic.available():
         # Every plant any built level's passing loadouts or nullifier counters
         # name (POWER_SIM.md).
@@ -345,8 +349,9 @@ def slot_progression_plants(world) -> set:
         plants.update(budget_logic.power_rule_plants(world))
     # ...and the budget zombie roll's hazard counters.
     plants.update(budget_logic.slot_hazard_plants(world))
-    for _, group in getattr(world, "logic_budget_power", ()):
-        plants.update(group)
+    if not selected:
+        for _, group in getattr(world, "logic_budget_power", ()):
+            plants.update(group)
     return plants
 
 

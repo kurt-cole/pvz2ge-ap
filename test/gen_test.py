@@ -425,8 +425,10 @@ assert isinstance(_sd_on["conveyor_seed"], int) and 0 <= _sd_on["conveyor_seed"]
 assert _sd_off["goal_locations"] == _sd_on["goal_locations"], "conveyor changed logic"
 
 # ── shuffle_zombies ─────────────────────────────────────────────────────────
-# Also pure client behaviour: generation carries the flag, a per-slot seed and
-# the tier table, and must leave the pool, the locations and the logic alone.
+# [user] shuffle_zombies is the budget roll now, which adds per-level hazard
+# rules (budget_logic_test.py covers those) and so may reclassify plants.
+# Generation still carries the flag, a per-slot seed and the tier table, and
+# must leave the locations and the goal alone.
 from pvz2gardendless.zombie_data import (ZOMBIE_HP, ZOMBIE_TIERS,
                                          ZOMBIE_TIER_OF, THREAT_TAGS,
                                          swap_pool, tier_of)
@@ -437,8 +439,8 @@ assert _z_off["shuffle_zombies"] is False and _z_on["shuffle_zombies"] is True
 assert isinstance(_z_on["zombie_seed"], int) and 0 <= _z_on["zombie_seed"] < 2**32
 assert _z_off["goal_locations"] == _z_on["goal_locations"], "zombie shuffle changed logic"
 assert len(_z_off_w.active_locations()) == len(_z_on_w.active_locations())
-assert sorted(i.name for i in _z_off_w.multiworld.itempool) == \
-       sorted(i.name for i in _z_on_w.multiworld.itempool), "zombie shuffle changed the pool"
+assert len(_z_off_w.multiworld.itempool) == len(_z_on_w.multiworld.itempool), \
+    "zombie shuffle changed the pool size"
 
 # The tiers are only worth sending when the client will use them: ~6KB in
 # every Connected packet otherwise.
@@ -484,7 +486,10 @@ assert set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES == \
      # promotes to progression for the power rules. A seed without the key
      # leaves UT on its own draw, and an EMPTY list means the seed had
      # plant_power_logic off.
-     "logic_power_plants"}, \
+     "logic_power_plants",
+     # Added 2026-09-16: the plants the loadout rules may name. Absent means
+     # every passing loadout, as seeds before it had.
+     "logic_power_selection"}, \
     f"unexpected new slot_data keys: {sorted(set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES)}"
 
 # modern_day_keyed is additive for the same reason, and modern_day_victory
@@ -2066,13 +2071,14 @@ _og_flat = [o for g in _OG for o in g.options]
 _og_declared = [f.type for f in _dc_og.fields(W.PvZ2Options)]
 
 # Literals, not len(OPTION_GROUPS) / len(fields) -- an expectation read from the
-# thing under test passes whatever that thing says. 24 is every option in
-# PvZ2Options as of 2026-09-15 (22 before zombie_budget_roll and
+# thing under test passes whatever that thing says. 25 is every option in
+# PvZ2Options as of 2026-09-16 (24 before power_loadouts_per_level, 22 before
+# zombie_budget_roll and
 # travelling_dinos, 21 before plant_power_logic, 20 before
 # include_levels_past_goal); 7 is the groups options.py declares.
 assert len(_OG) == 7, f"expected 7 option groups, got {len(_OG)}"
-assert len(_og_declared) == 24, \
-    f"PvZ2Options declares {len(_og_declared)} options, not 24 -- if that is " \
+assert len(_og_declared) == 25, \
+    f"PvZ2Options declares {len(_og_declared)} options, not 25 -- if that is " \
     "intended, update this literal AND put the new option in a group"
 
 _og_missing = [o.__name__ for o in _og_declared if o not in _og_flat]

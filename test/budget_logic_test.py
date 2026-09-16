@@ -72,16 +72,18 @@ print("\n=== budget roll off ===")
 _, w_off, sd_off = build(seed=1, **EVERY)
 _, w_tier, sd_tier = build(seed=1, shuffle_zombies=1, **EVERY)
 _, w_lone, _ = build(seed=1, zombie_budget_roll=1, **EVERY)
-if w_off.budget_mode or w_tier.budget_mode or w_lone.budget_mode:
-    fail("budget mode switched on without both shuffle_zombies and zombie_budget_roll")
-elif B.slot_level_hazard_groups(w_off) or B.slot_level_hazard_groups(w_tier):
+# [user] The budget roll replaced the tier shuffle: shuffle_zombies alone turns
+# it on, and the deprecated zombie_budget_roll does nothing by itself.
+if w_off.budget_mode or w_lone.budget_mode or not w_tier.budget_mode:
+    fail("budget mode does not follow shuffle_zombies alone")
+elif B.slot_level_hazard_groups(w_off):
     fail("hazard rules exist outside budget mode")
-elif C.slot_entry_groups(w_tier, "Far Future") != [["Blover"]]:
-    fail("the tier shuffle lost Far Future's Blover entrance rule")
+elif not sd_tier["zombie_budget_roll"]:
+    fail("shuffle_zombies seed does not tell the client to use the budget roll")
 elif (sd_off["zombie_budget_roll"], sd_off["travelling_dinos"], sd_off["logic_jester_power"]) != (False, False, []):
     fail("slot data claims budget mode with it off")
 else:
-    ok("off, tier shuffle, and budget roll without shuffle_zombies all keep today's logic")
+    ok("shuffle_zombies alone is the budget roll; off and the deprecated option alone keep today's logic")
 
 # ── on ───────────────────────────────────────────────────────────────────────
 print("\n=== budget roll on, every world ===")

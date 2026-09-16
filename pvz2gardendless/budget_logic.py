@@ -1,8 +1,7 @@
 """
 PvZ2 Gardendless: generation logic for the budget zombie roll.
 
-Active only when both shuffle_zombies
-and zombie_budget_roll are on. generate_early calls compute(), which rolls every
+Active whenever shuffle_zombies is on (zombie_budget_roll is deprecated). generate_early calls compute(), which rolls every
 built level from zombie_seed exactly as the client will, and records each
 level's plan and hazards. Everything else reads those through the helpers here,
 so the access rules, the progression promote and the item-pool floor cannot
@@ -52,7 +51,9 @@ POWER_CEILING = max(LEVEL_REQUIRED_DPS.values())
 
 def enabled(world) -> bool:
     options = world.options
-    return bool(options.shuffle_zombies) and bool(getattr(options, "zombie_budget_roll", 0))
+    # [user] The budget roll replaced the tier shuffle: zombie_budget_roll is
+    # deprecated and ignored.
+    return bool(options.shuffle_zombies)
 
 
 # ── sun economy (step 3c) ────────────────────────────────────────────────────
@@ -434,7 +435,11 @@ def level_hazard_groups(world, name: str) -> List[Tuple[List[str], bool]]:
         groups.append((affordable(AIR_COUNTERS, budget), True))
     if "dino" in hazards:
         groups.append((list(DINO_COUNTERS), True))
-    return groups
+    # [user] Narrowed to the slot's power selection (power_logic.select), like
+    # the loadout rules, so a counter group promotes the plants the seed chose
+    # rather than every member.
+    from . import power_logic
+    return [(power_logic.narrow(world, g), promoted) for g, promoted in groups]
 
 
 def slot_level_hazard_groups(world) -> Dict[str, List[List[str]]]:
@@ -460,7 +465,8 @@ def slot_hazard_floor_groups(world) -> List[List[str]]:
                 out.append(sorted(group))
     # Each jester power plant covers levels the others do not, so each is its
     # own group rather than one group the floor could satisfy with any one.
-    for plant in getattr(world, "logic_jester_power", ()):
+    for plant in (() if getattr(world, "power_selection", None) is not None
+                  else getattr(world, "logic_jester_power", ())):
         if (plant,) not in seen:
             seen.add((plant,))
             out.append([plant])
@@ -472,7 +478,8 @@ def slot_hazard_plants(world) -> Set[str]:
     plants: Set[str] = set()
     for group in slot_hazard_floor_groups(world):
         plants.update(group)
-    plants.update(getattr(world, "logic_jester_power", ()))
+    if getattr(world, "power_selection", None) is None:
+        plants.update(getattr(world, "logic_jester_power", ()))
     # ...and the Jester class-power groups themselves: a rule names every
     # member, so every member has to be progression to count.
     for name in sorted(getattr(world, "budget_hazards", {})):

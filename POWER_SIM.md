@@ -159,6 +159,27 @@ The table reuses a per-level cache keyed by the simulator and data hash
 workers; when only zombie HP changes, only the levels fielding those zombies
 need re-simulating.
 
+## Selection (`power_logic.select`)
+
+[user] Naming every passing loadout made nearly every plant progression. At
+generation the slot keeps a small set of plants instead:
+
+- built levels are walked in play order (tutorial and Egypt first, then by
+  depth along `level_predecessors`, same-depth ties drawn);
+- per level, counter groups (nullifiers and the budget roll's hazard counters)
+  and then loadouts are topped up until the level has
+  `power_loadouts_per_level` distinct ways to pass (1 for the opening levels),
+  counting a loadout that is a superset of another as the same way;
+- a top-up takes the candidate adding the fewest new plants, then the one whose
+  new plants help the most built levels, as a seeded pick among the best 3.
+
+Every loadout rule, nullifier group and hazard group then names only selected or
+granted plants, so only those are promoted. The old DPS ladder and per-budget
+draws are no longer promoted when a selection exists. The selection is sent as
+`logic_power_selection` so Universal Tracker builds the same rules; a seed
+without it names every passing loadout, as before. Measured 2026-09-16: 21-27%
+of pool plants progression at 2-3 loadouts per level.
+
 ## Calibration
 
 Model only for now; recalibrated from playtest. Fixed verdicts become tests:

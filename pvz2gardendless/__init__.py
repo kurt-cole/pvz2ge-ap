@@ -41,7 +41,7 @@ from .locations import (
 from .regions import create_regions as build_regions
 from .rules import set_rules as apply_rules
 from .zombie_data import ZOMBIE_TIERS, ZOMBIE_HP
-from . import budget_logic
+from . import budget_logic, power_logic
 
 # ── Launcher ──────────────────────────────────────────────────────────────────
 
@@ -257,6 +257,8 @@ class PvZ2GardendlessWorld(World):
     # level, not just these -- see POWER_DRAW_COUNT in constants.py for why the
     # two differ.
     logic_power_plants: tuple = ()
+    # power_logic.select(): the plants loadout rules may name. None = no selection.
+    power_selection = None
 
     # What generate_early handed the player. Declared here for the same reason:
     # create_item_pool reads it to keep those plants out of the pool, and an
@@ -513,6 +515,10 @@ class PvZ2GardendlessWorld(World):
         # ...and, under the budget zombie roll, one draw per lower sun budget
         # the slot builds, since the ladder is priced at the default budget.
         self.logic_budget_power = budget_logic.draw_budget_power(self)
+        # ...and the plants the loadout simulation's rules may name, drawn in
+        # play order (power_logic.select). None when the option is off.
+        self.power_selection = (power_logic.select(self)
+                                if self.options.plant_power_logic else None)
 
         # THE SEED'S OWN ROLLS, under Universal Tracker. All three are drawn
         # from self.random above, and a tracker's local draw is a different
@@ -539,6 +545,13 @@ class PvZ2GardendlessWorld(World):
                     tuple(group) for group in passthrough["logic_power_plants"])
             if "logic_jester_power" in passthrough:
                 self.logic_jester_power = tuple(passthrough["logic_jester_power"])
+            # Absent from a seed generated before selection existed: None,
+            # which every rule reads as "every passing loadout", as it was.
+            if "logic_power_selection" in passthrough:
+                sel = passthrough["logic_power_selection"]
+                self.power_selection = None if sel is None else frozenset(sel)
+            elif "logic_power_plants" in passthrough:
+                self.power_selection = None
             if "logic_budget_power" in passthrough:
                 self.logic_budget_power = tuple(
                     (int(budget), tuple(group))
@@ -900,6 +913,11 @@ class PvZ2GardendlessWorld(World):
             # ...and its per-sun-budget power draws, as [budget, [plants]].
             "logic_budget_power": [[budget, list(group)]
                                    for budget, group in self.logic_budget_power],
+            # The plants the loadout rules may name (power_logic.select), so a
+            # tracker builds the same rules. null when plant_power_logic is off;
+            # absent from older seeds, which name every passing loadout.
+            "logic_power_selection": (sorted(self.power_selection)
+                                      if self.power_selection is not None else None),
             # The options that decide which locations exist. goal_type,
             # shopsanity, worlds_required and skip_tutorial are above already;
             # these three were client-irrelevant and so were never sent. UT is

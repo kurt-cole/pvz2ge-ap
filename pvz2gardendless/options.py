@@ -269,88 +269,64 @@ class RandomizeConveyorPlants(Toggle):
 
 class ShuffleZombies(Toggle):
     """
-    Shuffle which zombies each level sends at you.
+    Randomize the zombies each level sends at you.
 
-    Swaps stay inside a tier, so a level keeps the difficulty it was built
-    around. A tier is a set of zombies the game itself prices the same (its
-    own `WavePointCost`), fields in the same lane, and that take about the
-    same killing -- so a Mummy is traded for another zombie of a Mummy's
-    price and toughness, never for a Gargantuar. Gargantuars only become
-    Gargantuars, and Zombosses are never touched, so every boss fight is the
-    one the level intended.
+    Each level's zombie health is re-spent: fewer, stronger zombies or more,
+    weaker ones, within a budget that keeps the level close to the health it
+    shipped with. Zombies with a hard counter (Jester, flyers, ice-block
+    carriers, plant-disabling zombies) can appear outside their home worlds,
+    and logic asks for their counter wherever they land.
 
-    On top of that, the level as a whole is weighed: if a roll would leave a
-    level meaningfully tougher or softer than it shipped, it is re-rolled, and
-    a level with nothing fair to swap to simply keeps its own zombies. Across
-    every shipped level, a shuffled lawn lands within a few percent of the
-    health the level was built with.
+    Nothing new arrives before Ancient Egypt 6: the opening levels field only
+    the hazards they ship with, so a run never opens waiting on a counter the
+    multiworld has not handed over yet. Rocket imps and summoners never appear
+    before a level's first flag wave unless the level ships them there.
 
-    Zombies that need a specific plant to answer them stay put: the Jester
-    still only appears where a Jester appeared, ice-block carriers only where
-    ice-block carriers did, and the same goes for zombies that fly, that block
-    your shots, and that summon more of their own. That is what keeps Dark
-    Ages' Jester requirement and Frostbite Caves' warmth requirement honest --
-    the shuffle cannot move a threat into a world with no answer for it, nor
-    take one out of a world whose access rule is built on it. Nothing about
-    generation logic changes when this is on.
-
-    Water zombies and land zombies are kept apart, since a land zombie
-    dropped in a deep-water lane drowns.
-
-    Zombies that are not really walkers stay exactly where the game put them:
-    the camels, Sky City's airship crews, the imps that are meant to arrive
-    from a carrier, and the immobile props. A level that ships one still gets
-    it; no other level can gain one.
-
-    Levels built around particular zombies are skipped entirely -- the camel
-    matching games, the cannon levels, Beghouled, bowling, Last Stand and the
-    other set pieces. Those levels win on their specific zombies rather than
-    just spawning them, so swapping there can leave one unbeatable. That is 73
-    of the game's levels; the rest all shuffle, and about 70% of everything
-    they field changes.
-
-    The roll is fixed per level, so retrying a level gives the same zombies
-    rather than rerolling until you like them. Rolls differ between slots on
-    the same seed.
-
-    Off matches how seeds generated before this option existed behave.
+    Set pieces (camels, the cannon levels, bowling, Last Stand and the rest)
+    are never touched. The roll is fixed per level, so retrying a level gives
+    the same zombies. Rolls differ between slots on the same seed.
     """
     display_name = "Shuffle Zombies"
 
+
 class ZombieBudgetRoll(Toggle):
     """
-    EXPERIMENTAL. The client reproduces generation's roll level for level; what
-    is still being calibrated is how the result plays.
-
-    Only applies when Shuffle Zombies is also on. Instead of trading each
-    zombie for one of the same tier, each level's zombie health is re-spent:
-    fewer, stronger zombies or more, weaker ones, within a budget that keeps
-    the level beatable. Zombies with a hard counter (Jester, flyers, ice-block
-    carriers) can appear outside their home worlds, and the logic asks for
-    their counter wherever they land.
-
-    Nothing new arrives before Ancient Egypt 6: the levels up to there field
-    only the hazards they ship with, so the opening of a run never waits on a
-    counter the multiworld has not handed over yet.
-
-    Set pieces (camels, the cannon levels, bowling, Last Stand and the rest)
-    are never touched. Intended to replace the tier shuffle once proven.
+    Deprecated: Shuffle Zombies now always uses the budget roll. Kept so older
+    YAMLs still load; its value is ignored.
     """
-    display_name = "Zombie Budget Roll (Experimental)"
+    display_name = "Zombie Budget Roll (deprecated)"
+    visibility = Visibility.none
 
 
 class TravellingDinos(Toggle):
     """
-    EXPERIMENTAL. The client places the dinosaurs generation rolled.
-
-    Only applies when Zombie Budget Roll is on. Dinosaurs may appear in any
-    level zombie randomization is allowed to change, from Ancient Egypt 6 on,
-    that you bring your own plants to, about as often as Jurassic Marsh's share of the levels your
-    goal builds, shaped like a Jurassic Marsh level of the same difficulty.
-    They take part of that level's zombie budget, and any level that gains
-    dinosaurs requires Perfume-shroom.
+    Only applies when Shuffle Zombies is on. Dinosaurs may appear in any level
+    zombie randomization is allowed to change, from Ancient Egypt 6 on, that
+    you bring your own plants to, about as often as Jurassic Marsh's share of
+    the levels your goal builds, shaped like a Jurassic Marsh level of the same
+    difficulty. They take part of that level's zombie budget, and any level
+    that gains dinosaurs requires Perfume-shroom.
     """
-    display_name = "Travelling Dinosaurs (Experimental)"
+    display_name = "Travelling Dinosaurs"
+
+
+class PowerLoadoutsPerLevel(Range):
+    """
+    Only applies with Plant Power Logic on. How many different plant loadouts
+    (sun producer, attacker, optional support plant) logic keeps for each level
+    past Ancient Egypt 5; the opening levels always keep one.
+
+    Logic picks a small set of plants that carries the seed from level to
+    level, so only those become progression items. More loadouts per level
+    give fill more ways to place them, at the cost of more progression plants.
+
+    WARNING: below 2 or above 3 can cause generation errors, from too few ways
+    to place the plants or too many progression items for the locations.
+    """
+    display_name = "Power Loadouts Per Level"
+    range_start = 1
+    range_end = 5
+    default = 2
 
 
 class EarlyWorldKeys(Toggle):
@@ -512,24 +488,16 @@ class TrapWeightGems(TrapWeight):
 
 class PlantPowerLogic(DefaultOnToggle):
     """
-    Require that the plants in logic can actually kill what a level sends.
+    Require that the plants in logic can actually beat what a level sends.
 
-    On (the default), every level the player brings their own plants to carries
-    one extra requirement: hold an attacker whose lawn's worth of damage per
-    second reaches what that level's waves need. Both figures come from the
-    game's own tables -- see pvz2gardendless/plant_data.py -- and between 12 and
-    73 of the game's plants satisfy any given level, so this is a floor on what
-    a seed may leave you holding rather than a prescription of which plant to
-    use.
-
-    It exists because a seed could put a level in logic that the plants in logic
-    cannot beat: Ancient Egypt 3 with nothing but a 45-second-recharge attacker,
-    and no rule anywhere asking for better.
+    On (the default), every level you bring your own plants to requires a
+    loadout that passes a simulation of that level: a sun producer (or none),
+    an attacker, and optionally a support plant, against the level's zombies at
+    their rolled health. Zombies that disable plants also require their
+    counter. See POWER_SIM.md.
 
     Off restores the older behaviour, where a level's only requirements were its
-    world's unlocks and the specific plants a handful of worlds ask for. The
-    guaranteed STARTING plant is held to the same standard either way, since
-    nothing in front of the opening levels can be gated at all.
+    world's unlocks and the specific plants a handful of worlds ask for.
     """
     display_name = "Plant Power Logic"
 
@@ -552,6 +520,7 @@ class PvZ2Options(PerGameCommonOptions):
     zombie_budget_roll: ZombieBudgetRoll
     travelling_dinos: TravellingDinos
     plant_power_logic: PlantPowerLogic
+    power_loadouts_per_level: PowerLoadoutsPerLevel
     early_world_keys: EarlyWorldKeys
     include_levels_past_goal: IncludeLevelsPastGoal
     trap_percentage:  TrapPercentage
@@ -564,12 +533,14 @@ OPTION_GROUPS = [
     OptionGroup("Goal Settings",[GoalType, WorldsRequired, EnabledWorlds]),
     OptionGroup("AP Settings", [DeathLink]),
     OptionGroup("Level Access",[WorldCount, IncludeSidePaths,
-                               IncludeLevelsPastGoal, PlantPowerLogic]),
+                               IncludeLevelsPastGoal, PlantPowerLogic,
+                               PowerLoadoutsPerLevel]),
     OptionGroup("Extra Locations",[Shopsanity]),
     OptionGroup("Traps",[TrapPercentage, TrapWeightLawnMower,
                          TrapWeightCostumeShuffle, TrapWeightCoins,
                          TrapWeightGems]),
-    OptionGroup("Gameplay Tweaks",[SkipTutorial,ShuffleUpgrades, StartingPlants,RandomizeConveyorPlants, ShuffleZombies]),
+    OptionGroup("Gameplay Tweaks",[SkipTutorial,ShuffleUpgrades, StartingPlants,RandomizeConveyorPlants, ShuffleZombies,
+                                   TravellingDinos]),
     OptionGroup("Experimental DANGER",[IncludeDangerRooms, ModernDayVictory, EarlyWorldKeys,
-                                       ZombieBudgetRoll, TravellingDinos])
+                                       ZombieBudgetRoll])
 ]

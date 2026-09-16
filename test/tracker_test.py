@@ -199,6 +199,9 @@ bz_server = build(seed=31, **BUDGET)
 bz_sd = bz_server.fill_slot_data()
 bz_tracked = build(seed=32, passthrough=bz_sd, **BUDGET)
 check("the tracker is in budget mode too", bz_tracked.budget_mode)
+check("the tracker keeps the seed's power selection",
+      bz_tracked.power_selection == bz_server.power_selection
+      and bool(bz_server.power_selection))
 check("every level's hazards come back identical",
       bz_server.budget_hazards == bz_tracked.budget_hazards)
 srv = {n: [sorted(g) for g, _ in B.level_hazard_groups(bz_server, n)]

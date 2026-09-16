@@ -541,11 +541,10 @@ else:
     ok("Lily Pad, Blover, Perfume-shroom, a Jester answer and a warming plant "
        "each open their world on top of unlock+sun, and Pirate Seas needs none")
 
-# shuffle_zombies must not move a single location between spheres. It is a
-# client-side swap confined to tiers that keep every threat mechanic in the
-# world it started in, so no access rule can change -- and the sphere shape is
-# a design target (sphere 1 is deliberately ~7% of locations), so a silent
-# shift here is the failure mode worth catching.
+# The deprecated zombie_budget_roll option alone must not move a single location
+# between spheres: it is ignored now. The sphere shape is a design target
+# (sphere 1 is deliberately ~7% of locations), so a silent shift is the failure
+# mode worth catching.
 def sphere_shape(**kw):
     mw, w = build(**kw)
     pre = [i.name for i in mw.precollected]
@@ -557,12 +556,15 @@ def sphere_shape(**kw):
     return out
 
 
-_off, _on = sphere_shape(shuffle_zombies=0), sphere_shape(shuffle_zombies=1)
+# [user] shuffle_zombies is now the budget roll, which adds hazard rules, so
+# only the deprecated tier-swap path could hold this. Kept on zombies off vs
+# the deprecated zombie_budget_roll alone, which must still change nothing.
+_off, _on = sphere_shape(shuffle_zombies=0), sphere_shape(zombie_budget_roll=1)
 if _off != _on:
     _diff = next(sorted(set(a) ^ set(b)) for a, b in zip(_off, _on) if a != b)
-    fail(f"shuffle_zombies moved {len(_diff)} locations between spheres: {_diff[:5]}")
+    fail(f"zombie_budget_roll alone moved {len(_diff)} locations between spheres: {_diff[:5]}")
 else:
-    ok(f"shuffle_zombies leaves every sphere identical "
+    ok(f"zombie_budget_roll alone leaves every sphere identical "
        f"({', '.join(str(len(s)) for s in _off)} locations at 3 depths)")
 
 # ── Egypt's opening is egypt1-8, and egypt9 is behind the first unlock ──────
