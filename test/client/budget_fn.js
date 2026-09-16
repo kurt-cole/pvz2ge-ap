@@ -43,7 +43,7 @@ function _apHash(str) {
 // designers push wave objects into the same list the same way.
 const APB = {
   NOISE_LO: 1000, NOISE_HI: 1200, FEASIBLE_PERMILLE: 1100, NOVEL_WEIGHT: 3,
-  CAP_MULT: 3, CAP_ADD: 4, LEVEL_OK: [900, 1100], LEVEL_HARD: [750, 1333], TRIES: 8,
+  CAP_MULT: 3, CAP_ADD: 4, LEVEL_OK: [900, 1100], LEVEL_HARD: [750, 1333], CEILING_PERMILLE: 1500, TRIES: 8,
   SHARE_KNEE: 200, SHARE_HALF: 50, DINO_BUDGET_PERMILLE: 100,
   DINO_TYPES: ['ankylo', 'ptero', 'raptor', 'stego', 'tyranno'],
   DINO_LEVEL_PERMILLE_BY_GOAL: [262, 232, 236],
@@ -606,20 +606,20 @@ function _apbRoll(t, seed, levelId, level, dinos, goal) {
   // exactly what a preset seed bank does.
   const opening = APB.OPENING_LEVELS.indexOf(levelId) >= 0;
   const bring = level.own_plants && !opening;
-  // [user] A level that picks the player's plants for them may field nothing
-  // tougher than its own toughest zombie: the budget is still spent, as more
-  // bodies rather than bigger ones.
+  // [user] A level that picks the player's plants may field nothing over
+  // CEILING_PERMILLE of its own toughest zombie. Mirrors zombie_roll.py.
   let ceiling = 0;
   if (!level.own_plants) {
     for (const c of Object.keys(vanilla)) ceiling = Math.max(ceiling, t.hp[c] || 0);
+    ceiling = Math.floor(ceiling * APB.CEILING_PERMILLE / 1000);
   }
   if (!bring || narrow || ceiling) {
     for (const b of APB.BUCKETS) {
       const names = t.pools[b].filter(function (c) {
         return vanilla[c] || ((bring || !t.hazard[c])
                                 && (!opening || !t.nullifier[c])
-                              && (!narrow || !t.multilane[c])
-                              && (!ceiling || t.hp[c] <= ceiling));
+                                && (!narrow || !t.multilane[c])
+                                && (!ceiling || t.hp[c] <= ceiling));
       });
       pools[b] = [names, names.map(function (c) { return t.hp[c]; })];
     }

@@ -60,6 +60,9 @@ CAP_MULT, CAP_ADD = 3, 4
 # Level guard, per mille of the level's vanilla budget.
 LEVEL_OK = (900, 1100)
 LEVEL_HARD = (750, 1333)
+# [user] Preset and conveyor levels: no rolled zombie over this share of the
+# level's own toughest zombie's HP. Mirrored in the client's APB config.
+CEILING_PERMILLE = 1500
 TRIES = 8
 
 # Decision 4: one type's share of a level's spawns may exceed the vanilla
@@ -558,13 +561,11 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
         # player cannot have yet. Preset and conveyor levels may still gain one.
         drop |= t.nullifier_names - vanilla
     if not level["own_plants"]:
-        # [user] ...and nothing tougher than the level's own toughest zombie. A
-        # level that picks the plants picks them for what it ships with:
-        # tutorial1 hands the player one Peashooter against a 190 HP zombie, and
-        # the roll was free to answer that with a 700 HP hunter. The budget is
-        # still spent in full, so this reads as more bodies rather than bigger
-        # ones.
-        ceiling = max((t.hp[c] for c in vanilla), default=0)
+        # [user] A level that picks the plants picks them for what it ships
+        # with, so nothing over CEILING_PERMILLE of its own toughest zombie.
+        # Softened from 1x once the ratio bound (LEVEL_OK) held these levels:
+        # the budget is still spent in full.
+        ceiling = max((t.hp[c] for c in vanilla), default=0) * CEILING_PERMILLE // 1000
         if ceiling:
             drop |= {c for c in t.hp if t.hp[c] > ceiling} - vanilla
     if level.get("lanes", 5) < 5:

@@ -253,36 +253,36 @@ else:
     ok(f"dino levels per goal (world key, zomboss, completion): "
        f"{[len(g) for g in by_goal]} of {len(eligible)}, inside their bands")
 
-# [user] A level that picks the player's plants may field nothing tougher than
-# its own toughest zombie, and no level opens on a rocket imp. tutorial1 hands
-# over one Peashooter against a 190 HP zombie; the roll used to answer with a
-# 700 HP hunter.
+# [user] No level opens on a rocket imp or a summoner: nothing banned in any
+# spawn wave before the first flag wave, unless the level ships it there.
+# [user] A preset or conveyor level fields nothing over CEILING_PERMILLE of its
+# own toughest zombie (1.5x).
 over, opened, checked = [], [], 0
 for lid, lv in sorted(levels.items()):
     if not R.eligible(lv):
         continue
     van = {c for g in lv["groups"] for c, _ in g["z"]}
-    ceiling = max((t.hp[c] for c in van), default=0)
     for seed in SEEDS[:3]:
         plan = R.roll_level(seed, lid, dinos=True, goal_type=0)
         if plan is None or plan["vanilla"]:
             continue
         checked += 1
+        ceiling = max((t.hp[c] for c in van), default=0) * R.CEILING_PERMILLE // 1000
         if not lv["own_plants"] and ceiling:
             worst = max((t.hp[c] for c in R.roster(plan)), default=0)
             if worst > ceiling:
-                over.append(f"{lid} seed {seed}: {worst} HP against a {ceiling} HP level")
+                over.append(f"{lid} seed {seed}: {worst} HP over a {ceiling} HP cap")
         for g in plan["groups"]:
-            if g["w"] != 1:
+            if not R.opening_wave(lv, g["w"]):
                 continue
             for c, _ in g["z"]:
-                if c in R.FIRST_WAVE_BANNED and c not in van:
-                    opened.append(f"{lid} seed {seed}: {c} in wave 1")
+                if c in t.first_wave_banned and c not in van:
+                    opened.append(f"{lid} seed {seed}: {c} in wave {g['w']}")
 if over or opened:
-    fail(f"a level was rolled past its ceiling or opened on a banned zombie: {(over + opened)[:3]}")
+    fail(f"a level outgrew its HP cap or opened on a banned zombie: {(over + opened)[:3]}")
 else:
-    ok(f"no preset level outgrows its own toughest zombie, no level opens on a "
-       f"rocket imp, over {checked} rolls")
+    ok(f"no preset level outgrows its HP cap, no level opens on a rocket imp or summoner before its first flag wave, "
+       f"over {checked} rolls")
 
 
 # [user] Nothing new before egypt6. The opening of a run is played with whatever
