@@ -451,6 +451,12 @@ def _ensure_carriers(t: _Tables, entries, need: int, pools):
     return sorted([c, n] for c, n in counts.items() if n > 0)
 
 
+def opening_wave(level, w: int) -> bool:
+    """Wave 1, or any spawn wave before the level's first flag wave. A model
+    without `flag` (generated before it) reads as wave 1 only, as before."""
+    return w == 1 or w < level.get("flag", 0)
+
+
 def _attempt(t: _Tables, seed: int, level_id: str, level, attempt: int,
              scale: int, vanilla: set, pools, pools_first=None):
     rng = Stream(ap_hash(f"{seed}|{level_id}|budget|{attempt}"))
@@ -473,8 +479,10 @@ def _attempt(t: _Tables, seed: int, level_id: str, level, attempt: int,
             if "bring" in g:
                 out["bring"] = g["bring"]
         elif kind in LIST_KINDS or kind in FIELD_KINDS:
-            # Wave 1 draws from the pool that has no level-opening zombie in it.
-            gp = pools_first if (g["w"] == 1 and pools_first is not None) else pools
+            # [user] Every spawn wave before the first flag wave (and wave 1
+            # always) draws from the pool with no level-opening zombie in it.
+            gp = pools_first if (pools_first is not None and opening_wave(level, g["w"])) \
+                else pools
             entries = g["z"]
             buckets: Dict[Any, list] = {}
             fixed = []

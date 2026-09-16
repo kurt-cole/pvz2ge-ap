@@ -208,6 +208,10 @@ class Level:
             # authored WaveCount is overwritten, and sky3 (12 listed, 8 authored)
             # plays all 12.
             "waves": len(waves) or (count if isinstance(count, int) else 0),
+            # The first flag (huge) wave's number; 0 when the level states none.
+            "flag": (int(manager["FlagWaveInterval"])
+                     if isinstance(manager.get("FlagWaveInterval"), int)
+                     and manager["FlagWaveInterval"] > 0 else 0),
             "bespoke": any(BESPOKE_MODULES.search(c) for c in classes),
             "generated": any(GENERATORS.match(c) for c in classes),
             "own_plants": seedbank.get("SelectionMethod") == "chooser" and not conveyor,

@@ -56,7 +56,7 @@ ROLL_STEP = 9               # every ninth eligible level, sorted
 ROLL_CASES = [(987654321, True, 1)]
 
 MODEL_KEYS = ("waves", "stage", "bespoke", "generated", "own_plants", "planks",
-              "lanes", "dynamic", "dinos", "graves")
+              "lanes", "flag", "dynamic", "dinos", "graves")
 GROUP_KEYS = ("k", "id", "w", "z", "f", "p", "rep", "bring", "pf")
 PLAN_KEYS = ("attempt", "vanilla", "budget", "ratio", "dynamic", "dinos")
 

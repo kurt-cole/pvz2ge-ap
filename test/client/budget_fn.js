@@ -276,6 +276,9 @@ function _apbModel(objs) {
   const count = manager.WaveCount;
   return {
     waves: waves.length || (Number.isInteger(count) ? count : 0),
+    // The first flag wave's number; 0 when the level states none.
+    flag: (Number.isInteger(manager.FlagWaveInterval) && manager.FlagWaveInterval > 0)
+      ? manager.FlagWaveInterval : 0,
     stage: _apbRt(definition.StageModule) || '',
     bespoke: objs.some(function (o) { return o && AP_BESPOKE_MODULES.test(o.objclass || ''); }),
     generated: objs.some(function (o) {
@@ -535,7 +538,8 @@ function _apbAttempt(t, seed, levelId, level, attempt, scale, vanilla, pools,
       if (_apbHas(g, 'bring')) out.bring = g.bring;
     } else if (rolls) {
       // Wave 1 draws from the pool that has no level-opening zombie in it.
-      const gp = (g.w === 1 && poolsFirst) ? poolsFirst : pools;
+      // [user] Every spawn wave before the first flag wave, and wave 1 always.
+      const gp = (poolsFirst && (g.w === 1 || g.w < (level.flag || 0))) ? poolsFirst : pools;
       const buckets = Object.create(null), fixed = [];
       for (const e of g.z) {
         const key = _apbBucket(t, e[0]);
