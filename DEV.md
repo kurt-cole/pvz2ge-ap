@@ -1,5 +1,9 @@
 ## Development notes
 
+### In progress: plant power loadout simulation
+
+The lawn-DPS power model is being replaced. Design and status: [POWER_SIM.md](POWER_SIM.md).
+
 ### Open: adopt the AutoWorld and Region helper APIs — @kurt-cole to address
 
 The world still builds its region graph and reaches for its own objects the long way round, using

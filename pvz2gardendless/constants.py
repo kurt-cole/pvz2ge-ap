@@ -789,15 +789,11 @@ ALL_LOGIC_PLANTS = (LOGIC_PLANTS | set(CHEAP_ATTACKER_PLANTS)
 # ── Plant power ───────────────────────────────────────────────────────────────
 # How many plants each rung of the power ladder contributes to a slot's draw.
 #
-# TWO, and the draw exists for the same reason LOGIC_ATTACKER_COUNT does. Every
-# level's requirement is met by between 12 and 73 of the game's plants, and
-# rules.py NAMES all of them -- a player with any of them is in logic, and a
-# tracker shows all of them as options. But a plant a rule names has to be
-# PROGRESSION for fill to reason about it, and promoting seventy plants would
-# leave a small seed room for nothing else. So the rule stays wide and the
-# promotion stays narrow: a handful per rung of DRAW_RUNGS, which between them
-# cover every level in the seed, because a rung is the hardest requirement in
-# its bucket.
+# Every level's requirement is met by between 12 and 73 of the game's plants,
+# rules.py names all of them, and all of them are progression (a useful plant
+# never counts toward a rule in AP). The draw no longer narrows the promote; it
+# is the pool floor: a handful per rung of DRAW_RUNGS, which between them cover
+# every level in the seed, so a small seed's plant trim always keeps one.
 #
 # Two rather than one so no single plant is load-bearing for a whole rung.
 POWER_DRAW_COUNT = 2

@@ -224,6 +224,21 @@ def power_need(world, name: str) -> Optional[Tuple[float, int]]:
     return required, budget
 
 
+def power_rule_plants(world) -> Set[str]:
+    """Every plant some power rule this slot built names, for the promote.
+
+    AP only counts advancement items in CollectionState, so a plant the rule
+    names but that stays useful never satisfies it: logic (and Universal
+    Tracker) would ignore a player holding it. Mirrors rules.py's gate, which
+    builds power rules only when the ladder was drawn.
+    """
+    if not getattr(world, "logic_power_plants", ()):
+        return set()
+    needs = {power_need(world, loc.name) for loc in world.active_locations()}
+    needs.discard(None)
+    return {p for need in needs for p in plants_clearing_at(*need)}
+
+
 def draw_budget_power(world) -> Tuple[Tuple[int, Tuple[str, ...]], ...]:
     """Power plants for the levels priced below SUN_BUDGET, one draw per budget.
 
@@ -332,16 +347,18 @@ def client_tables(world) -> Dict[str, Any]:
     The client re-derives each level's model from the live level objects, but
     the per-zombie table and the count-field names come from every level in the
     game, so they are sent (data the client needs is sent, not duplicated).
-    Zombies as [hp, cost, tier, excluded, carry, multilane]; see the client's
-    _apbTables. A client reading a seed rolled before one of the trailing flags
-    existed sees a shorter entry and falls back to what that roll assumed: every
-    zombie able to carry plant food, and none of them multi-lane.
+    Zombies as [hp, cost, tier, excluded, carry, multilane, nullifier]; see the
+    client's _apbTables. A client reading a seed rolled before one of the
+    trailing flags existed sees a shorter entry and falls back to what that roll
+    assumed: every zombie able to carry plant food, none of them multi-lane, and
+    none of them kept out of the opening levels as a nullifier.
     """
     t = zombie_roll.tables()
     return {
         "zombies": {c: [z["hp"], z["cost"], z["tier"], z["excluded"] or "",
                         1 if z.get("carry", True) else 0,
-                        1 if z.get("multilane") else 0]
+                        1 if z.get("multilane") else 0,
+                        1 if c in t.nullifier_names else 0]
                     for c, z in sorted(t.zombies.items())},
         "grave_hp": dict(sorted(t.model["grave_hp"].items())),
         "field_names": {k: sorted(v) for k, v in t.field_names.items()},
@@ -456,4 +473,10 @@ def slot_hazard_plants(world) -> Set[str]:
     for group in slot_hazard_floor_groups(world):
         plants.update(group)
     plants.update(getattr(world, "logic_jester_power", ()))
+    # ...and the Jester class-power groups themselves: a rule names every
+    # member, so every member has to be progression to count.
+    for name in sorted(getattr(world, "budget_hazards", {})):
+        for group, promoted in level_hazard_groups(world, name):
+            if not promoted:
+                plants.update(group)
     return plants

@@ -1613,11 +1613,13 @@ for _label, _kw in (("default", {}), ("Egypt only", dict(world_count=1)),
     # WarmingRadius, so Frostbite Caves names it whether this draw picked it or
     # not. And the plant-power ladder, which draws from the whole roster and
     # lands on a cheap attacker often -- a different draw for a different rule,
-    # so a plant in it is progression for that rule's sake.
+    # so a plant in it is progression for that rule's sake. Since 2026-09-16
+    # that is every plant a built power rule names, not only the drawn ladder:
+    # AP never counts a useful plant toward a rule.
     _slot_prog = W.items.slot_progression_plants(_wD)
     _entry_here = {n for _w2 in _wD.enabled_worlds
                    for _g in C.WORLD_ENTRY_PLANTS.get(_w2, []) for n in _g}
-    _power_here = C.slot_power_plants(_wD)
+    _power_here = C.slot_power_plants(_wD) | W.budget_logic.power_rule_plants(_wD)
     _leaked = ((set(C.CHEAP_ATTACKER_PLANTS) - _drawn - _entry_here - _power_here)
                & _slot_prog)
     assert not _leaked, \
@@ -1681,10 +1683,10 @@ for _label2, _kw2 in (("Egypt only", dict(world_count=1)),
     _stretch_here = {n for _w3 in _wC.enabled_worlds
                      for _sfx in C.stretch_suffixes(_w3)
                      for _g3 in C.slot_stretch_groups(_wC, _w3, _sfx) for n in _g3}
-    # ...and the plant-power ladder, which is a rule naming them: see
-    # POWER_DRAW_COUNT in constants.py.
+    # ...and the power rules, which name every plant clearing a built level.
     _exempt = (_entry_here2 | _stretch_here | set(C.SUN_PRODUCER_PLANTS)
-               | set(_wC.logic_jesters) | C.slot_power_plants(_wC))
+               | set(_wC.logic_jesters) | C.slot_power_plants(_wC)
+               | W.budget_logic.power_rule_plants(_wC))
     _prog_atk = [n for n in C.CHEAP_ATTACKER_PLANTS if n not in _exempt
                  and _wC.create_item(n).classification == _IC_j.progression]
     assert not _prog_atk, (
@@ -1863,19 +1865,24 @@ for _name in ("Progressive Ancient Egypt", "Sky Shield", "100 Coins",
 _wE2, _ = run("classification: Egypt-only progression set", world_count=1)
 assert _wE2.enabled_worlds == {"Ancient Egypt"}, _wE2.enabled_worlds
 _egypt_prog = W.items.slot_progression_plants(_wE2)
-_power_egypt = C.slot_power_plants(_wE2)
+# Since 2026-09-16 the power part is every plant a built power rule names, not
+# only the drawn ladder: AP never counts a useful plant toward a rule. It takes
+# no room from filler or traps, which create_item_pool adds only after every
+# plant, progression or useful.
+_power_egypt = C.slot_power_plants(_wE2) | W.budget_logic.power_rule_plants(_wE2)
 _want_egypt = set(C.SUN_PRODUCER_PLANTS) | _power_egypt
 assert _egypt_prog == _want_egypt, (
     f"an Egypt-only seed's progression plants are {sorted(_egypt_prog - _want_egypt)} "
     f"beyond its sun producers, and missing {sorted(_want_egypt - _egypt_prog)}")
-# The ladder is what the power rules cost a seed this small, and the number is
-# the reason it is DRAWN rather than naming every plant that clears a level:
-# egypt1-8 need two of the five rungs, so at POWER_DRAW_COUNT each that is at
-# most four plants, against the 38 to 73 the rules themselves name.
-assert len(_power_egypt) <= 2 * C.POWER_DRAW_COUNT, sorted(_power_egypt)
+# The drawn ladder stays small (it is the pool floor): egypt1-8 need two of the
+# five rungs, so at POWER_DRAW_COUNT each that is at most four plants.
+assert len(C.slot_power_plants(_wE2)) <= 2 * C.POWER_DRAW_COUNT, \
+    sorted(C.slot_power_plants(_wE2))
 # Five sun producers, as a literal: reading the length off SUN_PRODUCER_PLANTS
-# would agree with whatever that list said.
-assert len(_egypt_prog - _power_egypt) == 5, sorted(_egypt_prog)
+# would agree with whatever that list said. A sun producer can also clear a
+# level, so they are counted directly rather than as what the power set leaves.
+assert len(set(C.SUN_PRODUCER_PLANTS)) == 5 and set(C.SUN_PRODUCER_PLANTS) <= _egypt_prog, \
+    sorted(_egypt_prog)
 assert not ({"Lily Pad", "Blover", "Perfume-shroom", "Torchwood"} & _egypt_prog), \
     "an Egypt-only seed still carries entry plants for worlds it does not have"
 print(f"per-slot classification: {len(_egypt_prog)} progression plants in an "
@@ -2231,7 +2238,8 @@ for _other in sorted(set(C.JESTER_COUNTER_PLANTS) - set(_drawn)):
     # Guava is the live example of the first kind -- it is both a Jester counter
     # and a Frostbite Caves warming plant.
     if (_other in _jw.logic_attackers or _other in C.SUN_PRODUCER_PLANTS
-            or _other in _OTHER_ENTRY or _other in C.slot_power_plants(_jw)):
+            or _other in _OTHER_ENTRY or _other in C.slot_power_plants(_jw)
+            or _other in W.budget_logic.power_rule_plants(_jw)):
         continue
     assert _jw.create_item(_other).classification == _IC_j.useful, \
         f"undrawn counter {_other} is progression; the draw is not narrowing"
@@ -2262,6 +2270,7 @@ _je_prog = [n for n in C.JESTER_COUNTER_PLANTS
             # ...and not in this slot's plant-power ladder, which Ancient Egypt's
             # own levels do name.
             and n not in C.slot_power_plants(_je)
+            and n not in W.budget_logic.power_rule_plants(_je)
             and _je.create_item(n).classification == _IC_j.progression]
 assert not _je_prog, \
     f"Egypt-only seed marks Jester counters progression for a world it never built: {_je_prog}"
@@ -2404,7 +2413,8 @@ _eprog = [i.name for i in _ew.multiworld.itempool
 # egypt1-8 are the only things the run actually requires.
 assert _eprog, "no progression item at all, so egypt8 would be unreachable"
 _enonsun = sorted(set(_eprog) - set(C.SUN_PRODUCER_PLANTS)
-                  - C.slot_power_plants(_ew))
+                  - C.slot_power_plants(_ew)
+                  - W.budget_logic.power_rule_plants(_ew))
 assert not _enonsun, f"progression items that are not sun producers: {_enonsun}"
 assert _esd["goal_locations"] == ["egypt8"], _esd["goal_locations"]
 print(f"Egypt-only world_key: {len(_enames)} locations, {len(_eprog)} progression "

@@ -26,6 +26,12 @@ import tkinter as tk
 from tkinter import filedialog
 import queue
 
+# Appended to Electron's userData directory. Empty for the stable build.
+# build_apworld.py --beta rewrites it, so a beta client keeps its own
+# localStorage (game saves, AP slot, panel settings) instead of sharing the
+# stable client's: Electron keys userData by productName, not install folder.
+USER_DATA_SUFFIX = ""
+
 # The Archipelago logo, inlined so the injected client stays a single
 # self-contained file -- devrun.py rewrites only tmpPatch.js, so a sibling
 # image would go missing on the fast path. 128x128 PNG, downscaled from the
@@ -1322,7 +1328,8 @@ window.electron = electron;
     const t = { hp: Object.create(null), cost: Object.create(null), tier: Object.create(null),
                 excluded: Object.create(null), pools: {}, poolHp: {}, tiers: Object.create(null),
                 hazard: Object.create(null), field: {}, graveHp: (data && data.grave_hp) || {},
-                carry: Object.create(null), multilane: Object.create(null) };
+                carry: Object.create(null), multilane: Object.create(null),
+                nullifier: Object.create(null) };
     for (const c of names) {
       const z = zombies[c];
       t.hp[c] = z[0]; t.cost[c] = z[1]; t.tier[c] = z[2] || ''; t.excluded[c] = z[3] || '';
@@ -1331,6 +1338,9 @@ window.electron = electron;
       // none of them putting bodies into a neighbouring lane.
       t.carry[c] = z.length > 4 ? !!z[4] : true;
       t.multilane[c] = z.length > 5 ? !!z[5] : false;
+      // [user] Absent (a seed rolled before the flag) reads as no nullifiers,
+      // which is what that roll kept out of the opening levels: nothing extra.
+      t.nullifier[c] = z.length > 6 ? !!z[6] : false;
     }
     for (const b of APB.BUCKETS) t.pools[b] = [];
     for (const c of names) {
@@ -1627,6 +1637,7 @@ window.electron = electron;
       for (const b of APB.BUCKETS) {
         const names = t.pools[b].filter(function (c) {
           return vanilla[c] || ((bring || !t.hazard[c])
+                                && (!opening || !t.nullifier[c])
                                 && (!narrow || !t.multilane[c])
                                 && (!ceiling || t.hp[c] <= ceiling));
         });
@@ -1669,9 +1680,13 @@ window.electron = electron;
       if (ratio >= APB.LEVEL_OK[0] && ratio <= APB.LEVEL_OK[1]) return plan;
       if (best === null || Math.abs(ratio - 1000) < Math.abs(best.ratio - 1000)) best = plan;
     }
-    if (best !== null && best.ratio >= APB.LEVEL_HARD[0] && best.ratio <= APB.LEVEL_HARD[1]) return best;
+    if (best !== null) {
+      if (!level.own_plants && best.ratio >= APB.LEVEL_OK[0] && best.ratio <= APB.LEVEL_OK[1]) return best;
+      else if (level.own_plants && best.ratio >= APB.LEVEL_HARD[0] && best.ratio <= APB.LEVEL_HARD[1]) return best;
+    }
     return { attempt: -1, vanilla: true, budget: budget, ratio: 1000,
-             groups: level.groups, dynamic: {}, dinos: [] };
+                  groups: level.groups, dynamic: {}, dinos: [] };
+    
   }
 
   // Rewrite a list source's Zombies[] to the rolled composition. A rolled
@@ -6354,6 +6369,15 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
                 "  win.removeMenu(); // hides the top menu bar",
                 "  win.removeMenu(); // hides the top menu bar\n" + f12_hook
             )
+        if USER_DATA_SUFFIX and "AP_USER_DATA_SUFFIX" not in main_js:
+            # Before app.whenReady(): userData has to move before anything
+            # opens storage under it.
+            main_js = main_js.replace(
+                "app.whenReady()",
+                "// AP_USER_DATA_SUFFIX\n"
+                f"app.setPath('userData', app.getPath('userData') + {json.dumps(USER_DATA_SUFFIX)});\n"
+                "app.whenReady()", 1)
+            log(f"  userData suffixed with {USER_DATA_SUFFIX!r} in main.js")
         with open(main_js_path, "w", encoding="utf-8") as f:
             f.write(main_js)
         log("  Enabled F12 devtools in main.js")

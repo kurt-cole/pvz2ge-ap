@@ -160,6 +160,11 @@ class World:
     def __init__(self, multiworld, player):
         self.multiworld, self.player = multiworld, player
         self.random = random.Random(12345)
+        # AP's MultiWorld.worlds. CollectionState.collect reads it to skip what
+        # AP's World.collect_item skips.
+        worlds = getattr(multiworld, "worlds", None)
+        if isinstance(worlds, dict):
+            worlds[player] = self
 
 
 class WebWorld:
@@ -205,6 +210,7 @@ mod("worlds.LauncherComponents")  # no components attr -> ImportError path
 class MultiWorld:
     def __init__(self):
         self.regions, self.itempool = [], []
+        self.worlds = {}
         self.completion_condition, self.precollected = {}, []
         self._entrances, self._locations = {}, {}
         self.indirect = []
@@ -246,7 +252,24 @@ class CollectionState:
         self.collect_placed = True
 
     def collect(self, name, count=1):
+        # AP's World.collect_item only counts advancement items, so a rule
+        # naming a useful item never passes on it. Mirrored for any name a
+        # registered world defines; names no world defines (events, test
+        # sentinels) are counted as before.
+        if not self._counts(name):
+            return
         self.prog_items[name] = self.prog_items.get(name, 0) + count
+
+    def _counts(self, name):
+        cache = self.__dict__.setdefault("_count_cache", {})
+        if name not in cache:
+            cache[name] = True
+            for w in getattr(self.multiworld, "worlds", {}).values():
+                if name in getattr(w, "item_name_to_id", {}):
+                    cls = w.create_item(name).classification
+                    cache[name] = bool(cls & ItemClassification.progression)
+                    break
+        return cache[name]
 
     def has(self, name, player, count=1):
         return self.prog_items.get(name, 0) >= count

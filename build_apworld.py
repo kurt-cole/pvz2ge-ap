@@ -4,6 +4,7 @@
     python build_apworld.py                # build it
     python build_apworld.py --check        # ...and generate a seed from the zip
     python build_apworld.py --list         # show what would ship, write nothing
+    python build_apworld.py --beta         # build/pvz2ge_beta.apworld instead
 
 An apworld is a zip Archipelago imports as a package, so the only thing that has
 to be right is WHAT GOES IN. This ships the package's .py files and the two
@@ -40,6 +41,52 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent
 PACKAGE = "pvz2gardendless"
 OUT = REPO / "build" / f"{PACKAGE}.apworld"
+
+# The beta: the same sources under another module and game name, so it installs
+# beside the stable apworld and a running multiworld on the stable one is left
+# alone. Each edit must match exactly `count` times, so a moved string fails
+# the build instead of shipping a beta that still calls itself the stable game.
+BETA_NAME = "pvz2ge_beta"
+BETA_EDITS = {
+    "constants.py": [
+        ('GAME_NAME = "PvZ2 Gardendless"', f'GAME_NAME = "{BETA_NAME}"', 1),
+    ],
+    "__init__.py": [
+        ('settings_key = "pvz2gardendless"', f'settings_key = "{BETA_NAME}"', 1),
+        ('Component("PvZ2 Gardendless Installer"', f'Component("{BETA_NAME} Installer"', 1),
+        ("Could not locate pvz2gardendless.apworld.", f"Could not locate {BETA_NAME}.apworld.", 1),
+    ],
+    "build_pvzge_ap.py": [
+        ("const GAME_NAME       = 'PvZ2 Gardendless';",
+         f"const GAME_NAME       = '{BETA_NAME}';", 1),
+        ("get_settings().pvz2gardendless.", f"get_settings().{BETA_NAME}.", 2),
+        # Its own Electron userData, so the beta client never touches the
+        # stable client's saves.
+        ('USER_DATA_SUFFIX = ""', 'USER_DATA_SUFFIX = "-beta"', 1),
+    ],
+}
+
+
+def stage_beta(files, work: Path):
+    """Copy `files` into work/BETA_NAME with BETA_EDITS applied; new rel paths."""
+    out = []
+    for rel in files:
+        text = (REPO / rel).read_bytes()
+        edits = BETA_EDITS.get(rel.name) if len(rel.parts) == 2 else None
+        if edits:
+            src = text.decode("utf-8")
+            for old, new, count in edits:
+                found = src.count(old)
+                if found != count:
+                    raise SystemExit(f"beta edit expected {count} of {old!r} in "
+                                     f"{rel.as_posix()}, found {found}")
+                src = src.replace(old, new)
+            text = src.encode("utf-8")
+        new_rel = Path(BETA_NAME, *rel.parts[1:])
+        (work / new_rel).parent.mkdir(parents=True, exist_ok=True)
+        (work / new_rel).write_bytes(text)
+        out.append(new_rel)
+    return out
 
 # What ships, by suffix and by where it sits. An allow-list rather than a
 # deny-list: a new kind of file in the package should have to be named here
@@ -111,7 +158,7 @@ def write_apworld(files, out: Path, root: Path = REPO) -> None:
             tmp.unlink()
 
 
-def check(out: Path) -> bool:
+def check(out: Path, package: str = PACKAGE) -> bool:
     """Generate a seed from the built zip, in a child interpreter.
 
     The point is to exercise the PACKAGED copy rather than the working tree: a
@@ -133,7 +180,7 @@ def check(out: Path) -> bool:
             f"sys.path.insert(0, {str(work)!r})\n"
             "import apstub\n"
             "from apstub import MultiWorld\n"
-            f"import {PACKAGE} as W\n"
+            f"import {package} as W\n"
             f"assert W.__file__.startswith({str(work)!r}), W.__file__\n"
             "from opts import Opts\n"
             "for label, kw in (('default', {}), ('one world', dict(world_count=1)),\n"
@@ -166,7 +213,9 @@ def main() -> int:
                     help="generate a seed from the built zip afterwards")
     ap.add_argument("--list", action="store_true",
                     help="print what would ship and exit without writing")
-    ap.add_argument("-o", "--output", type=Path, default=OUT,
+    ap.add_argument("--beta", action="store_true",
+                    help=f"build {BETA_NAME}.apworld, the renamed beta")
+    ap.add_argument("-o", "--output", type=Path, default=None,
                     help=f"where to write it (default: {OUT.relative_to(REPO)})")
     args = ap.parse_args()
 
@@ -187,10 +236,20 @@ def main() -> int:
         print(f"{len(files)} files")
         return 0
 
-    out = args.output if args.output.is_absolute() else REPO / args.output
+    default = REPO / "build" / f"{BETA_NAME}.apworld" if args.beta else OUT
+    out = default if args.output is None else args.output
+    out = out if out.is_absolute() else REPO / out
     before = hashlib.sha256(out.read_bytes()).hexdigest() if out.is_file() else None
 
-    write_apworld(files, out)
+    if args.beta:
+        work = Path(tempfile.mkdtemp(prefix="apworld-beta-"))
+        try:
+            files = stage_beta(files, work)
+            write_apworld(files, out, root=work)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+    else:
+        write_apworld(files, out)
 
     digest = hashlib.sha256(out.read_bytes()).hexdigest()
     with zipfile.ZipFile(out) as zf:
@@ -212,7 +271,7 @@ def main() -> int:
     elif before == digest:
         print("(identical to the previous build)")
 
-    if args.check and not check(out):
+    if args.check and not check(out, BETA_NAME if args.beta else PACKAGE):
         return 1
     return 0
 

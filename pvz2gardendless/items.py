@@ -17,7 +17,7 @@ from .constants import (
     UPGRADE_GROUPS,
 )
 from .plant_data import LEVEL_REQUIRED_DPS, PLANT_LAWN_DPS
-from . import budget_logic
+from . import budget_logic, power_logic
 
 if TYPE_CHECKING:
     from . import PvZ2GardendlessWorld
@@ -250,6 +250,13 @@ def _pool_floor_groups(world):
     # the power rules require. The easier rungs are drawn to keep fill from
     # believing Ancient Egypt 3 needs a Citron, which is a question of sphere
     # depth rather than of solvability, and they cost no reservation.
+    if power_logic.available() and getattr(world, "logic_power_plants", ()):
+        # A few loadouts that between them pass every built level, and one
+        # counter per nullifier group a built level asks for.
+        groups.extend(power_logic.floor_groups(world))
+        for loc in world.active_locations():
+            groups.extend(power_logic.nullifier_groups(world, loc.name))
+        return groups
     power = power_draw_groups(world)
     if power:
         # A granted plant that clears the hardest requirement this seed built
@@ -325,11 +332,17 @@ def slot_progression_plants(world) -> set:
         for suffix in stretch_suffixes(w):
             for group in slot_stretch_groups(world, w, suffix):
                 plants.update(group)
-    # ...and this slot's plant-power ladder. The power rules name far more plants
-    # than these -- every plant that clears the level -- but only the drawn ones
-    # need to be progression, which is the whole point of drawing them. See
-    # POWER_DRAW_COUNT in constants.py.
+    # ...and every plant this slot's power rules name. Promoting only the drawn
+    # ladder left the rest useful, and AP never counts a useful item toward a
+    # rule, so logic ignored every other plant that clears a level (the starter
+    # included). The ladder is still drawn: it is the pool floor.
     plants.update(slot_power_plants(world))
+    if power_logic.available():
+        # Every plant any built level's passing loadouts or nullifier counters
+        # name (POWER_SIM.md).
+        plants.update(power_logic.promoted_plants(world))
+    else:
+        plants.update(budget_logic.power_rule_plants(world))
     # ...and the budget zombie roll's hazard counters.
     plants.update(budget_logic.slot_hazard_plants(world))
     for _, group in getattr(world, "logic_budget_power", ()):

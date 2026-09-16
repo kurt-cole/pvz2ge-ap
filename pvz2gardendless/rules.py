@@ -6,7 +6,7 @@ All logic is expressed through the worlds.generic.Rules rule-builder helpers
 compose predictably and stay consistent with the rest of Archipelago.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List
 
 from worlds.generic.Rules import add_item_rule, add_rule, forbid_items_for_player, set_rule
 
@@ -21,8 +21,8 @@ from .constants import (
 )
 from .plant_data import LEVEL_REQUIRED_DPS
 from .items import GEM_GRANT
-from . import budget_logic
-from .locations import SHOP_LOC_UNLOCK, goal_locations_for
+from . import budget_logic, power_logic
+from .locations import SHOP_LOC_UNLOCK, goal_locations_for, level_predecessors
 
 if TYPE_CHECKING:
     from . import PvZ2GardendlessWorld
@@ -310,58 +310,103 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # register_indirect_condition, for the same reason the Danger Room and shop
     # rules above do not: no region's reachability turns on it.
     #
-    # THE RULE NAMES EVERY PLANT THAT CLEARS THE LEVEL, 12 to 73 of them, while
-    # only the slot's drawn ladder is promoted to progression. That asymmetry is
-    # deliberate and explained at POWER_DRAW_COUNT in constants.py: the player
-    # and the tracker get every option, and fill reasons about a bounded handful.
-    # It is sound in that direction -- fill plans with a subset of what actually
-    # satisfies the rule, so anything it considers reachable is reachable.
+    # THE RULE NAMES EVERY PLANT THAT CLEARS THE LEVEL, 12 to 73 of them, and
+    # every one is promoted to progression (budget_logic.power_rule_plants).
+    # Promoting only the drawn ladder did not give the player and tracker every
+    # option: AP never counts a useful item toward a rule, so logic ignored
+    # every undrawn plant, the starter included. The ladder is still drawn, as
+    # the pool floor.
     #
     # Keyed off the drawn ladder rather than off the option, so that Universal
     # Tracker follows the SEED: a seed generated with the option on sends its
     # ladder, and a tracker whose own YAML says otherwise still gates the same
     # levels. An empty ladder means the seed had the option off, and nothing
     # here applies.
-    if world.logic_power_plants:
-        # One closure per distinct requirement rather than per location: the
-        # levels share requirements heavily, and this rule is evaluated on every
-        # sweep of every fill.
+    # Every per-level requirement, as ("group", names) for has_any over plant
+    # names or ("loadout", packed triples) for the loadout simulation
+    # (power_logic.py, POWER_SIM.md). Both kinds are carried down the level order
+    # below.
+    level_reqs: Dict[str, List[tuple]] = {}
+
+    def need(name, kind, members):
+        level_reqs.setdefault(name, []).append((kind, frozenset(members)))
+
+    if world.logic_power_plants and power_logic.available():
+        # The loadout simulation: some held (producer, attacker, utility) passes
+        # the level at its rolled HP. A level the offline table does not cover
+        # (side paths, preset and conveyor levels) has no power rule.
+        for loc_data in world.active_locations():
+            req = power_logic.level_requirement(world, loc_data.name)
+            if req:
+                need(loc_data.name, "loadout", req)
+            for group in power_logic.nullifier_groups(world, loc_data.name):
+                need(loc_data.name, "group", group)
+    elif world.logic_power_plants:
+        # The lawn-DPS model, for a checkout without the offline table.
         answers = {}
         for loc_data in world.active_locations():
-            # (required dps, sun budget). Outside the budget zombie roll that is
-            # (LEVEL_REQUIRED_DPS, 1000) and prices exactly as it always has;
-            # under it the requirement is scaled by the level's roll and the
-            # plants are priced at the level's own sun budget.
-            need = budget_logic.power_need(world, loc_data.name)
-            if need is None:
-                continue  # a shop check, a Danger Room, or a level that hands
-                          # the player its plants
-            if need not in answers:
-                answers[need] = budget_logic.plants_clearing_at(*need)
-            group = answers[need]
-            if not group:
-                # No plant in the game clears it. The generator refuses to emit
-                # such a level, so this cannot happen -- and if it ever does, an
-                # ungated level is a better outcome than an unreachable one.
+            dps = budget_logic.power_need(world, loc_data.name)
+            if dps is None:
                 continue
-            try:
-                location = multiworld.get_location(loc_data.name, player)
-            except KeyError:
-                continue  # not built in this seed
-            add_rule(location,
-                     lambda state, g=group: state.has_any(g, player))
+            if dps not in answers:
+                answers[dps] = budget_logic.plants_clearing_at(*dps)
+            if answers[dps]:
+                need(loc_data.name, "group", answers[dps])
 
     # HAZARD COUNTERS, under the budget zombie roll. The level's own roll says
     # which hazards it fields, so the counter goes on that level's location,
     # the same footing as the power rule above. See budget_logic.py for what
     # each hazard asks. Empty in every other mode.
     for loc_name, groups in budget_logic.slot_level_hazard_groups(world).items():
+        for group in groups:
+            need(loc_name, "group", group)
+
+    # LEVEL ORDER [user]: each level depends on beating the one before it in its
+    # world, so it carries every requirement its predecessors have. Without
+    # this, egypt4 and egypt5 read as in logic while egypt2 and egypt3 did not.
+    # Carried as data rather than as can_reach() on the previous location: a
+    # chain of can_reach calls re-walks the whole world on every sweep. Within a
+    # kind, a requirement whose members are a superset of another's is implied
+    # by it and dropped. Region rules need no carrying: a stretch is only entered
+    # from the stretch before it. See level_predecessors for "before".
+    built = {loc.name for loc in world.active_locations()}
+    preds = level_predecessors(built)
+    carried: Dict[str, frozenset] = {}
+
+    def carried_reqs(name: str) -> frozenset:
+        chain = []
+        while name and name not in carried:
+            chain.append(name)
+            name = preds.get(name)
+        acc = carried.get(name, frozenset()) if name else frozenset()
+        for n in reversed(chain):
+            acc = acc | frozenset(level_reqs.get(n, ()))
+            carried[n] = acc
+        return acc
+
+    shapes: Dict[frozenset, "power_logic.RuleShape"] = {}
+    for name in sorted(built):
+        reqs = carried_reqs(name)
+        if not reqs:
+            continue
+        kept = []
+        for kind in ("group", "loadout"):
+            sets = sorted((m for k, m in reqs if k == kind), key=len)
+            kept += [(kind, m) for i, m in enumerate(sets)
+                     if not any(o <= m for o in sets[:i])]
         try:
-            location = multiworld.get_location(loc_name, player)
+            location = multiworld.get_location(name, player)
         except KeyError:
             continue  # not built in this seed
-        for group in groups:
-            add_rule(location, lambda state, g=tuple(group): state.has_any(g, player))
+        for kind, members in kept:
+            if kind == "group":
+                add_rule(location,
+                         lambda state, g=tuple(sorted(members)): state.has_any(g, player))
+            else:
+                if members not in shapes:
+                    shapes[members] = power_logic.RuleShape(members)
+                add_rule(location,
+                         lambda state, r=shapes[members]: r.passes(state, player))
 
     # Keys out of the late stretches, when the option asks for it. This is an
     # item rule rather than an access rule: it does not change what any

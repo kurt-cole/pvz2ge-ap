@@ -12,7 +12,7 @@ from .constants import (
     ALL_WORLD_REGIONS, BASE_ID, DANGER_ROOM_LOCATIONS, DANGER_ROOM_UNLOCK,
     GAME_NAME,
     SHOP_CHECK_COMMODITIES, SHOP_COMMODITIES, SHOP_EXTRA_COMMODITIES,
-    SHOP_LEGACY_COMMODITIES, SHOP_REGION, SHOP_UNLOCK, SIDE_PATH_REGIONS,
+    SHOP_LEGACY_COMMODITIES, SHOP_REGION, SHOP_UNLOCK, SIDE_PATH_CHAIN, SIDE_PATH_REGIONS,
     SIDE_PATH_UNLOCK, SIDE_PATH_WORLD, UNREACHABLE_LOCATIONS, WORLD_REGIONS,
     EGYPT_SUN_CUT, shop_location_name, stretches_kept,
 )
@@ -1200,6 +1200,73 @@ def _play_order(name: str) -> Optional[float]:
     if m:
         return int(m.group(2)) + (int(m.group(3)) / 100.0 if m.group(3) else 0.0)
     return None
+
+
+def level_predecessors(names: Iterable[str]) -> Dict[str, str]:
+    """{level: the built level that has to be beaten before it} for `names`.
+
+    [user] Each level in a world depends on beating the previous one. How the
+    map links its nodes is not decoded [guess], so this errs weak, never strict:
+      - a main level (egyptN) follows the nearest built main level below it
+      - an optional one (egyptN_k) hangs off egyptN, the node that reveals it
+      - a Modern Day Zomboss rematch follows the nearest built main modern level
+      - a side path's levels run in order, and its first follows the level that
+        reveals the path (SIDE_PATH_UNLOCK)
+    Anything else (tutorials, danger rooms, iceage24_B, sandbox) gets none;
+    danger rooms and shop cards already follow their unlock level in rules.py.
+    """
+    names = set(names)
+    mains: Dict[str, List[tuple]] = {}
+    for n in names:
+        m = _PLAY_ORDER_NUM.match(n)
+        if m and not m.group(3):
+            mains.setdefault(m.group(1), []).append((int(m.group(2)), n))
+    for lst in mains.values():
+        lst.sort()
+
+    def main_below(prefix: str, order: float) -> Optional[str]:
+        below = [n for o, n in mains.get(prefix, ()) if o < order]
+        return below[-1] if below else None
+
+    out: Dict[str, str] = {}
+    for n in names:
+        m = _PLAY_ORDER_MZ.match(n)
+        if m:
+            pred = main_below("modern", _play_order(n))
+        else:
+            m = _PLAY_ORDER_NUM.match(n)
+            if not m:
+                continue
+            prefix, num = m.group(1), int(m.group(2))
+            if m.group(3):
+                base = f"{prefix}{num}"
+                pred = base if base in names else main_below(prefix, num)
+            else:
+                pred = main_below(prefix, num)
+        if pred:
+            out[n] = pred
+
+    by_path: Dict[str, List[tuple]] = {}
+    for loc in ALL_LOCATIONS:
+        if loc.region in SIDE_PATH_REGIONS and loc.name in names:
+            m = _TRAILING_NUM.search(loc.name)
+            if m:
+                by_path.setdefault(loc.region, []).append((int(m.group(1)), loc.name))
+    for region, lst in by_path.items():
+        lst.sort()
+        # A path reached through another path (SIDE_PATH_CHAIN) follows that
+        # path's own unlock level: weak, as above.
+        prev = SIDE_PATH_UNLOCK.get(SIDE_PATH_CHAIN.get(region, region))
+        prev = prev if prev in names else None
+        for _, n in lst:
+            out.pop(n, None)  # a side path name never follows a world's chain
+            if prev:
+                out[n] = prev
+            prev = n
+    return out
+
+
+_TRAILING_NUM = re.compile(r"(\d+)$")
 
 
 def _stretch_cuts(numbered: List[str]) -> tuple:

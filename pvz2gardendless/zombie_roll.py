@@ -33,6 +33,7 @@ from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import level_model
+from .sim_data import SIM_DATA
 
 MASK = 0xFFFFFFFF
 
@@ -197,6 +198,12 @@ class _Tables:
         # without checking whether those lanes are playable. Absent from a model
         # generated before the flag was extracted, which reads as "it does not":
         # that is what the roll assumed before this existed.
+        # [user] Zombies that disable plants (torch, wizard, gargantuar, ...):
+        # they may not arrive in the opening levels unless the level ships them.
+        # Tags come from sim_data.py, the same table the counter rules read.
+        self.nullifier_names = {c for c in self.zombies
+                                if set(SIM_DATA["zombies"].get(c, {}).get("tags", ()))
+                                - {"noswallow"}}
         self.multilane_names = {c for c, z in self.zombies.items()
                                 if z.get("multilane")}
         # A count-field source may only name a codename the game itself names in
@@ -531,6 +538,10 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
         # only hazards the level already shipped with may appear. Before egypt6
         # the player HAS no counter yet, which comes to the same thing.
         drop |= t.hazard_names - vanilla
+    if level_id in OPENING_LEVELS:
+        # [user] Opening only: a plant-nullifying zombie needs a counter the
+        # player cannot have yet. Preset and conveyor levels may still gain one.
+        drop |= t.nullifier_names - vanilla
     if not level["own_plants"]:
         # [user] ...and nothing tougher than the level's own toughest zombie. A
         # level that picks the plants picks them for what it ships with:
@@ -590,8 +601,11 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
             return plan
         if best is None or abs(ratio - 1000) < abs(best["ratio"] - 1000):
             best = plan
-    if best is not None and LEVEL_HARD[0] <= best["ratio"] <= LEVEL_HARD[1]:
-        return best
+    if best is not None:
+        if not level["own_plants"] and LEVEL_OK[0] <= best["ratio"] <= LEVEL_OK[1]:
+            return best
+        elif level["own_plants"] and LEVEL_HARD[0] <= best["ratio"] <= LEVEL_HARD[1]:
+            return best
     return {"level": level_id, "attempt": -1, "vanilla": True, "budget": budget,
             "ratio": 1000, "groups": [dict(g) for g in level["groups"]],
             "dynamic": {}, "dinos": []}

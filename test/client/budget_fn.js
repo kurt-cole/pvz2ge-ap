@@ -304,7 +304,8 @@ function _apbTables(data) {
   const t = { hp: Object.create(null), cost: Object.create(null), tier: Object.create(null),
               excluded: Object.create(null), pools: {}, poolHp: {}, tiers: Object.create(null),
               hazard: Object.create(null), field: {}, graveHp: (data && data.grave_hp) || {},
-              carry: Object.create(null), multilane: Object.create(null) };
+              carry: Object.create(null), multilane: Object.create(null),
+                nullifier: Object.create(null) };
   for (const c of names) {
     const z = zombies[c];
     t.hp[c] = z[0]; t.cost[c] = z[1]; t.tier[c] = z[2] || ''; t.excluded[c] = z[3] || '';
@@ -313,6 +314,9 @@ function _apbTables(data) {
     // none of them putting bodies into a neighbouring lane.
     t.carry[c] = z.length > 4 ? !!z[4] : true;
     t.multilane[c] = z.length > 5 ? !!z[5] : false;
+      // [user] Absent (a seed rolled before the flag) reads as no nullifiers,
+      // which is what that roll kept out of the opening levels: nothing extra.
+      t.nullifier[c] = z.length > 6 ? !!z[6] : false;
   }
   for (const b of APB.BUCKETS) t.pools[b] = [];
   for (const c of names) {
@@ -609,6 +613,7 @@ function _apbRoll(t, seed, levelId, level, dinos, goal) {
     for (const b of APB.BUCKETS) {
       const names = t.pools[b].filter(function (c) {
         return vanilla[c] || ((bring || !t.hazard[c])
+                                && (!opening || !t.nullifier[c])
                               && (!narrow || !t.multilane[c])
                               && (!ceiling || t.hp[c] <= ceiling));
       });
