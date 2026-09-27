@@ -70,7 +70,7 @@ const CONVEYOR_GROUPS = {
     'blover', 'chilibean', 'empea', 'escaperoot',
     'goldleaf', 'gravebuster', 'hotpotato', 'iceburg', 'potatomine',
     'primalpotatomine', 'shadowshroom', 'shrinkingviolet', 'squash',
-    'stallia', 'stunion', 'sunbean', 'tanglekelp'
+    'stallia', 'stunion', 'tanglekelp'
   ],
   'attacker:high': [
     'applemortar', 'banana', 'cantaloupe', 'citron', 'coconutcannon',
@@ -87,19 +87,18 @@ const CONVEYOR_GROUPS = {
   ],
   'instant:low': [
     'ghostpepper', 'grimrose', 'hurrikale', 'hypnoshroom', 'jalapeno',
-    'lavaguava', 'solarsage', 'solartomato', 'thymewarp'
+    'lavaguava', 'thymewarp'
   ],
   'attacker:budget': [
     'buttercup', 'celerystalker', 'explodeonut', 'magnifyinggrass',
     'puffshroom', 'scaredyshroom', 'seashroom'
   ],
   'support:budget': [
-    'garlic', 'lilypad', 'moonbean', 'moonflower', 'springbean',
-    'sunflower', 'sunshroom'
+    'garlic', 'lilypad', 'moonbean', 'moonflower', 'springbean'
   ],
   'support:low': [
     'intensivecarrot', 'magnetshroom', 'peach', 'plantern',
-    'primalsunflower', 'twinsunflower', 'umbrellaleaf'
+    'umbrellaleaf'
   ],
   'instant:mid': [
     'cherry_bomb', 'grapeshot', 'perfumeshroom', 'powerlily'

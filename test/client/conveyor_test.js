@@ -402,23 +402,27 @@ for (const l of LEVELS) {
 if (goldIn) fail(`goldleaf swapped in ${goldIn} time(s) despite needing a gold tile`);
 else ok('goldleaf is never swapped in, on any lawn');
 
-// goldbloom produces sun and nothing else, and a conveyor level hands plants
-// out rather than charging for them, so it is a dead slot on any belt. It is
-// in no group, which must keep it off every belt it did not ship on -- and
-// equally must not stop a level that ships one from keeping it.
+// Pure sun producers are dead slots on a belt: a conveyor level hands plants
+// out rather than charging for them. They are in no group, which must keep
+// them off every belt they did not ship on -- and equally must not stop a
+// level that ships one from keeping it.
 {
-  if (GROUP_OF['goldbloom']) fail('goldbloom is back in a conveyor group');
-  let bloomIn = 0;
-  for (const l of LEVELS) {
-    const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
-    for (let i = 0; i < after.length; i++) {
-      if (after[i].PlantType === 'goldbloom' && before[i].PlantType !== 'goldbloom') bloomIn++;
-      if (before[i].PlantType === 'goldbloom' && after[i].PlantType !== 'goldbloom')
-        fail('a level that ships goldbloom had it swapped away');
+  const SUN_ONLY = ['goldbloom', 'sunbean', 'sunflower', 'twinsunflower',
+    'primalsunflower', 'sunshroom', 'solartomato', 'solarsage'];
+  for (const cn of SUN_ONLY) {
+    if (GROUP_OF[cn]) fail(`${cn} is back in a conveyor group`);
+    let swappedIn = 0;
+    for (const l of LEVELS) {
+      const before = clone(l).InitialPlantList, after = run(clone(l)).InitialPlantList;
+      for (let i = 0; i < after.length; i++) {
+        if (after[i].PlantType === cn && before[i].PlantType !== cn) swappedIn++;
+        if (before[i].PlantType === cn && after[i].PlantType !== cn)
+          fail(`a level that ships ${cn} had it swapped away`);
+      }
     }
+    if (swappedIn) fail(`${cn} swapped in ${swappedIn} time(s); it is a wasted belt slot`);
   }
-  if (bloomIn) fail(`goldbloom swapped in ${bloomIn} time(s); it is a wasted belt slot`);
-  else ok('goldbloom is never swapped onto a belt');
+  ok('no pure sun producer is ever swapped onto a belt');
 }
 
 // Dragonbruit is cut content -- absent from the game's SEEDCHOOSERDEFAULTORDER,

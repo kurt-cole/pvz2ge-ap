@@ -2068,6 +2068,10 @@ window.electron = electron;
   // sun is exactly the resource a belt does not need. It was a wasted slot
   // every time it rolled. It keeps its CONVEYOR_FAMILIES entry, which is only
   // read as a preference inside a group, the same way glaciershroom's is.
+  // The same reasoning later took out every other pure sun producer: sunbean,
+  // sunflower, twinsunflower, primalsunflower, sunshroom, solartomato and
+  // solarsage. A level that ships one on its belt still keeps it. Moonflower
+  // stays because it powers Shadow plants.
   //
   // Sun producers no longer have a role of their own. They used to, to stop a
   // belt losing its sun economy -- but of the 504 levels with a conveyor, THREE
@@ -2090,7 +2094,7 @@ window.electron = electron;
       'blover', 'chilibean', 'empea', 'escaperoot',
       'goldleaf', 'gravebuster', 'hotpotato', 'iceburg', 'potatomine',
       'primalpotatomine', 'shadowshroom', 'shrinkingviolet', 'squash',
-      'stallia', 'stunion', 'sunbean', 'tanglekelp'
+      'stallia', 'stunion', 'tanglekelp'
     ],
     'attacker:high': [
       'applemortar', 'banana', 'cantaloupe', 'citron', 'coconutcannon',
@@ -2107,19 +2111,18 @@ window.electron = electron;
     ],
     'instant:low': [
       'ghostpepper', 'grimrose', 'hurrikale', 'hypnoshroom', 'jalapeno',
-      'lavaguava', 'solarsage', 'solartomato', 'thymewarp'
+      'lavaguava', 'thymewarp'
     ],
     'attacker:budget': [
       'buttercup', 'celerystalker', 'explodeonut', 'magnifyinggrass',
       'puffshroom', 'scaredyshroom', 'seashroom'
     ],
     'support:budget': [
-      'garlic', 'lilypad', 'moonbean', 'moonflower', 'springbean',
-      'sunflower', 'sunshroom'
+      'garlic', 'lilypad', 'moonbean', 'moonflower', 'springbean'
     ],
     'support:low': [
       'intensivecarrot', 'magnetshroom', 'peach', 'plantern',
-      'primalsunflower', 'twinsunflower', 'umbrellaleaf'
+      'umbrellaleaf'
     ],
     'instant:mid': [
       'cherry_bomb', 'grapeshot', 'perfumeshroom', 'powerlily'
