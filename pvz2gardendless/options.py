@@ -493,6 +493,32 @@ class PlantPowerLogic(DefaultOnToggle):
     display_name = "Plant Power Logic"
 
 
+class UsefulPlantOrder(Choice):
+    """
+    Hand out weak useful plants before strong ones.
+
+    After items are placed, this slot's useful (non-progression) attacking
+    plants are reordered among the spots they already occupy, in every game of
+    the multiworld, so weaker ones sit in earlier spheres and stronger ones in
+    later spheres. Strength is each plant's result in the plant-power
+    simulation (POWER_SIM.md). Only non-progression plants move, so what logic
+    requires, and where it sits, is untouched. Support plants, sun producers,
+    single-use instants and plants the simulation does not rank stay where
+    they were placed.
+
+    tiered: plants are split into four bands by strength; every plant is in
+      the same or an earlier sphere than every plant in a stronger band.
+      Order within a band is random.
+    strict: the full ranking is followed, weakest first.
+    off: plants stay wherever the fill put them.
+    """
+    display_name = "Useful Plant Order"
+    option_off    = 0
+    option_tiered = 1
+    option_strict = 2
+    default = 1
+
+
 @dataclasses.dataclass
 class PvZ2Options(PerGameCommonOptions):
     world_count:      WorldCount
@@ -511,6 +537,7 @@ class PvZ2Options(PerGameCommonOptions):
     travelling_dinos: TravellingDinos
     plant_power_logic: PlantPowerLogic
     power_loadouts_per_level: PowerLoadoutsPerLevel
+    useful_plant_order: UsefulPlantOrder
     early_world_keys: EarlyWorldKeys
     include_levels_past_goal: IncludeLevelsPastGoal
     trap_percentage:  TrapPercentage
@@ -530,6 +557,6 @@ OPTION_GROUPS = [
                          TrapWeightCostumeShuffle, TrapWeightCoins,
                          TrapWeightGems]),
     OptionGroup("Gameplay Tweaks",[SkipTutorial,ShuffleUpgrades, StartingPlants,RandomizeConveyorPlants, ShuffleZombies,
-                                   TravellingDinos]),
+                                   TravellingDinos, UsefulPlantOrder]),
     OptionGroup("Experimental DANGER",[IncludeDangerRooms, ModernDayVictory, EarlyWorldKeys])
 ]

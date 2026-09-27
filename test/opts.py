@@ -14,7 +14,7 @@ from pvz2gardendless.options import (
     RandomizeConveyorPlants, EarlyWorldKeys, ShuffleZombies, IncludeSidePaths,
     IncludeDangerRooms, StartingPlants, PlantPowerLogic, PowerLoadoutsPerLevel,
     TrapWeightLawnMower, TrapWeightCostumeShuffle, TrapWeightCoins,
-    TrapWeightGems, IncludeLevelsPastGoal, TravellingDinos,
+    TrapWeightGems, IncludeLevelsPastGoal, TravellingDinos, UsefulPlantOrder,
 )
 from apstub import DeathLink
 
@@ -48,6 +48,8 @@ class Opts:
             kw.get("power_loadouts_per_level", PowerLoadoutsPerLevel.default))
         self.plant_power_logic = PlantPowerLogic(
             kw.get("plant_power_logic", PlantPowerLogic.default))
+        self.useful_plant_order = UsefulPlantOrder(
+            kw.get("useful_plant_order", UsefulPlantOrder.default))
         self.early_world_keys = EarlyWorldKeys(kw.get("early_world_keys", 0))
         self.include_levels_past_goal = IncludeLevelsPastGoal(
             kw.get("include_levels_past_goal",

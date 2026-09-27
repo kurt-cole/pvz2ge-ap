@@ -23,7 +23,7 @@ const is = (got, want, m) =>
 const sorted = a => a.slice().sort();
 
 // A save the way rebuildAPSave leaves it: levelProps keyed by codename, each
-// { progress: 3 } for a checked location.
+// { progress: 4 } for a checked location (3 for one won but not yet pushed).
 const save = (levels, features) => ({
   levelProps: Object.fromEntries(
     Object.entries(levels).map(([k, v]) => [k, { progress: v }])),

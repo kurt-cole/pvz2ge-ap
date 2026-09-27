@@ -22,6 +22,9 @@ class Item:
     game = "Generic"
     def __init__(self, name, classification, code, player):
         self.name, self.classification, self.code, self.player = name, classification, code, player
+    @property
+    def advancement(self):
+        return bool(self.classification & ItemClassification.progression)
 
 
 class Location:

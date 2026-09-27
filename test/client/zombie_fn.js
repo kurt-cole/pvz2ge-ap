@@ -75,6 +75,11 @@ let _apZombiePlan = null;
 // families one at a time only ever patches case by case.
 const AP_BESPOKE_MODULES = /Minigame|Beghouled|Rhythm/;
 
+// [user] Level ids never rolled or shuffled although no module above marks
+// them. By id, so every other level rolls exactly as before. eighties9 is
+// Neon Mixtape Tour 9. Mirrors NEVER_ROLLED in zombie_roll.py.
+const AP_NEVER_ROLLED = ['eighties9'];
+
 // Where a level names a zombie. Only a Zombies[].Type entry is a spawn -- one
 // zombie, once. The pool keys are candidates a wave generator may or may not
 // draw from, so they are mapped like everything else but weigh nothing.
@@ -255,7 +260,9 @@ function _apZombiePlanFor(objs) {
   // something has moved -- and a level that does not shuffle is a far
   // cheaper mistake than one that cannot be beaten.
   let bespoke = true, map = {};
-  if (objs) {
+  // Levels the budget roll never touches (AP_NEVER_ROLLED) are spared here
+  // too, so a seed from before the budget roll leaves them vanilla as well.
+  if (objs && AP_NEVER_ROLLED.indexOf(levelKey) < 0) {
     bespoke = false;
     for (const o of objs) {
       if (o && AP_BESPOKE_MODULES.test(o.objclass || '')) { bespoke = true; break; }

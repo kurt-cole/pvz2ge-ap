@@ -116,7 +116,8 @@ def main() -> int:
         })
 
     eligible = sorted(lid for lid, lv in levels.items()
-                      if R.eligible(lv) and lid not in FIXTURES)
+                      if R.eligible(lv) and lid not in FIXTURES
+                      and lid not in R.NEVER_ROLLED)
     rolls = []
     for lid in eligible[::ROLL_STEP]:
         rolls.append({

@@ -58,7 +58,7 @@ const ID_TO_CN = {
 const CONVEYOR_GROUPS = {
   'attacker:mid': [
     'akee', 'bambooshoot', 'bamboozle', 'bloomerang', 'bloominghearts',
-    'bonkchoy', 'bowlingbulb', 'cactus', 'chomper', 'coldsnapdragon',
+    'bonkchoy', 'bowlingbulb', 'cactus', 'coldsnapdragon',
     'doomshroom', 'dusklobber', 'electriccurrant',
     'electricpeashooter', 'firegourd', 'firepeashooter', 'hotdate',
     'iceweed', 'jackolantern', 'laser_bean', 'lychee', 'parsnip',
@@ -101,7 +101,7 @@ const CONVEYOR_GROUPS = {
     'umbrellaleaf'
   ],
   'instant:mid': [
-    'cherry_bomb', 'grapeshot', 'perfumeshroom', 'powerlily'
+    'cherry_bomb', 'chomper', 'grapeshot', 'perfumeshroom', 'powerlily'
   ],
   'blocker:budget': [
     'imitater', 'turnip', 'wallnut'
@@ -266,6 +266,44 @@ function installConveyorHook(LC) {
                                              !window._AP_conveyorBeltLocked.has(e.PlantType) &&
                                              !window._AP_conveyorTerrainLocked.has(e.PlantType)));
         const slotCount = swappableAt.filter(Boolean).length;
+        // [user] A level that fields a belt threat (Excavator, torch zombie)
+        // keeps an answer to each on its belt. Draws nothing from the stream
+        // unless the level fields one, so every other belt rolls as before.
+        const threatAnswers = window._AP_conveyorThreatAnswers || {};
+        const threats = ((window._AP_levelThreats && window._AP_levelThreats(this)) || [])
+          .filter(k => threatAnswers[k]).map(k => threatAnswers[k]);
+        // [user] A plant the level shipped as an instant (its group's role)
+        // only ever becomes another instant, on every path below.
+        const roleAll = window._AP_conveyorRole || {};
+        const isInstant = cn => roleAll[cn] === 'instant';
+        // [user] ...and one that kills only becomes another that kills.
+        const killSet = window._AP_conveyorKillingInstants;
+        const kills = cn => !!(killSet && killSet.has(cn));
+        const fits = (orig, cn) => isInstant(cn) === isInstant(orig) &&
+                                   (!kills(orig) || kills(cn));
+        // Put an answer back for each threat the swap left unanswered: the
+        // first slot whose own group has one, else the first slot, from all
+        // answers. A slot that alone answers another threat only takes a
+        // plant that answers that one too (Winter Melon for Akee). A shadow
+        // deck's Moonflower is never the slot taken.
+        const keepAnswer = function (picked, usableAt, keepMoon) {
+          for (const answers of threats) {
+            if (picked.some(cn => cn && answers.has(cn))) continue;
+            placed: for (const wide of [false, true]) {
+              for (let i = 0; i < list.length; i++) {
+                if (!swappableAt[i] || (keepMoon && picked[i] === 'moonflower')) continue;
+                const alone = threats.filter(a => a !== answers && a.has(picked[i]) &&
+                  !picked.some((cn, j) => j !== i && cn && a.has(cn)));
+                const from = usableAt(i, wide).filter(
+                  cn => answers.has(cn) && fits(list[i].PlantType, cn) &&
+                        alone.every(a => a.has(cn)));
+                if (!from.length) continue;
+                picked[i] = from[Math.floor(rnd() * from.length)];
+                break placed;
+              }
+            }
+          }
+        };
 
         // The shadow belt. Rolled FIRST and from the same stream, so a level
         // either becomes a shadow deck or goes through the ordinary swap --
@@ -284,7 +322,14 @@ function installConveyorHook(LC) {
             cn => window._AP_conveyorPlantable(cn, hasWater));
           // Moonflower is the whole point: without it the other seven never
           // reach ShadowPowered, so a set that lost it to terrain is no set.
-          if (usableShadow.indexOf('moonflower') !== -1) {
+          // Moonflower lands on a slot that did not ship an instant, so a belt
+          // with none of those is no shadow deck either.
+          const plainSlots = list.filter(
+            (e, i) => swappableAt[i] && !isInstant(e.PlantType)).length;
+          // Nor is a belt facing a threat the shadow set cannot answer (no
+          // Shadow plant is an ice plant): it takes the ordinary swap.
+          const shadowCovers = threats.every(a => usableShadow.some(cn => a.has(cn)));
+          if (usableShadow.indexOf('moonflower') !== -1 && plainSlots && shadowCovers) {
             const picks = [];
             const takenShadow = new Set();
             for (let i = 0; i < list.length; i++) {
@@ -293,8 +338,12 @@ function installConveyorHook(LC) {
               // so a belt of blockers does not become a belt of one-shots.
               const roleOf = window._AP_conveyorRole || {};
               const want = roleOf[list[i].PlantType];
-              let pool = usableShadow.filter(cn => roleOf[cn] === want);
-              if (!pool.length) pool = usableShadow;
+              let pool = usableShadow.filter(cn => roleOf[cn] === want &&
+                                                   fits(list[i].PlantType, cn));
+              if (!pool.length) {
+                if (want === 'instant') { picks.push(null); continue; }
+                pool = usableShadow;
+              }
               let pick = pool[Math.floor(rnd() * pool.length)];
               for (let tries = 0; tries < 8 && takenShadow.has(pick); tries++) {
                 pick = pool[Math.floor(rnd() * pool.length)];
@@ -302,14 +351,19 @@ function installConveyorHook(LC) {
               takenShadow.add(pick);
               picks.push(pick);
             }
-            // Guarantee Moonflower. Overwrite the last real slot rather than a
-            // random one: it is the latest arrival on the belt, so the deck
+            // Guarantee Moonflower. Overwrite the last real slot that did not
+            // ship an instant, rather than a random one: it is the latest arrival on the belt, so the deck
             // still opens with an attacker.
             if (picks.indexOf('moonflower') === -1) {
               for (let i = list.length - 1; i >= 0; i--) {
-                if (picks[i]) { picks[i] = 'moonflower'; break; }
+                if (picks[i] && !isInstant(list[i].PlantType)) {
+                  picks[i] = 'moonflower'; break;
+                }
               }
             }
+            const shadowHeld = picks.map((cn, i) => cn || (list[i] && list[i].PlantType));
+            keepAnswer(shadowHeld, (i, wide) => usableShadow, true);
+            for (let i = 0; i < list.length; i++) if (picks[i]) picks[i] = shadowHeld[i];
             patched = Object.assign(
               Object.create(Object.getPrototypeOf(props) || Object.prototype), props);
             patched.InitialPlantList = list.map(
@@ -346,8 +400,20 @@ function installConveyorHook(LC) {
           // that a plant with nothing left to trade for stays put -- the
           // original is always in its own group, so fewer than two survivors
           // means there is no alternative.
-          const usable = candidates.filter(cn => window._AP_conveyorPlantable(cn, hasWater));
+          let usable = candidates.filter(cn => window._AP_conveyorPlantable(cn, hasWater));
           if (usable.length < 2) return entry;
+          // An answer to a threat the level fields only trades for another
+          // answer to it, and stays put when its group has no other.
+          for (const answers of threats) {
+            if (!answers.has(entry.PlantType)) continue;
+            usable = usable.filter(cn => answers.has(cn));
+            if (usable.length < 2) return entry;
+          }
+          // A killing instant only trades for another killing instant.
+          if (kills(entry.PlantType)) {
+            usable = usable.filter(kills);
+            if (usable.length < 2) return entry;
+          }
           // Step two of the three: inside the role-and-power group, prefer a
           // plant of the same Family, so a Peashooter tends to become another
           // Peashooter and a Lobber another Lobber. A preference rather than
@@ -383,6 +449,15 @@ function installConveyorHook(LC) {
           used.add(pick);
           return Object.assign({}, entry, { PlantType: pick });
         });
+        const held = newList.map(e => e && e.PlantType);
+        keepAnswer(held, (i, wide) =>
+          (wide ? Object.keys(swaps).sort() : swaps[list[i].PlantType] || [])
+            .filter(cn => window._AP_conveyorPlantable(cn, hasWater)));
+        for (let i = 0; i < list.length; i++) {
+          if (newList[i] && held[i] !== newList[i].PlantType) {
+            newList[i] = Object.assign({}, newList[i], { PlantType: held[i] });
+          }
+        }
         // Copy rather than mutate. The level's properties object is cached
         // and handed back on a replay, so writing to it would feed the next
         // roll its own output and the level would drift on every attempt.
@@ -419,6 +494,36 @@ window._AP_conveyorShadow=CONVEYOR_SHADOW.slice();
 window._AP_conveyorShadowChance=CONVEYOR_SHADOW_CHANCE;
 window._AP_conveyorShadowMinSlots=CONVEYOR_SHADOW_MIN_SLOTS;
 window._AP_conveyorBeltLocked=new Set([...CONVEYOR_BELT_LOCKED]);
+// [user] Instants that kill (or take the zombie out of the fight). A belt
+// instant that kills only swaps for another one; the rest of the instant
+// groups (Blover, Iceberg Lettuce, Stunion...) may become any instant.
+// Membership is a hand reading of what each plant does [guess].
+const CONVEYOR_KILLING_INSTANTS = new Set([
+  'cherry_bomb', 'chilibean', 'chomper', 'ghostpepper', 'grapeshot', 'grimrose',
+  'hypnoshroom', 'jalapeno', 'lavaguava', 'potatomine', 'primalpotatomine',
+  'shadowshroom', 'squash', 'tanglekelp',
+]);
+window._AP_conveyorKillingInstants = CONVEYOR_KILLING_INSTANTS;
+
+const CONVEYOR_EXCAVATOR_ANSWERS = new Set([
+  'bonkchoy', 'celerystalker', 'gloomshroom', 'gloomvine', 'phatbeet',
+  'splitpea', 'starfruit',
+  'cherry_bomb', 'chomper', 'doomshroom', 'escaperoot', 'grapeshot',
+  'grimrose', 'hypnoshroom', 'jalapeno', 'potatomine', 'primalpotatomine',
+  'squash', 'toadstool',
+  'akee', 'applemortar', 'banana', 'cabbagepult', 'cantaloupe',
+  'dusklobber', 'kernelpult', 'melonpult', 'pepperpult', 'wintermelon',
+]);
+const CONVEYOR_TORCH_ANSWERS = new Set([
+  'coldsnapdragon', 'iceburg', 'iceweed', 'missiletoe', 'snowdrop', 'snowpea',
+  'wintermelon',
+]);
+window._AP_conveyorThreatAnswers = {
+  excavator: CONVEYOR_EXCAVATOR_ANSWERS,
+  torch: CONVEYOR_TORCH_ANSWERS,
+};
+// The real check reads the level's objects; the suite sets the answer.
+window._AP_levelThreats=function(){ return window._testThreats || []; };
 
 // Terrain gate, mirroring the client's declarations. These are const/window
 // assignments rather than named functions, so drift_test cannot check them --

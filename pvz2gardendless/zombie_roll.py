@@ -138,6 +138,12 @@ OPENING_LEVELS = frozenset({
     "egypt1", "egypt2", "egypt3", "egypt4", "egypt5",
 })
 
+# [user] Game level ids the roll never touches although they are neither
+# bespoke nor generated. Keyed by id, so excluding one leaves every other
+# level's stream exactly as it was. eighties9 is Neon Mixtape Tour 9.
+# Mirrors APB.NEVER_ROLLED and the tier shuffle's check in the client.
+NEVER_ROLLED = frozenset({"eighties9"})
+
 
 # ── the PRNG ─────────────────────────────────────────────────────────────────
 
@@ -544,7 +550,7 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
     """The plan for one level, or None when the level is never rolled."""
     t = tables()
     level = t.model["levels"].get(level_id)
-    if level is None or not eligible(level):
+    if level is None or level_id in NEVER_ROLLED or not eligible(level):
         return None
     graves = _graves_hp(t, level)
     budget = _groups_hp(t, level["groups"]) + _dynamic_hp(t, level, {}) + graves

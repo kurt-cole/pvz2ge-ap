@@ -41,7 +41,7 @@ from .locations import (
 from .regions import create_regions as build_regions
 from .rules import set_rules as apply_rules
 from .zombie_data import ZOMBIE_TIERS, ZOMBIE_HP
-from . import budget_logic, power_logic
+from . import budget_logic, plant_order, power_logic
 
 # ── Launcher ──────────────────────────────────────────────────────────────────
 
@@ -780,6 +780,30 @@ class PvZ2GardendlessWorld(World):
                               range(1, max(locked) + 1)],
             }
         return gates
+
+    @classmethod
+    def _order_useful_plants(cls, multiworld) -> None:
+        """Weak useful plants into early spheres, strong ones late, across the
+        whole multiworld. See plant_order.py for why this cannot change logic."""
+        worlds = [w for w in multiworld.worlds.values()
+                  if isinstance(w, cls) and w.options.useful_plant_order.value]
+        if not worlds or not plant_order.strength_scores():
+            return
+        sphere_of = plant_order.sphere_index(multiworld)
+        filled = list(multiworld.get_filled_locations())
+        for w in worlds:
+            mode = w.options.useful_plant_order.current_key
+            moved = plant_order.order_player(w.player, sphere_of, filled, mode,
+                                             w.random, multiworld.state)
+            logging.debug("PvZ2 player %s: useful plant order moved %d items", w.player, moved)
+
+    # After progression balancing where the host has that stage, since
+    # balancing swaps non-progression items later; older hosts only have
+    # post_fill, which runs before balancing.
+    if hasattr(World, "finalize_multiworld"):
+        stage_finalize_multiworld = _order_useful_plants
+    else:
+        stage_post_fill = _order_useful_plants
 
     def fill_slot_data(self) -> Dict[str, Any]:
         goal_locs = self.goal_locations()

@@ -40,8 +40,14 @@ def ok(msg):
 
 t = R.tables()
 levels = t.model["levels"]
-eligible = sorted(lid for lid, lv in levels.items() if R.eligible(lv))
+eligible = sorted(lid for lid, lv in levels.items()
+                  if R.eligible(lv) and lid not in R.NEVER_ROLLED)
 ok(f"{len(eligible)} of {len(levels)} levels are eligible for the roll")
+
+for lid in sorted(R.NEVER_ROLLED):
+    if R.roll_level(SEEDS[0], lid) is not None:
+        fail(f"{lid} is in NEVER_ROLLED but was rolled")
+ok(f"{', '.join(sorted(R.NEVER_ROLLED))} never rolled")
 
 for lid in CANNON_LEVELS:
     if R.roll_level(SEEDS[0], lid) is not None:

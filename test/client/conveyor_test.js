@@ -76,7 +76,7 @@ else ok('source level properties never mutated');
 ok(`${preserved} levels processed: ${swapped} plant entries swapped, ${toolsKept} non-plant entries preserved`);
 
 // ── determinism ──────────────────────────────────────────────────────────────
-const lvl = LEVELS.find(l => l.InitialPlantList.filter(e => KNOWN.has(e.PlantType)).length >= 3);
+const lvl = LEVELS.find(l => l.InitialPlantList.filter(e => KNOWN.has(e.PlantType) && window._AP_conveyorSwaps[e.PlantType]).length >= 3);
 const r1 = run(clone(lvl)).InitialPlantList.map(e => e.PlantType).join(',');
 const r2 = run(clone(lvl)).InitialPlantList.map(e => e.PlantType).join(',');
 const r3 = run(clone(lvl)).InitialPlantList.map(e => e.PlantType).join(',');
@@ -473,6 +473,109 @@ for (const l of wetByBelt) {
 }
 ok(`${beltSignal}/${wetByBelt.length} levels recognised as wet from their own belt alone`);
 setLevelWater(false);
+
+// ── Excavator levels keep an answer ──────────────────────────────────────────
+// lostcity16 opens with Akee alone; a swap to a straight shooter made it
+// unclearable. With the level fielding an Excavator, every belt must hold an
+// answer, and turning the check back off must leave no trace on later belts.
+{
+  const ANSWERS = window._AP_conveyorThreatAnswers.excavator;
+  const belts = [{ _file: 'lostcity16', InitialPlantList: [{ PlantType: 'akee', Weight: 15 }] },
+                 { _file: 'straight-only', InitialPlantList: [
+                   { PlantType: 'snowpea', Weight: 10 }, { PlantType: 'peashooter', Weight: 10 },
+                   { PlantType: 'wallnut', Weight: 5 }] }].concat(LEVELS);
+  const plain = belts.map(l => JSON.stringify(run(clone(l)).InitialPlantList));
+  let none = [], seeds = 0;
+  window._testThreats = ['excavator'];
+  for (let seed = 1; seed <= 200; seed++) {
+    window._AP_conveyorSeed = seed;
+    for (const l of belts.slice(0, 2)) {
+      const got = run(clone(l)).InitialPlantList;
+      if (!got.some(e => e && ANSWERS.has(e.PlantType))) none.push(`${l._file}@${seed}`);
+    }
+    seeds++;
+  }
+  window._AP_conveyorSeed = 123456789;
+  const lost = LEVELS.filter(l => l.InitialPlantList.some(e => e && ANSWERS.has(e.PlantType)) &&
+    !run(clone(l)).InitialPlantList.some(e => e && ANSWERS.has(e.PlantType)));
+  window._testThreats = [];
+  if (none.length) fail('belts left with no Excavator answer: ' + none.slice(0, 5).join(', '));
+  else ok(`lostcity16 and a straight-shooter belt keep an Excavator answer (${seeds} seeds)`);
+  if (lost.length) fail('Excavator levels lost their answer: ' + lost.map(l => l._file).slice(0, 5).join(', '));
+  else ok('no shipped belt with an Excavator answer loses it');
+  const drift = belts.filter((l, i) => JSON.stringify(run(clone(l)).InitialPlantList) !== plain[i]);
+  if (drift.length) fail('an Excavator level changed a later belt: ' + drift[0]._file);
+  else ok('the Excavator check leaves no trace on later belts');
+}
+
+// ── a shipped instant only ever becomes another instant ───────────────────────
+// Every path: the ordinary swap, the shadow deck (its Moonflower included) and
+// the Excavator answer pass.
+{
+  const role = window._AP_conveyorRole;
+  const inst = cn => role[cn] === 'instant';
+  let checked = 0, bad = [];
+  for (const exc of [false, true]) {
+    window._testThreats = exc ? ['excavator', 'torch'] : [];
+    for (let seed = 1; seed <= 60; seed++) {
+      window._AP_conveyorSeed = seed;
+      for (const l of LEVELS) {
+        const before = l.InitialPlantList, after = run(clone(l)).InitialPlantList;
+        for (let i = 0; i < before.length; i++) {
+          if (!before[i] || !inst(before[i].PlantType)) continue;
+          checked++;
+          const k = window._AP_conveyorKillingInstants;
+          if (!inst(after[i].PlantType) ||
+              (k.has(before[i].PlantType) && !k.has(after[i].PlantType))) {
+            bad.push(`${l._file}[${i}]@${seed}${exc ? '+exc' : ''}: ${before[i].PlantType} -> ${after[i].PlantType}`);
+          }
+        }
+      }
+    }
+  }
+  window._testThreats = [];
+  window._AP_conveyorSeed = 123456789;
+  if (bad.length) fail(`${bad.length} instant slot(s) lost their instant or their kill: ${bad.slice(0, 5).join(', ')}`);
+  else ok(`${checked} shipped instant slots stayed instant, killers stayed killers (60 seeds, with and without Excavators)`);
+}
+
+// ── torch zombies keep an ice plant, alone or with Excavators ─────────────────
+{
+  const A = window._AP_conveyorThreatAnswers;
+  const lc16 = { _file: 'lostcity16', InitialPlantList: [{ PlantType: 'akee', Weight: 15 }] };
+  const bad = [];
+  // Both threats at once are only held to where one slot can answer both
+  // (lostcity16: Akee to Winter Melon); a one-slot instant belt cannot.
+  for (const threats of [['torch'], ['excavator', 'torch']]) {
+    window._testThreats = threats;
+    for (let seed = 1; seed <= 200 && threats.length === 1; seed++) {
+      window._AP_conveyorSeed = seed;
+      for (const l of [lc16].concat(LEVELS)) {
+        const got = run(clone(l)).InitialPlantList.map(e => e && e.PlantType);
+        // A slot that can take an ice plant: swappable, and not a killing
+        // instant (those only become killing instants, and no ice plant kills).
+        const K = window._AP_conveyorKillingInstants;
+        const open = l.InitialPlantList.some(e => e && window._AP_conveyorSwaps[e.PlantType] &&
+          !window._AP_conveyorBeltLocked.has(e.PlantType) &&
+          !window._AP_conveyorTerrainLocked.has(e.PlantType) && !K.has(e.PlantType));
+        if (!open) continue;
+        for (const k of threats) {
+          if (!got.some(cn => A[k].has(cn))) bad.push(`${l._file}@${seed} ${threats.join('+')}: no ${k} answer`);
+        }
+      }
+      if (seed >= 20) break;   // LEVELS is large; lc16 alone gets the full 200 below
+    }
+    for (let seed = 21; seed <= 200; seed++) {
+      window._AP_conveyorSeed = seed;
+      const got = run(clone(lc16)).InitialPlantList.map(e => e.PlantType);
+      for (const k of threats) if (!got.some(cn => A[k].has(cn))) bad.push(`lostcity16@${seed}: no ${k} answer`);
+    }
+  }
+  window._testThreats = [];
+  window._AP_conveyorSeed = 123456789;
+  if (bad.length) fail(`${bad.length} belt(s) missing an answer: ${bad.slice(0, 5).join(', ')}`);
+  else ok('torch levels keep an ice plant, and lostcity16 with both threats keeps both answers');
+}
 
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nCONVEYOR HOOK OK');
 process.exit(failed ? 1 : 0);

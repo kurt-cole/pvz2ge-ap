@@ -5,6 +5,11 @@
 const window = {};
 const st = {};
 const AP_BESPOKE_MODULES = /Minigame|Beghouled|Rhythm/;
+
+// [user] Level ids never rolled or shuffled although no module above marks
+// them. By id, so every other level rolls exactly as before. eighties9 is
+// Neon Mixtape Tour 9. Mirrors NEVER_ROLLED in zombie_roll.py.
+const AP_NEVER_ROLLED = ['eighties9'];
 const _AP_RTID = /^RTID\(([^@()]+)@([^()]*)\)$/;
 
 // Harness stubs. _apLevelKey reads the game's LevelPlay statics in the client;
@@ -62,6 +67,9 @@ const APB = {
   // OPENING_LEVELS in zombie_roll.py.
   OPENING_LEVELS: ['tutorial1', 'tutorial2', 'tutorial3', 'tutorial4', 'tutorial5',
                    'egypt1', 'egypt2', 'egypt3', 'egypt4', 'egypt5'],
+  // [user] Level ids never rolled although neither bespoke nor generated.
+  // See AP_NEVER_ROLLED.
+  NEVER_ROLLED: AP_NEVER_ROLLED,
   // [user] A rocket imp reaches the house before the player can plant, so it
   // never opens a level. Wave 1 only. Mirrors FIRST_WAVE_BANNED.
   FIRST_WAVE_BANNED: ['kongfu_rocket_imp'],
@@ -589,7 +597,8 @@ function _apbAttempt(t, seed, levelId, level, attempt, scale, vanilla, pools,
 
 // roll_level(), as the Python. null for a level the roll never touches.
 function _apbRoll(t, seed, levelId, level, dinos, goal) {
-  if (!level || level.bespoke || level.generated) return null;
+  if (!level || level.bespoke || level.generated ||
+      APB.NEVER_ROLLED.indexOf(levelId) >= 0) return null;
   const graves = _apbGravesHp(t, level);
   const budget = _apbGroupsHp(t, level.groups) + _apbDynamicHp(t, level, {}) + graves;
   const vanilla = Object.create(null);

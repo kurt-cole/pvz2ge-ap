@@ -1,9 +1,10 @@
 """Run the whole offline test suite.
 
-    python test/run.py [-j N] [suite ...]
+    python test/run.py [-j N] [--release] [suite ...]
 
 Suites run in parallel, one per CPU by default; each suite's output prints
-whole when it finishes.
+whole when it finishes. The slow generation sweeps (SLOW below) only run with
+--release or when named, since they take over ten minutes each.
 
 Archipelago is not importable outside a full AP checkout, so generation is
 exercised against apstub.py, a hand-written stand-in for BaseClasses, Options,
@@ -31,7 +32,11 @@ PY_SUITES = [
     ("powersel",   "power_selection_test.py", "the plant-power selection keeps logic small"),
     ("rollvectors","roll_vectors_test.py", "the budget roll's parity vectors are current"),
     ("tracker",    "tracker_test.py", "Universal Tracker rebuilds the same seed"),
+    ("plantorder", "plant_order_test.py", "weak useful plants in earlier spheres than strong ones"),
 ]
+# Skipped unless --release or named on the command line.
+SLOW = {"generation", "spheres"}
+
 JS_SUITES = [
     # First: the others require *_fn.js copies, so none of them ever runs the
     # client as one program. This one does, and a client that dies on load
@@ -72,11 +77,15 @@ def main():
     ap = argparse.ArgumentParser(description="Run the offline test suite in parallel.")
     ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 4,
                     help="suites run at once (default: one per CPU)")
+    ap.add_argument("--release", action="store_true",
+                    help="also run the slow suites: " + ", ".join(sorted(SLOW)))
     ap.add_argument("only", nargs="*", help="suite labels to run (default: all)")
     args = ap.parse_args()
 
     def wanted(label):
-        return not args.only or label in args.only
+        if args.only:
+            return label in args.only
+        return args.release or label not in SLOW
 
     jobs = [(label, [sys.executable, script], HERE, blurb)
             for label, script, blurb in PY_SUITES if wanted(label)]
@@ -121,6 +130,8 @@ def main():
         print(f"\n{len(failed)} SUITE(S) FAILED: {', '.join(failed)}")
         return 1
     print(f"\nALL {len(results)} SUITES PASSED")
+    if not args.only and not args.release:
+        print(f"  (skipped {', '.join(sorted(SLOW))}; run with --release before a release)")
     return 0
 
 

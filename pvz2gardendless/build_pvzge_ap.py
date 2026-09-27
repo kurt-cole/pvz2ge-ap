@@ -609,6 +609,44 @@ window.electron = electron;
                                                !window._AP_conveyorBeltLocked.has(e.PlantType) &&
                                                !window._AP_conveyorTerrainLocked.has(e.PlantType)));
           const slotCount = swappableAt.filter(Boolean).length;
+          // [user] A level that fields a belt threat (Excavator, torch zombie)
+          // keeps an answer to each on its belt. Draws nothing from the stream
+          // unless the level fields one, so every other belt rolls as before.
+          const threatAnswers = window._AP_conveyorThreatAnswers || {};
+          const threats = ((window._AP_levelThreats && window._AP_levelThreats(this)) || [])
+            .filter(k => threatAnswers[k]).map(k => threatAnswers[k]);
+          // [user] A plant the level shipped as an instant (its group's role)
+          // only ever becomes another instant, on every path below.
+          const roleAll = window._AP_conveyorRole || {};
+          const isInstant = cn => roleAll[cn] === 'instant';
+          // [user] ...and one that kills only becomes another that kills.
+          const killSet = window._AP_conveyorKillingInstants;
+          const kills = cn => !!(killSet && killSet.has(cn));
+          const fits = (orig, cn) => isInstant(cn) === isInstant(orig) &&
+                                     (!kills(orig) || kills(cn));
+          // Put an answer back for each threat the swap left unanswered: the
+          // first slot whose own group has one, else the first slot, from all
+          // answers. A slot that alone answers another threat only takes a
+          // plant that answers that one too (Winter Melon for Akee). A shadow
+          // deck's Moonflower is never the slot taken.
+          const keepAnswer = function (picked, usableAt, keepMoon) {
+            for (const answers of threats) {
+              if (picked.some(cn => cn && answers.has(cn))) continue;
+              placed: for (const wide of [false, true]) {
+                for (let i = 0; i < list.length; i++) {
+                  if (!swappableAt[i] || (keepMoon && picked[i] === 'moonflower')) continue;
+                  const alone = threats.filter(a => a !== answers && a.has(picked[i]) &&
+                    !picked.some((cn, j) => j !== i && cn && a.has(cn)));
+                  const from = usableAt(i, wide).filter(
+                    cn => answers.has(cn) && fits(list[i].PlantType, cn) &&
+                          alone.every(a => a.has(cn)));
+                  if (!from.length) continue;
+                  picked[i] = from[Math.floor(rnd() * from.length)];
+                  break placed;
+                }
+              }
+            }
+          };
 
           // The shadow belt. Rolled FIRST and from the same stream, so a level
           // either becomes a shadow deck or goes through the ordinary swap --
@@ -627,7 +665,14 @@ window.electron = electron;
               cn => window._AP_conveyorPlantable(cn, hasWater));
             // Moonflower is the whole point: without it the other seven never
             // reach ShadowPowered, so a set that lost it to terrain is no set.
-            if (usableShadow.indexOf('moonflower') !== -1) {
+            // Moonflower lands on a slot that did not ship an instant, so a belt
+            // with none of those is no shadow deck either.
+            const plainSlots = list.filter(
+              (e, i) => swappableAt[i] && !isInstant(e.PlantType)).length;
+            // Nor is a belt facing a threat the shadow set cannot answer (no
+            // Shadow plant is an ice plant): it takes the ordinary swap.
+            const shadowCovers = threats.every(a => usableShadow.some(cn => a.has(cn)));
+            if (usableShadow.indexOf('moonflower') !== -1 && plainSlots && shadowCovers) {
               const picks = [];
               const takenShadow = new Set();
               for (let i = 0; i < list.length; i++) {
@@ -636,8 +681,12 @@ window.electron = electron;
                 // so a belt of blockers does not become a belt of one-shots.
                 const roleOf = window._AP_conveyorRole || {};
                 const want = roleOf[list[i].PlantType];
-                let pool = usableShadow.filter(cn => roleOf[cn] === want);
-                if (!pool.length) pool = usableShadow;
+                let pool = usableShadow.filter(cn => roleOf[cn] === want &&
+                                                     fits(list[i].PlantType, cn));
+                if (!pool.length) {
+                  if (want === 'instant') { picks.push(null); continue; }
+                  pool = usableShadow;
+                }
                 let pick = pool[Math.floor(rnd() * pool.length)];
                 for (let tries = 0; tries < 8 && takenShadow.has(pick); tries++) {
                   pick = pool[Math.floor(rnd() * pool.length)];
@@ -645,14 +694,19 @@ window.electron = electron;
                 takenShadow.add(pick);
                 picks.push(pick);
               }
-              // Guarantee Moonflower. Overwrite the last real slot rather than a
-              // random one: it is the latest arrival on the belt, so the deck
+              // Guarantee Moonflower. Overwrite the last real slot that did not
+              // ship an instant, rather than a random one: it is the latest arrival on the belt, so the deck
               // still opens with an attacker.
               if (picks.indexOf('moonflower') === -1) {
                 for (let i = list.length - 1; i >= 0; i--) {
-                  if (picks[i]) { picks[i] = 'moonflower'; break; }
+                  if (picks[i] && !isInstant(list[i].PlantType)) {
+                    picks[i] = 'moonflower'; break;
+                  }
                 }
               }
+              const shadowHeld = picks.map((cn, i) => cn || (list[i] && list[i].PlantType));
+              keepAnswer(shadowHeld, (i, wide) => usableShadow, true);
+              for (let i = 0; i < list.length; i++) if (picks[i]) picks[i] = shadowHeld[i];
               patched = Object.assign(
                 Object.create(Object.getPrototypeOf(props) || Object.prototype), props);
               patched.InitialPlantList = list.map(
@@ -689,8 +743,20 @@ window.electron = electron;
             // that a plant with nothing left to trade for stays put -- the
             // original is always in its own group, so fewer than two survivors
             // means there is no alternative.
-            const usable = candidates.filter(cn => window._AP_conveyorPlantable(cn, hasWater));
+            let usable = candidates.filter(cn => window._AP_conveyorPlantable(cn, hasWater));
             if (usable.length < 2) return entry;
+            // An answer to a threat the level fields only trades for another
+            // answer to it, and stays put when its group has no other.
+            for (const answers of threats) {
+              if (!answers.has(entry.PlantType)) continue;
+              usable = usable.filter(cn => answers.has(cn));
+              if (usable.length < 2) return entry;
+            }
+            // A killing instant only trades for another killing instant.
+            if (kills(entry.PlantType)) {
+              usable = usable.filter(kills);
+              if (usable.length < 2) return entry;
+            }
             // Step two of the three: inside the role-and-power group, prefer a
             // plant of the same Family, so a Peashooter tends to become another
             // Peashooter and a Lobber another Lobber. A preference rather than
@@ -726,6 +792,15 @@ window.electron = electron;
             used.add(pick);
             return Object.assign({}, entry, { PlantType: pick });
           });
+          const held = newList.map(e => e && e.PlantType);
+          keepAnswer(held, (i, wide) =>
+            (wide ? Object.keys(swaps).sort() : swaps[list[i].PlantType] || [])
+              .filter(cn => window._AP_conveyorPlantable(cn, hasWater)));
+          for (let i = 0; i < list.length; i++) {
+            if (newList[i] && held[i] !== newList[i].PlantType) {
+              newList[i] = Object.assign({}, newList[i], { PlantType: held[i] });
+            }
+          }
           // Copy rather than mutate. The level's properties object is cached
           // and handed back on a replay, so writing to it would feed the next
           // roll its own output and the level would drift on every attempt.
@@ -785,6 +860,11 @@ window.electron = electron;
   // This is the general answer to a class of bug that excluding zombie
   // families one at a time only ever patches case by case.
   const AP_BESPOKE_MODULES = /Minigame|Beghouled|Rhythm/;
+
+  // [user] Level ids never rolled or shuffled although no module above marks
+  // them. By id, so every other level rolls exactly as before. eighties9 is
+  // Neon Mixtape Tour 9. Mirrors NEVER_ROLLED in zombie_roll.py.
+  const AP_NEVER_ROLLED = ['eighties9'];
 
   // Where a level names a zombie. Only a Zombies[].Type entry is a spawn -- one
   // zombie, once. The pool keys are candidates a wave generator may or may not
@@ -966,7 +1046,9 @@ window.electron = electron;
     // something has moved -- and a level that does not shuffle is a far
     // cheaper mistake than one that cannot be beaten.
     let bespoke = true, map = {};
-    if (objs) {
+    // Levels the budget roll never touches (AP_NEVER_ROLLED) are spared here
+    // too, so a seed from before the budget roll leaves them vanilla as well.
+    if (objs && AP_NEVER_ROLLED.indexOf(levelKey) < 0) {
       bespoke = false;
       for (const o of objs) {
         if (o && AP_BESPOKE_MODULES.test(o.objclass || '')) { bespoke = true; break; }
@@ -1015,6 +1097,39 @@ window.electron = electron;
   // a per-spawn hot path and a runaway here would hang the level rather than
   // just look wrong.
   let _apZombieDepth = 0;
+
+  // Which belt threats does the level being built field? Read for the
+  // conveyor swap, which must then keep an answer to each on the belt. Asked
+  // of the level as it will play: readLevelJson calls module_SetLevelDefinition,
+  // which sets the conveyor, so the budget roll has already rewritten the
+  // objects; a tier-shuffle seed swaps at spawn time, so its plan is asked what
+  // the level's own names become. Fails to none, which is the swap as it was.
+  // Codenames by sim_data tag: "excavator" and "torch". Listed here rather than
+  // sent, so seeds generated before this carry the same protection.
+  const AP_THREAT_RES = {
+    excavator: /\blostcity_excavator\b/,
+    torch: /\b(?:abbot_torch|explorer|explorer_veteran|kongfu_torch|monk_torch)\b/,
+  };
+  function _apLevelThreats(lc) {
+    const out = [];
+    try {
+      const objs = (lc && Array.isArray(lc.currentLevelObjects) && lc.currentLevelObjects.length)
+        ? lc.currentLevelObjects : _apLevelObjects();
+      if (!objs) return out;
+      const text = JSON.stringify(objs);
+      let names = [];
+      if (window._AP_shuffleZombies && window._AP_zombieTierOf) {
+        const plan = _apZombiePlanFor(objs);
+        if (!plan.bespoke) names = Object.keys(plan.map).map(c => plan.map[c]);
+      }
+      for (const key of Object.keys(AP_THREAT_RES)) {
+        const re = AP_THREAT_RES[key];
+        if (re.test(text) || names.some(n => re.test(n))) out.push(key);
+      }
+    } catch (e) { /* fall through */ }
+    return out;
+  }
+  window._AP_levelThreats = _apLevelThreats;
 
   function installZombieHook(Z) {
     if (!Z || Z._ap_hooked_zombies ||
@@ -1086,6 +1201,9 @@ window.electron = electron;
     // OPENING_LEVELS in zombie_roll.py.
     OPENING_LEVELS: ['tutorial1', 'tutorial2', 'tutorial3', 'tutorial4', 'tutorial5',
                      'egypt1', 'egypt2', 'egypt3', 'egypt4', 'egypt5'],
+    // [user] Level ids never rolled although neither bespoke nor generated.
+    // See AP_NEVER_ROLLED.
+    NEVER_ROLLED: AP_NEVER_ROLLED,
     // [user] A rocket imp reaches the house before the player can plant, so it
     // never opens a level. Wave 1 only. Mirrors FIRST_WAVE_BANNED; summoners are
     // banned alongside it where the pool is cut (tables().first_wave_banned).
@@ -1614,7 +1732,8 @@ window.electron = electron;
 
   // roll_level(), as the Python. null for a level the roll never touches.
   function _apbRoll(t, seed, levelId, level, dinos, goal) {
-    if (!level || level.bespoke || level.generated) return null;
+    if (!level || level.bespoke || level.generated ||
+      APB.NEVER_ROLLED.indexOf(levelId) >= 0) return null;
     const graves = _apbGravesHp(t, level);
     const budget = _apbGroupsHp(t, level.groups) + _apbDynamicHp(t, level, {}) + graves;
     const vanilla = Object.create(null);
@@ -2058,6 +2177,10 @@ window.electron = electron;
   // Family and DPS are then applied INSIDE a group as preferences, not as part
   // of the key -- see CONVEYOR_FAMILIES and CONVEYOR_DPS.
   //
+  // [user] Chomper is an instant on a belt, not an attacker: it swallows one
+  // zombie and is out of action while it chews. Conveyor only; nothing else
+  // reads these groups. See CONVEYOR_KILLING_INSTANTS for how instants trade.
+  //
   // Plants deliberately in no group are never swapped, in either direction:
   // glaciershroom, whose damage is not in any table the game loads, and
   // xshot (Rotobaga), which has no sun cost anywhere. An unknown is not a zero.
@@ -2082,7 +2205,7 @@ window.electron = electron;
   const CONVEYOR_GROUPS = {
     'attacker:mid': [
       'akee', 'bambooshoot', 'bamboozle', 'bloomerang', 'bloominghearts',
-      'bonkchoy', 'bowlingbulb', 'cactus', 'chomper', 'coldsnapdragon',
+      'bonkchoy', 'bowlingbulb', 'cactus', 'coldsnapdragon',
       'doomshroom', 'dusklobber', 'electriccurrant',
       'electricpeashooter', 'firegourd', 'firepeashooter', 'hotdate',
       'iceweed', 'jackolantern', 'laser_bean', 'lychee', 'parsnip',
@@ -2125,7 +2248,7 @@ window.electron = electron;
       'umbrellaleaf'
     ],
     'instant:mid': [
-      'cherry_bomb', 'grapeshot', 'perfumeshroom', 'powerlily'
+      'cherry_bomb', 'chomper', 'grapeshot', 'perfumeshroom', 'powerlily'
     ],
     'blocker:budget': [
       'imitater', 'turnip', 'wallnut'
@@ -2247,6 +2370,46 @@ window.electron = electron;
   // Moonflower is on a belt only in levels built around Shadow plants, so
   // trading it away takes the level's premise with it.
   const CONVEYOR_BELT_LOCKED = new Set(['moonflower']);
+
+  // Plants that can kill an Excavator, whose shovel digs up the first plant in
+  // front of it and keeps a straight shot from reaching it. lostcity16 opens
+  // with Akee and nothing else, and a swap to Snow Pea left a player unable to
+  // clear it. On a level that fields one, a belt answer only trades for another
+  // answer, and a belt left with none has one put back (see the hook).
+  //   backward, instant  the logic's own answer (power_logic.py, sim_data tags)
+  //   lobbed             [user] over the shovel; lostcity16 shipping Akee
+  //                      alone is the evidence
+  // [user] Instants that kill (or take the zombie out of the fight). A belt
+  // instant that kills only swaps for another one; the rest of the instant
+  // groups (Blover, Iceberg Lettuce, Stunion...) may become any instant.
+  // Membership is a hand reading of what each plant does [guess].
+  const CONVEYOR_KILLING_INSTANTS = new Set([
+    'cherry_bomb', 'chilibean', 'chomper', 'ghostpepper', 'grapeshot', 'grimrose',
+    'hypnoshroom', 'jalapeno', 'lavaguava', 'potatomine', 'primalpotatomine',
+    'shadowshroom', 'squash', 'tanglekelp',
+  ]);
+  window._AP_conveyorKillingInstants = CONVEYOR_KILLING_INSTANTS;
+
+  const CONVEYOR_EXCAVATOR_ANSWERS = new Set([
+    'bonkchoy', 'celerystalker', 'gloomshroom', 'gloomvine', 'phatbeet',
+    'splitpea', 'starfruit',
+    'cherry_bomb', 'chomper', 'doomshroom', 'escaperoot', 'grapeshot',
+    'grimrose', 'hypnoshroom', 'jalapeno', 'potatomine', 'primalpotatomine',
+    'squash', 'toadstool',
+    'akee', 'applemortar', 'banana', 'cabbagepult', 'cantaloupe',
+    'dusklobber', 'kernelpult', 'melonpult', 'pepperpult', 'wintermelon',
+  ]);
+  // Torch zombies burn off chill and freeze and light plants on fire; the
+  // logic's answer is an ice plant (power_logic.py, sim_data "ice" tag), here
+  // limited to the ones the belt groups hold.
+  const CONVEYOR_TORCH_ANSWERS = new Set([
+    'coldsnapdragon', 'iceburg', 'iceweed', 'missiletoe', 'snowdrop', 'snowpea',
+    'wintermelon',
+  ]);
+  window._AP_conveyorThreatAnswers = {
+    excavator: CONVEYOR_EXCAVATOR_ANSWERS,
+    torch: CONVEYOR_TORCH_ANSWERS,
+  };
 
   // Conveyor randomization pool, also exposed for the hook in that IIFE.
   // Neither of these two is a plant you would hand a player off a belt:
@@ -3618,9 +3781,9 @@ window.electron = electron;
   };
 
   // The game's LevelProgress enum: locked 0, unlocked_neverPlayed 1,
-  // unlocked_played 2, unlocked_willbeFinished 3, finished 4. 3 is what
-  // rebuildAPSave writes for a checked location and what most of the chain
-  // compares against; the thresholds above name their own so the two coins
+  // unlocked_played 2, unlocked_willbeFinished 3, finished 4. 3 is the lowest
+  // progress that counts as a clear, and what most of the chain compares
+  // against (rebuildAPSave writes 4 for a checked location); the thresholds above name their own so the two coins
   // conditions stay distinguishable.
   const PROGRESS_FINISHED = 3;
 
@@ -3783,12 +3946,27 @@ window.electron = electron;
       } catch(e) {}
     }
 
-    // 3. Reset AP-tracked level progress, then restore checked locations
+    // 3. Reset AP-tracked level progress, then restore checked locations.
+    //
+    // A checked level is written as finished (4), not unlocked_willbeFinished
+    // (3). The world map reads 3 as "just won, animation pending": the node
+    // draws as unfinished and pushPath() replays the finish, which moves the
+    // map to it and only then stores 4. Rewriting 3 on every rebuild undid
+    // that, so every checked level replayed its finish on each map load and
+    // the view never stayed on the player's frontier.
+    //
+    // A 3 the game itself wrote (a level won this session, map not yet
+    // visited) is kept so its finish plays once; the map then stores 4.
     if(!cp.levelProps) cp.levelProps = {};
-    for(const lvl of new Set(Object.values(LOC_LEVELS))) delete cp.levelProps[lvl];
+    const _prevProgress = {};
+    for(const lvl of new Set(Object.values(LOC_LEVELS))) {
+      const e = cp.levelProps[lvl];
+      if(e) _prevProgress[lvl] = e.progress || 0;
+      delete cp.levelProps[lvl];
+    }
     for(const locName of (st.checked||[])) {
       const lvl = LOC_LEVELS[locName];
-      if(lvl) cp.levelProps[lvl] = { progress: 3 };
+      if(lvl) cp.levelProps[lvl] = { progress: _prevProgress[lvl] === 3 ? 3 : 4 };
     }
 
     // 3b. Take back the game's own world-key currency. Every poll, not once:
