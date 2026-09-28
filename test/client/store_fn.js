@@ -25,8 +25,14 @@ function installStoreHook(SC) {
     const _origReadCommodity = SC.prototype.readCommodity;
     SC.prototype.readCommodity = function (props) {
       try {
-        if (props && props.CommodityName && window._AP_isShopCommodityChecked &&
-            window._AP_isShopCommodityChecked(props.CommodityName)) {
+        // Also dropped: a card that is no Archipelago location for this slot
+        // (see _AP_isShopCommodityOffered), which is how event plants and the
+        // ticket-priced rotation stop showing up under AP.
+        if (props && props.CommodityName &&
+            ((window._AP_isShopCommodityChecked &&
+              window._AP_isShopCommodityChecked(props.CommodityName)) ||
+             (window._AP_isShopCommodityOffered &&
+              !window._AP_isShopCommodityOffered(props)))) {
           this.currentCommodity = props;
           if (this.node && this.node.destroy) this.node.destroy();
           // The original is async and its early-out still resolves, so hand
@@ -126,6 +132,16 @@ function setSlotLocations(ids){ slotLocationIds = new Set(ids || []); }
 function slotHasLocation(id){
   return !slotLocationIds.size || slotLocationIds.has(id);
 }
+
+function isShopCommodityOffered(props){
+  const type = props && props.CommodityType;
+  if(type !== 'plant' && type !== 'upgrade') return true;
+  if(!st.shopsanity) return type === 'upgrade' && !window._AP_shuffleUpgrades;
+  if(!slotLocationIds.size || !Object.keys(locIds).length) return true;
+  const id = locIds['Shop: ' + props.CommodityName];
+  return !!id && slotLocationIds.has(id);
+}
+window._AP_isShopCommodityOffered = isShopCommodityOffered;
 
 function scoutShopLocations(){
   if(!st.shopsanity) return;

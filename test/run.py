@@ -4,7 +4,7 @@
 
 Suites run in parallel, one per CPU by default; each suite's output prints
 whole when it finishes. The slow generation sweeps (SLOW below) only run with
---release or when named, since they take over ten minutes each.
+--release or when named, since they take minutes each.
 
 Archipelago is not importable outside a full AP checkout, so generation is
 exercised against apstub.py, a hand-written stand-in for BaseClasses, Options,
@@ -35,7 +35,7 @@ PY_SUITES = [
     ("plantorder", "plant_order_test.py", "weak useful plants in earlier spheres than strong ones"),
 ]
 # Skipped unless --release or named on the command line.
-SLOW = {"generation", "spheres"}
+SLOW = {"generation", "spheres", "budget", "tracker"}
 
 JS_SUITES = [
     # First: the others require *_fn.js copies, so none of them ever runs the

@@ -9,6 +9,10 @@ const checked = new Set();
 let shopsanity = true;
 window._AP_onShopPurchase = n => { if (shopsanity) checked.add('Shop: ' + n); };
 window._AP_isShopCommodityChecked = n => shopsanity && checked.has('Shop: ' + n);
+// The real offered-predicate reads the label section's harness state; this
+// section is about checked cards only, so it offers everything until then.
+const realOffered = window._AP_isShopCommodityOffered;
+window._AP_isShopCommodityOffered = () => true;
 
 // ── a stand-in for the game's StoreCommodity ─────────────────────────────────
 // owned[] stands for getPlantProgressByID/getUpgradeProgressByID > 0. Under AP
@@ -152,6 +156,36 @@ else ok('shopsanity off sends no scout');
 // and drops the client. That is exactly what happened when the ungated shop
 // cards stopped being built while the client still scouted all of them.
 const { setSlotLocations } = require('./store_fn.js');
+
+// ── only this slot's shop locations get a card ───────────────────────────────
+{
+  window._AP_isShopCommodityOffered = realOffered;
+  const offered = realOffered;
+  const P = n => ({ CommodityType: 'plant', CommodityName: n });
+  const U = n => ({ CommodityType: 'upgrade', CommodityName: n });
+  resetShopState({ shopsanity: true, apSlotId: 1 });
+  setLocations(['Shop: jalapeno', 'Shop: upgrade_8_slots', 'Shop: bamboozle']);
+  setSlotLocations([]);
+  if (!offered(P('eventplant'))) fail('offered must fail open before Connected');
+  setSlotLocations([3520000, 3520001]);
+  if (!offered(P('jalapeno'))) fail('a slot shop location must be offered');
+  if (!offered(U('upgrade_8_slots'))) fail('a slot upgrade location must be offered');
+  if (offered(P('bamboozle'))) fail('a game shop entry this slot did not build must be hidden');
+  if (offered(P('eventplant'))) fail('a plant with no shop location must be hidden');
+  if (!offered({ CommodityType: 'gem' })) fail('bundles must be left to the game');
+  const card = new SC(); card.readCommodity(P('eventplant'));
+  if (card.built || !card.node.destroyed) fail('a hidden card must be destroyed, not built');
+  resetShopState({ shopsanity: false });
+  setSlotLocations([3520000]);
+  window._AP_shuffleUpgrades = false;
+  if (offered(P('jalapeno'))) fail('shopsanity off: plant cards grant nothing and must be hidden');
+  if (!offered(U('upgrade_8_slots'))) fail('shopsanity off: an unshuffled upgrade is a real purchase');
+  window._AP_shuffleUpgrades = true;
+  if (offered(U('upgrade_8_slots'))) fail('shopsanity off: a shuffled upgrade grants nothing');
+  delete window._AP_shuffleUpgrades;
+  window._AP_isShopCommodityOffered = () => true;
+  ok('store shows only cards that are a slot location or a real purchase');
+}
 setupRoom();
 // The room knows all three names, but this SLOT only has two of them.
 setSlotLocations([3520000, 3520002]);

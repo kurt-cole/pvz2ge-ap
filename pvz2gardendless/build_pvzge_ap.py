@@ -322,7 +322,33 @@ window.electron = electron;
     'KeyListener': function(v) { window._AP_KeyListener = v; installLevelGateHook(v); },
     // The title screen: the save's name and the one way into the game.
     'splashScene': function(v) { installSplashGate(v); },
+    // The world map, which owns the zen garden button.
+    'worldMapScene': function(v) { installZenGardenBlock(v); },
   };
+
+  // The zen garden is not modelled by the logic, so under AP there is no way
+  // in. start() hides the button the same way the game does when
+  // feature_zengarden is off; the flag itself is left alone because the
+  // game's own unlock chain sets it on every egypt5 clear regardless.
+  // zengarden() is the button's handler, refused before it darkens the
+  // screen, in case the button is ever shown by some other path.
+  function installZenGardenBlock(W) {
+    if (!W || !W.prototype || W._ap_hooked_zen) return;
+    const P = W.prototype;
+    const origStart = P.start;
+    if (typeof origStart === 'function') P.start = function () {
+      const r = origStart.apply(this, arguments);
+      try {
+        if (this.zengardenButton && this.zengardenButton.node)
+          this.zengardenButton.node.active = false;
+      } catch (e) {}
+      return r;
+    };
+    if (typeof P.zengarden === 'function') P.zengarden = function () {
+      return Promise.resolve();
+    };
+    W._ap_hooked_zen = true;
+  }
 
   // splashScene.update() writes currentPlayer.name into its label every
   // frame, so naming the save just before it runs is all the display needs.
@@ -411,8 +437,14 @@ window.electron = electron;
       const _origReadCommodity = SC.prototype.readCommodity;
       SC.prototype.readCommodity = function (props) {
         try {
-          if (props && props.CommodityName && window._AP_isShopCommodityChecked &&
-              window._AP_isShopCommodityChecked(props.CommodityName)) {
+          // Also dropped: a card that is no Archipelago location for this slot
+          // (see _AP_isShopCommodityOffered), which is how event plants and the
+          // ticket-priced rotation stop showing up under AP.
+          if (props && props.CommodityName &&
+              ((window._AP_isShopCommodityChecked &&
+                window._AP_isShopCommodityChecked(props.CommodityName)) ||
+               (window._AP_isShopCommodityOffered &&
+                !window._AP_isShopCommodityOffered(props)))) {
             this.currentCommodity = props;
             if (this.node && this.node.destroy) this.node.destroy();
             // The original is async and its early-out still resolves, so hand
@@ -2002,7 +2034,7 @@ window.electron = electron;
   const _origRegister = System.register.bind(System);
   System.register = function(name, deps, declare) {
     if (typeof name === 'string' &&
-        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity|levelController|Zombies|KeyListener|splashScene)\.ts/.test(name)) {
+        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity|levelController|Zombies|KeyListener|splashScene|worldMapScene)\.ts/.test(name)) {
       const _origDeclare = declare;
       declare = function(_export, _context) {
         return _origDeclare(function(exportName, value) {
@@ -5251,6 +5283,26 @@ window.electron = electron;
     if(!st.shopsanity) return false;
     return isChecked('Shop: ' + commodityName);
   };
+
+  // Whether the store should build a card at all. A plant or upgrade card is
+  // shown only when buying it does something under AP: it is one of this
+  // slot's shop locations, or it is an upgrade the seed does not shuffle and
+  // so still a real purchase. Everything else is a gem sink: the plant guard
+  // blocks every plant that did not arrive as an item, so an event plant, a
+  // ticket-priced plant, or any plant card without shopsanity grants nothing.
+  // Bundles and other card types are left to the game.
+  //
+  // Fails open (shows the card) until both the DataPackage and Connected have
+  // landed, since before then an absent id means "not known yet".
+  function isShopCommodityOffered(props){
+    const type = props && props.CommodityType;
+    if(type !== 'plant' && type !== 'upgrade') return true;
+    if(!st.shopsanity) return type === 'upgrade' && !window._AP_shuffleUpgrades;
+    if(!slotLocationIds.size || !Object.keys(locIds).length) return true;
+    const id = locIds['Shop: ' + props.CommodityName];
+    return !!id && slotLocationIds.has(id);
+  }
+  window._AP_isShopCommodityOffered = isShopCommodityOffered;
 
   function applyPendingTraps(){
     let pending = st.pendingMowerTraps || 0;
