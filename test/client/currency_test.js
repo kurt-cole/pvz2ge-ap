@@ -366,6 +366,28 @@ is(wp.worldkey, 0, '...and still cleared');
 is(clearWorldKeys(null), 0, 'no player: nothing happens');
 is(clearWorldKeys({}), 0, 'a player with no worldkey field is fine');
 
+// ── a new seed empties the wallet, once ─────────────────────────────────────
+{
+  const { resetSeedCurrency } = require("./currency_fn.js");
+  const np = { coin: 900, gem: 12 };
+  reset({ currencyReset: true, coinSeen: 900, gemSeen: 12 },
+        { currentPlayer: np, savePP() {} });
+  window._AP_CoinCount = realHud(np, 'coin', 'addCoinCount', 900);
+  is(resetSeedCurrency(), true, 'a new seed resets the balance');
+  is(np.coin, 0, 'coins zeroed on the save');
+  is(np.gem, 0, 'gems zeroed without a HUD component');
+  is(window._AP_CoinCount.component.value, 0, 'the HUD cannot write the old coins back');
+  is(st.coinSeen, 0, 'the restore ledger is zeroed too');
+  is('currencyReset' in st, false, 'the flag is cleared');
+  np.coin = 50;
+  is(resetSeedCurrency(), false, 'it runs once: later earnings are kept');
+  is(np.coin, 50, '...untouched');
+
+  reset({ currencyReset: true }, { currentPlayer: null, savePP() {} });
+  is(resetSeedCurrency(), false, 'no player yet: waits');
+  is(st.currencyReset, true, '...and keeps the flag for the next poll');
+}
+
 if (failed) {
   console.log(`\n${failed} FAILURE(S)`);
   process.exit(1);

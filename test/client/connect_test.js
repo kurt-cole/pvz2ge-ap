@@ -123,5 +123,17 @@ C.lastSocket().fireClose();
 if (C.menuReturns.length) fail('a failed connect attempt reloaded the page');
 else ok('a failed attempt retries in place without leaving the title screen');
 
+// On the title screen a drop has nothing to leave: it retries in place.
+// Reloading here is what looped, since the reload reconnects and lands here.
+C.reset(HOSTED);
+C.setInGame(false);
+C.connect();
+C.lastSocket().fireOpen();
+C.activate();
+C.lastSocket().fireClose();
+if (C.menuReturns.length) fail('a drop on the title screen reloaded the page');
+else if (C.timers.length !== 1) fail('a drop on the title screen did not schedule a retry');
+else ok('a drop on the title screen retries in place instead of reloading');
+
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nCONNECT SCHEME OK');
 process.exit(failed ? 1 : 0);

@@ -37,7 +37,8 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          "connect_fn.js:findOrCreateAPSlot", "connect_fn.js:svCfg",
          "connect_fn.js:returnToMenu", "connect_fn.js:activate",
          "connect_fn.js:setTimeout", "connect_fn.js:reset",
-         "connect_fn.js:runNextTimer",
+         "connect_fn.js:runNextTimer", "connect_fn.js:inGame",
+         "connect_fn.js:setInGame",
          # deathlink_fn.js harness: gameUI() stands in for the game's UI class
          # and the LevelPlay component behind it, so a test can call loseDarken
          # the way the death screen does. installUILoseHook itself IS a copy and

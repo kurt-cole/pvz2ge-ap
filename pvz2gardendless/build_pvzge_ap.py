@@ -321,7 +321,9 @@ window.electron = electron;
     // hook there is the whole of the progressive world gate.
     'KeyListener': function(v) { window._AP_KeyListener = v; installLevelGateHook(v); },
     // The title screen: the save's name and the one way into the game.
-    'splashScene': function(v) { installSplashGate(v); },
+    // mainScene, not splashScene: splashScene is only the loading bar, and
+    // has no goToGame to hook.
+    'mainScene': function(v) { installTitleGate(v); },
     // The world map, which owns the zen garden button.
     'worldMapScene': function(v) { installZenGardenBlock(v); },
   };
@@ -350,12 +352,14 @@ window.electron = electron;
     W._ap_hooked_zen = true;
   }
 
-  // splashScene.update() writes currentPlayer.name into its label every
+  // mainScene.update() writes currentPlayer.name into its label every
   // frame, so naming the save just before it runs is all the display needs.
   // goToGame() is Start (click or Space): the world map, or a resumed level.
-  // Both ask the client IIFE and fail open if it is not up yet.
-  function installSplashGate(S) {
-    if (!S || !S.prototype || S._ap_hooked_splash) return;
+  // Both ask the client IIFE and fail open if it is not up yet. Passing the
+  // gate marks the page as in game, which is what lets a dropped session
+  // reload back here (see the client's inGame()).
+  function installTitleGate(S) {
+    if (!S || !S.prototype || S._ap_hooked_title) return;
     const P = S.prototype;
     const origUpdate = P.update, origGo = P.goToGame;
     if (typeof origUpdate === 'function') P.update = function () {
@@ -367,9 +371,10 @@ window.electron = electron;
         try { if (window._AP_refusePlay) window._AP_refusePlay(); } catch (e) {}
         return Promise.resolve();
       }
+      window._AP_inGame = true;
       return origGo.apply(this, arguments);
     };
-    S._ap_hooked_splash = true;
+    S._ap_hooked_title = true;
   }
 
   // Progressive world unlocks. The decision lives in the client IIFE, which
@@ -2034,7 +2039,7 @@ window.electron = electron;
   const _origRegister = System.register.bind(System);
   System.register = function(name, deps, declare) {
     if (typeof name === 'string' &&
-        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity|levelController|Zombies|KeyListener|splashScene|worldMapScene)\.ts/.test(name)) {
+        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity|levelController|Zombies|KeyListener|mainScene|worldMapScene)\.ts/.test(name)) {
       const _origDeclare = declare;
       declare = function(_export, _context) {
         return _origDeclare(function(exportName, value) {
@@ -4126,6 +4131,7 @@ window.electron = electron;
     // the component ends the pass agreeing with whatever the player now holds.
     const _compChanged = currencyComponentChanged();
     if(_compChanged) _currencyRestoreDone = false;
+    if(resetSeedCurrency()) log('New seed: coins and gems reset');
     const _restored = restoreLostCurrency();
     if(_restored.length) log('Restored balance the display overwrote: ' + _restored.join(', '));
     applyPendingCurrency();
@@ -4319,9 +4325,12 @@ window.electron = electron;
       ws.onclose=()=>{
         const wasActive=sessionActive;
         conn=false;sessionActive=false;goalSent=false;ws=null;setStatus('Disconnected','#f44');
-        // A live session dropped: back to the title screen, reconnecting
-        // from there. See returnToMenu().
-        if(wasActive){ returnToMenu(true); return; }
+        // A live session dropped mid-game: back to the title screen,
+        // reconnecting from there. See returnToMenu(). On the title screen
+        // there is nothing to leave, so it retries in place like a failed
+        // attempt; the reload lands on the title screen too, so a session
+        // that keeps dropping cannot reload in a loop.
+        if(wasActive && inGame()){ returnToMenu(true); return; }
         // Closed without ever opening, on an address that named no scheme: the
         // OTHER scheme is worth one immediate try before the backoff loop, so a
         // plain-ws server is not stuck behind a 5s wait on every attempt. "The
@@ -4406,7 +4415,11 @@ window.electron = electron;
           // so it has to be cleared here explicitly -- carrying it into a new
           // seed would grant upgrades that seed never sent.
           st = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
-                 upgradeCounts:{}, worldUnlocks:{}, goalItems:0, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey };
+                 upgradeCounts:{}, worldUnlocks:{}, goalItems:0, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey,
+                 // The save's balance belongs to the old seed too; st no longer
+                 // remembers it, but the save and the HUD still hold it. Zeroed
+                 // by the next rebuildAPSave(), which has the player to hand.
+                 currencyReset:true };
           window._AP_grantedPlantIds = new Set();
           window._AP_grantedUpgrades = new Set();
           // st was replaced wholesale, so the in-memory shop label maps are
@@ -4869,6 +4882,30 @@ window.electron = electron;
       cp.worldkey = 0;
     }
     return had;
+  }
+
+  // A new seed starts from an empty wallet. st.currencyReset is set when the
+  // Connected handler replaces st for a different slot or seed, and cleared
+  // once the save has been zeroed, so it runs exactly once per new seed.
+  // Through the component where there is one, as applyCurrencyTraps does: the
+  // HUD holds its own copy of the balance and would write the old one back.
+  function resetSeedCurrency(){
+    if(!st.currencyReset) return false;
+    const APP = window._AP_AllPlayerProperties;
+    const cp  = APP ? APP.currentPlayer : null;
+    if(!cp) return false; // retried from rebuildAPSave() on the next poll
+    for(const c of CURRENCY_FIELDS){
+      const comp = c.cls() && c.cls().component;
+      if(comp && typeof comp.value === 'number'){
+        try { comp.value = 0; } catch(e) { cp[c.field] = 0; }
+      }
+      cp[c.field] = 0;
+      st[c.seen] = 0;
+    }
+    try { APP.savePP(); } catch(e) {}
+    delete st.currencyReset;
+    svSt();
+    return true;
   }
 
   // Currency traps take from the balance. Queued as a debt per currency
@@ -5762,8 +5799,10 @@ window.electron = electron;
 
   // ── Connection gate ───────────────────────────────────────────────────────
   // No play without a slot: the title screen refuses Start while disconnected
-  // (installSplashGate) and the save reads as NO_SLOT_NAME until Connected.
+  // (installTitleGate) and the save reads as NO_SLOT_NAME until Connected.
   function playAllowed(){ return conn && sessionActive; }
+  // Set once Start passes the gate; a reload clears it with the page.
+  function inGame(){ return !!window._AP_inGame; }
 
   // Called every title-screen frame, so it only writes on a change. The save
   // itself is left alone: Connected rebuilds it from st and the server, and

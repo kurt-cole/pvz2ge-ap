@@ -149,6 +149,25 @@ function clearWorldKeys(cp){
   return had;
 }
 
+function resetSeedCurrency(){
+  if(!st.currencyReset) return false;
+  const APP = window._AP_AllPlayerProperties;
+  const cp  = APP ? APP.currentPlayer : null;
+  if(!cp) return false; // retried from rebuildAPSave() on the next poll
+  for(const c of CURRENCY_FIELDS){
+    const comp = c.cls() && c.cls().component;
+    if(comp && typeof comp.value === 'number'){
+      try { comp.value = 0; } catch(e) { cp[c.field] = 0; }
+    }
+    cp[c.field] = 0;
+    st[c.seen] = 0;
+  }
+  try { APP.savePP(); } catch(e) {}
+  delete st.currencyReset;
+  svSt();
+  return true;
+}
+
 function reset(state, players) {
   for (const k of Object.keys(st)) delete st[k];
   Object.assign(st, state);
@@ -167,7 +186,7 @@ function restoreDone(v) {
 
 module.exports = {
   restoreLostCurrency, observeCurrency, currencyComponentChanged,
-  applyCurrencyTraps, clearWorldKeys,
+  applyCurrencyTraps, clearWorldKeys, resetSeedCurrency,
   syncCurrencyDisplay, CURRENCY_FIELDS,
   st, window, reset, restoreDone, savedCount: () => saved,
 };
