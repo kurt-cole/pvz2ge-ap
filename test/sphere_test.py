@@ -710,28 +710,29 @@ else:
     else:
         ok(f"all {len(_shop_locs)} shop checks are behind the egypt6 gate")
 
-    # A sun producer opens the store BUTTON, which is all the Shop region
-    # models. It puts exactly the ten cards with no UnlockLevel on sale; the
-    # other 29 wait for their own level, so a rule that expected all 39 here
-    # would be asserting the bug this gating removed.
+    # The store BUTTON appears when egypt6 is BEATEN, not when its stretch is
+    # entered: egypt6 carries location rules (plant power, what it carries from
+    # egypt1-5) on top of " Early"'s entrance. So the ten cards with no
+    # UnlockLevel must open exactly when egypt6 does. A lone sun producer used
+    # to open them while egypt6 itself was still out of logic. The other 29
+    # wait for their own level.
     from pvz2gardendless.locations import SHOP_LOC_UNLOCK as _SHOPU
-    _open = {l.name for l in state_with(_mws, _pres + ["Sunflower"]).reachable_locations()}
     _ungated = [n for n in _shop_locs if n not in _SHOPU]
-    _shut = [n for n in _ungated if n not in _open]
-    # A gated card may legitimately be open here if its own level already is --
-    # iceweed unlocks at egypt9, which is in the very region the Shop hangs
-    # off. What must never happen is a card opening ahead of its level.
-    _early = [n for n in _shop_locs
-              if n in _SHOPU and n in _open and _SHOPU[n] not in _open]
-    if _shut:
-        fail(f"a sun producer does not open the ungated cards: {_shut[:3]}")
+    _bad, _early = [], []
+    for _extra in (["Sunflower"], [i.name for i in _mws.itempool]):
+        _open = {l.name for l in state_with(_mws, _pres + _extra).reachable_locations()}
+        _e6 = "egypt6" in _open
+        _bad += [n for n in _ungated if (n in _open) != _e6]
+        _early += [n for n in _shop_locs
+                   if n in _SHOPU and n in _open and _SHOPU[n] not in _open]
+    if _bad:
+        fail(f"ungated cards do not open exactly with egypt6: {_bad[:3]}")
     elif _early:
         fail(f"cards on sale before their unlock level: {_early[:3]}")
     else:
-        _still = [n for n in _shop_locs if n in _SHOPU and n not in _open]
-        ok(f"a sun producer opens the {len(_ungated)} cards with no UnlockLevel; "
-           f"{len(_still)} of the {len(_shop_locs) - len(_ungated)} gated ones "
-           f"stay shut behind their own level")
+        ok(f"the {len(_ungated)} cards with no UnlockLevel open exactly with "
+           f"egypt6; the {len(_shop_locs) - len(_ungated)} gated ones wait for "
+           f"their own level")
 
 # WHAT LEAVES SPHERE 1. Two kinds of item and no others: a sun producer, which
 # opens egypt6-8, or a world's first unlock, which opens that world's opening

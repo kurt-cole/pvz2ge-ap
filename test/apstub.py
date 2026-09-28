@@ -229,6 +229,8 @@ class MultiWorld:
                 for l in r.locations:
                     self._locations[(l.name, l.player)] = l
         return self._locations[(name, player)]
+    def get_region(self, name, player):
+        return next(r for r in self.regions if r.name == name and r.player == player)
     def get_regions(self, player=None):
         return [r for r in self.regions if player is None or r.player == player]
     def push_precollected(self, item):

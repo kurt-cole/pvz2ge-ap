@@ -125,9 +125,10 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
     # the game's own rule, in index.js's feature-unlock chain:
     #   feature_coins   <- tutorial4      feature_powerup/zengarden <- egypt5
     #   feature_store   <- egypt6
-    # Hung off the stretch holding egypt6, which is Egypt's " Early" -- so the
-    # store button exists exactly when the game says it does, and inherits that
-    # stretch's sun-and-attacker rule for free. It used to hang off Tutorial,
+    # Hung off the stretch holding egypt6, which is Egypt's " Early", so it
+    # inherits that stretch's sun-and-attacker rule. That is not the whole
+    # gate: egypt6 carries location rules of its own, so rules.py also puts
+    # "egypt6 beatable" on every card. It used to hang off Tutorial,
     # which put all 39 shopsanity checks in sphere 1 and made a shopsanity seed
     # open five times as wide as the same seed without it.
     #
@@ -137,9 +138,6 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
     # Affordability is still not modelled: currency accrues from play and from
     # Archipelago's own coin/gem items, so a purchase is a matter of grinding
     # rather than a logic gate.
-    # egypt6 is where the game sets feature_store, and egypt6 is in Egypt's
-    # " Early" stretch -- so the store button exists exactly when that stretch
-    # is reachable, sun producer and all.
     regions["Ancient Egypt Early"].connect(regions[SHOP_REGION])
 
     # Side paths hang off the stretch holding the level that reveals them, not
@@ -155,10 +153,14 @@ def create_regions(world: "PvZ2GardendlessWorld") -> None:
     # two side paths, 18 checks including anything fill cared to hide there,
     # were sphere 1. A real seed put two world keys in Appease-mint.
     #
-    # Stretch granularity is the most this model can say. `can_reach` on the
-    # unlock level is exactly "its region is reachable", so connecting to that
-    # region is the same rule an access rule would express, without needing an
-    # indirect condition on the entrance.
+    # Stretch granularity is the most a region can say. Reaching the unlock
+    # level's region is NOT beating it: that level can carry location rules of
+    # its own (plant power, what it inherits from the levels before it). The
+    # rest is enforced per location, not here: level_predecessors makes a
+    # path's first level follow its unlock level, so rules.py's level-order
+    # carry puts every requirement of the unlock level on every level in the
+    # path. Region plus carry is "unlock level beatable", with no indirect
+    # condition on the entrance.
     #
     # The eight paths the game ties to no world are standalone content reached
     # from the world chooser, and stay connected to Tutorial. All eight are

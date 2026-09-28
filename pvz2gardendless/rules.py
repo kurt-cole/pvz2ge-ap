@@ -14,7 +14,7 @@ from .constants import (
     slot_entry_groups, slot_stretch_groups,
     STRETCH_ENTRY_PLANTS, stretch_suffixes,
     CHEAP_ATTACKER_PLANTS, DANGER_ROOM_UNLOCK, EGYPT_STRETCH_PLANTS,
-    KEYED_WORLDS, SIDE_PATH_REGIONS, STRETCH_PLANTS, SUN_PRODUCER_PLANTS,
+    KEYED_WORLDS, SHOP_REGION, SIDE_PATH_REGIONS, STRETCH_PLANTS, SUN_PRODUCER_PLANTS,
     WORLD_ENTRY_PLANTS, WORLD_REGIONS, gem_grant_regions, is_early_region,
     plants_clearing,
     progressive_item_name, progressive_need, stretch_suffixes,
@@ -288,6 +288,16 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
         unlock = multiworld.get_location(unlock_name, player)
         add_rule(shop_loc, lambda state, u=unlock: u.can_reach(state))
         shop_gated.append(shop_loc)
+
+    # The ungated cards (the five upgrades) still need egypt6 BEATEN, not just
+    # its stretch entered. The Shop region only inherits " Early"'s entrance
+    # rule, while egypt6 itself carries location rules on top (plant power, and
+    # what it carries from egypt1-5), so the region gate alone put these in
+    # logic before the store button can exist.
+    store_unlock = multiworld.get_location("egypt6", player)
+    for shop_loc in multiworld.get_region(SHOP_REGION, player).locations:
+        if shop_loc.name not in SHOP_LOC_UNLOCK:
+            add_rule(shop_loc, lambda state, u=store_unlock: u.can_reach(state))
 
     # PLANT POWER -- the lawn has to be able to kill what the level sends.
     #
