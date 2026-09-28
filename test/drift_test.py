@@ -35,6 +35,7 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # waiting; reset/runNextTimer drive the harness.
          "connect_fn.js:setStatus", "connect_fn.js:onPkt",
          "connect_fn.js:findOrCreateAPSlot", "connect_fn.js:svCfg",
+         "connect_fn.js:returnToMenu", "connect_fn.js:activate",
          "connect_fn.js:setTimeout", "connect_fn.js:reset",
          "connect_fn.js:runNextTimer",
          # deathlink_fn.js harness: gameUI() stands in for the game's UI class

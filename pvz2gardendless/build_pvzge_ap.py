@@ -320,7 +320,31 @@ window.electron = electron;
     // the next-level and restart buttons, and getForceLevel() on resume. One
     // hook there is the whole of the progressive world gate.
     'KeyListener': function(v) { window._AP_KeyListener = v; installLevelGateHook(v); },
+    // The title screen: the save's name and the one way into the game.
+    'splashScene': function(v) { installSplashGate(v); },
   };
+
+  // splashScene.update() writes currentPlayer.name into its label every
+  // frame, so naming the save just before it runs is all the display needs.
+  // goToGame() is Start (click or Space): the world map, or a resumed level.
+  // Both ask the client IIFE and fail open if it is not up yet.
+  function installSplashGate(S) {
+    if (!S || !S.prototype || S._ap_hooked_splash) return;
+    const P = S.prototype;
+    const origUpdate = P.update, origGo = P.goToGame;
+    if (typeof origUpdate === 'function') P.update = function () {
+      try { if (window._AP_syncSaveName) window._AP_syncSaveName(); } catch (e) {}
+      return origUpdate.apply(this, arguments);
+    };
+    if (typeof origGo === 'function') P.goToGame = function () {
+      if (window._AP_playAllowed && !window._AP_playAllowed()) {
+        try { if (window._AP_refusePlay) window._AP_refusePlay(); } catch (e) {}
+        return Promise.resolve();
+      }
+      return origGo.apply(this, arguments);
+    };
+    S._ap_hooked_splash = true;
+  }
 
   // Progressive world unlocks. The decision lives in the client IIFE, which
   // owns slot_data and the item counts; this side only asks and refuses.
@@ -1978,7 +2002,7 @@ window.electron = electron;
   const _origRegister = System.register.bind(System);
   System.register = function(name, deps, declare) {
     if (typeof name === 'string' &&
-        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity|levelController|Zombies|KeyListener)\.ts/.test(name)) {
+        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity|levelController|Zombies|KeyListener|splashScene)\.ts/.test(name)) {
       const _origDeclare = declare;
       declare = function(_export, _context) {
         return _origDeclare(function(exportName, value) {
@@ -3543,6 +3567,10 @@ window.electron = electron;
   let st    = { checked:[], lastIdx:0, receivedKeys:[], receivedItems:[],
                 upgradeCounts:{}, worldUnlocks:{}, goalItems:0, costumes:{}, wornCostume:{}, pendingCostumes:0, runKey:'' };
   let sessionActive = false; // set true only after explicit Connect + server ack
+  // What the save is called until a slot connects; see syncSaveName().
+  const NO_SLOT_NAME = 'Connect to an AP Slot';
+  // sessionStorage flag: reconnect after the reload a dropped session causes.
+  const RESUME_KEY   = 'ap_pvz2_resume';
   // Whether this session has told the server the goal is met. Session state,
   // not persisted: it is reset on every disconnect so a reconnect re-sends,
   // which is what makes a StatusUpdate lost to a dropped socket self-healing.
@@ -3875,6 +3903,9 @@ window.electron = electron;
     if(liveIdx >= 0 && String(liveIdx) !== localStorage.getItem(AP_SLOT_IDX_KEY)){
       localStorage.setItem(AP_SLOT_IDX_KEY, String(liveIdx));
     }
+    // The save's name is the slot's: level names and descriptions fill
+    // <PLAYERNAME> from currentPlayer.name, not just the title screen.
+    syncSaveName(true);
 
     // 1. Rebuild granted plant set
     if(!window._AP_grantedPlantIds) window._AP_grantedPlantIds = new Set();
@@ -4254,7 +4285,11 @@ window.electron = electron;
       };
       ws.onmessage=e=>{try{JSON.parse(e.data).forEach(onPkt);}catch(ex){}};
       ws.onclose=()=>{
+        const wasActive=sessionActive;
         conn=false;sessionActive=false;goalSent=false;ws=null;setStatus('Disconnected','#f44');
+        // A live session dropped: back to the title screen, reconnecting
+        // from there. See returnToMenu().
+        if(wasActive){ returnToMenu(true); return; }
         // Closed without ever opening, on an address that named no scheme: the
         // OTHER scheme is worth one immediate try before the backoff loop, so a
         // plain-ws server is not stuck behind a 5s wait on every attempt. "The
@@ -4329,6 +4364,7 @@ window.electron = electron;
         break;
       case 'Connected':
         conn=true;sessionActive=true;setStatus('✓ '+cfg.slot,'#4f4');
+        syncSaveName(true);
         apTeam   = pkt.team || 0;
         apSlotId = pkt.slot || 0;
         // Check if this is a different seed/slot from last session
@@ -5559,7 +5595,9 @@ window.electron = electron;
     document.getElementById('ap-disc').onclick=()=>{
       clearTimeout(rtimer);
       if(ws){ws.onclose=null;ws.close();ws=null;}
+      const wasActive=sessionActive;
       conn=false;sessionActive=false;goalSent=false;setStatus('Disconnected','#f44');
+      if(wasActive) returnToMenu(false);
     };
     document.getElementById('ap-reset').onclick=()=>{
       if(!confirm('Reset all AP progress for this slot? This clears checked locations, received items, and run state.')) return;
@@ -5670,6 +5708,44 @@ window.electron = electron;
     toast(`⏩ ${_speed}x`, '#aaf');
   }
 
+  // ── Connection gate ───────────────────────────────────────────────────────
+  // No play without a slot: the title screen refuses Start while disconnected
+  // (installSplashGate) and the save reads as NO_SLOT_NAME until Connected.
+  function playAllowed(){ return conn && sessionActive; }
+
+  // Called every title-screen frame, so it only writes on a change. The save
+  // itself is left alone: Connected rebuilds it from st and the server, and
+  // st is also what the boot restore of coins and gems reads.
+  function syncSaveName(save){
+    const APP = window._AP_AllPlayerProperties;
+    const cp  = APP ? APP.currentPlayer : null;
+    if(!cp) return;
+    const want = playAllowed() ? (cfg.slot || NO_SLOT_NAME) : NO_SLOT_NAME;
+    if(cp.name === want) return;
+    cp.name = want;
+    if(save){ try { APP.savePP(); } catch(e) {} }
+  }
+
+  // Leaving a session goes back to the title screen by reloading: the one
+  // reset of every scene and level the game already survives (the boot
+  // currency restore exists for it). The balance is observed first so the
+  // restore has the latest figure (a zero is not recorded over it, as at
+  // boot). resume reconnects on the far side, for a
+  // dropped socket; the Disconnect button passes false.
+  function returnToMenu(resume){
+    try { observeCurrency(true); svSt(); } catch(e) {}
+    try { if(resume) sessionStorage.setItem(RESUME_KEY,'1'); } catch(e) {}
+    toast('Disconnected: returning to the title screen','#f44');
+    setTimeout(()=>window.location.reload(), 800);
+  }
+
+  window._AP_playAllowed  = playAllowed;
+  window._AP_syncSaveName = ()=>syncSaveName(false);
+  window._AP_refusePlay   = ()=>{
+    toast('Connect to an AP slot first','#fa0');
+    if(panel) panel.style.display='block';
+  };
+
   function init(){
     lsCfg();lsSt();
     // The gates come off persisted st, so they are live before the socket is:
@@ -5680,7 +5756,11 @@ window.electron = electron;
     syncGrantedPlants();
     buildUI();
     setInterval(pollChecks,2000);
-    // Never auto-connect — user must click Connect manually each session
+    // Never auto-connect a new session; the user clicks Connect. The one
+    // exception is resuming a session that dropped, which reloaded the page.
+    let resume=null;
+    try { resume=sessionStorage.getItem(RESUME_KEY); sessionStorage.removeItem(RESUME_KEY); } catch(e) {}
+    if(resume){ rdelay=5000; connect(); }
 
     // Use window capture phase so this fires before the game's own keydown
     // handlers, even if the game canvas calls stopPropagation().

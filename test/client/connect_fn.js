@@ -27,6 +27,8 @@ function toast(){}
 function svCfg(){ savedCfg++; }
 function onPkt(){}
 function findOrCreateAPSlot(){ return 0; }
+let menuReturns = [];
+function returnToMenu(resume){ menuReturns.push(resume); }
 
 // connect() short-circuits and reloads unless this key is already set, so the
 // harness pretends the slot was made on some earlier run.
@@ -93,7 +95,11 @@ function connect() {
       };
       ws.onmessage=e=>{try{JSON.parse(e.data).forEach(onPkt);}catch(ex){}};
       ws.onclose=()=>{
+        const wasActive=sessionActive;
         conn=false;sessionActive=false;goalSent=false;ws=null;setStatus('Disconnected','#f44');
+        // A live session dropped: back to the title screen, reconnecting
+        // from there. See returnToMenu().
+        if(wasActive){ returnToMenu(true); return; }
         // Closed without ever opening, on an address that named no scheme: the
         // OTHER scheme is worth one immediate try before the backoff loop, so a
         // plain-ws server is not stuck behind a 5s wait on every attempt. "The
@@ -126,7 +132,10 @@ function reset(server){
   schemeProbed=false;
   cfg = { server: server, slot:'kurt', password:'' };
   attempts.length = 0; timers.length = 0; statuses = []; savedCfg = 0;
+  sessionActive = false; menuReturns.length = 0;
 }
+// What Connected does to the session flags, for the drop tests.
+function activate(){ conn = true; sessionActive = true; }
 // Runs the most recently scheduled timer, which is how the client retries.
 function runNextTimer(){
   const t = timers.pop();
@@ -136,7 +145,7 @@ function runNextTimer(){
 }
 
 module.exports = {
-  connect, reset, runNextTimer, attempts, timers,
+  connect, reset, runNextTimer, attempts, timers, activate, menuReturns,
   getCfg: () => cfg,
   getStatuses: () => statuses,
   lastSocket: () => FakeWebSocket.last,

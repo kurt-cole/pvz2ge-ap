@@ -101,5 +101,27 @@ if (C.attempts.some(u => u.startsWith('ws://')))
   fail('still opening with plain ws:// against a hosted room');
 else ok('a hosted room is never contacted over plain ws:// first');
 
+// ── a live session that drops goes back to the title screen ─────────────────
+// Play is refused while disconnected, so a drop reloads to the title screen
+// and reconnects from there instead of retrying in place.
+C.reset(HOSTED);
+C.connect();
+C.lastSocket().fireOpen();
+C.activate();
+C.lastSocket().fireClose();
+if (C.menuReturns.length !== 1 || C.menuReturns[0] !== true)
+  fail(`a dropped session returned to menu ${JSON.stringify(C.menuReturns)}, expected [true]`);
+else if (C.timers.length)
+  fail('a dropped session also scheduled an in-place retry');
+else ok('a dropped live session returns to the title screen to reconnect');
+
+// A failed attempt is not a session: it keeps the ordinary retry loop, so a
+// server that is down cannot reload the page on every attempt.
+C.reset(HOSTED);
+C.connect();
+C.lastSocket().fireClose();
+if (C.menuReturns.length) fail('a failed connect attempt reloaded the page');
+else ok('a failed attempt retries in place without leaving the title screen');
+
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nCONNECT SCHEME OK');
 process.exit(failed ? 1 : 0);
