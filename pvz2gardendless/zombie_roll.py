@@ -112,7 +112,9 @@ BUCKET_ORDER = (("generic", "land"), ("generic", "water"), ("skycity", "land"))
 # Far Future's flyers: Blover specifically, wherever they land [user].
 FAR_FUTURE_FLYERS = frozenset({"future_jetpack", "future_jetpack_disco",
                                "future_jetpack_veteran"})
-HAZARD_TAGS = ("jester", "iceblock", "air")
+# fireproof: dark_imp_dragon takes no fire damage [user]. A level that picks the
+# plants may be dealt only fire ones, so it never gains one it did not ship.
+HAZARD_TAGS = ("jester", "iceblock", "air", "fireproof")
 
 # [user] Nothing new before egypt6. A run's opening is played with whatever the
 # multiworld has handed over by then, which in a multi-slot seed is close to

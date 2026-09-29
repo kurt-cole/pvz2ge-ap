@@ -1255,7 +1255,7 @@ window.electron = electron;
     LIST_KINDS: ['jittered', 'ground', 'storm', 'grave_spawn'],
     FIELD_KINDS: ['raid', 'beach', 'spider', 'parachute'],
     BUCKETS: ['generic|land', 'generic|water', 'skycity|land'],
-    HAZARD_TAGS: ['jester', 'iceblock', 'air'],
+    HAZARD_TAGS: ['jester', 'iceblock', 'air', 'fireproof'],
     // [user] Nothing new before egypt6: a run's opening is played with
     // whatever the multiworld has handed over by then, so these levels field
     // only the hazards they shipped with, and never gain dinos. Mirrors

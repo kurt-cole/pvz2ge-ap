@@ -37,7 +37,8 @@ plant to answer them.
     t{1..5}          WavePointCost band -- the game's own price
     land | water     LivesInDeepWater: a land zombie drowns in a deep lane
     garg             ZombieSort == Gargantuar
-    threat tags      jester / iceblock / air / blocker / shield / summon --
+    threat tags      jester / iceblock / air / blocker / shield / summon /
+                     fireproof --
                      mechanics that need a specific plant or that field extra
                      zombies, partitioned so a shuffle can neither create nor
                      destroy one
@@ -173,6 +174,30 @@ def find_armor_types(root: str):
     raise SystemExit(f"could not find the ARMORS list under {imports}")
 
 
+def find_fireproof(root: str):
+    """Codenames the game's legacy property sheets make immune to fire.
+
+    The fire multiplier is not on the ZombieProps sheets the rest of this
+    model reads. It sits on the older `_ZOMBIEPROPERTIES` sheets, which
+    `_ZOMBIETYPES` points each codename at by a Properties RTID. Only
+    dark_imp_dragon states `FireDamageMultiplier: 0` in this build, and its
+    almanac entry says the same ("immune to fire damage"). Found in play: a
+    conveyor level dealt only fire plants and fielded one.
+    """
+    sheets = alias_map(find_table(root, "_ZOMBIEPROPERTIES"))
+    out = set()
+    for obj in find_table(root, "_ZOMBIETYPES"):
+        data = obj.get("objdata", {}) or {}
+        ref = data.get("Properties", "")
+        match = RTID.match(ref) if isinstance(ref, str) else None
+        sheet = sheets.get(match.group(1), {}) if match else {}
+        if sheet.get("FireDamageMultiplier", 1) == 0:
+            out.update(obj.get("aliases", []) or [])
+            if data.get("TypeName"):
+                out.add(data["TypeName"])
+    return out
+
+
 def find_table(root: str, table_name: str):
     """Locate a named PvZ2 table (ZombieProps, ArmorProps, ZombieTypes...).
 
@@ -212,8 +237,11 @@ def find_table(root: str, table_name: str):
 # ── the zombie model ─────────────────────────────────────────────────────────
 
 class Zombies:
-    def __init__(self, types, props, armors, armor_types=None):
+    def __init__(self, types, props, armors, armor_types=None, fireproof=None):
         self.types = alias_map(types)
+        # Absent (a caller from before find_fireproof) reads as none, which is
+        # what every tier assumed before the tag existed.
+        self.fireproof = set(fireproof or ())
         self.props = alias_map(props)
         self.armors = alias_map(armors)
         # StartingArmors names an armor TYPE, which points at its props sheet.
@@ -461,6 +489,9 @@ class Zombies:
             # Fields zombies of its own. A swap that creates a summoner adds
             # spawns the level's wave budget never accounted for.
             key += "-summon"
+        if codename in self.fireproof:
+            # Takes no fire damage, so a lawn of fire plants cannot kill it.
+            key += "-fireproof"
         hp = max(self.hp(codename), 1)
         return key + f"-h{int(math.floor(math.log(hp) / math.log(HP_BAND)))}"
 
@@ -587,6 +618,9 @@ The tier key joins these with "-":
                    answer.
          summon    `ZombiesToSummon`, `SkunkType` and friends -- fields zombies of its own,
                    which a level's wave budget never accounted for.
+         fireproof `FireDamageMultiplier` 0 on the legacy `_ZOMBIEPROPERTIES`
+                   sheet -- takes no fire damage, so fire plants alone
+                   cannot answer it.
   5. `h{{n}}`, an effective-HP band: floor(log(hp) / log({hp_band})), where hp is
      `Toughness`, every `StartingArmors` entry's toughness, and the toughness
      of every body the zombie brings with it whenever it spawns -- a
@@ -733,7 +767,8 @@ if _dupes:
 # Tiers whose special-mechanic tag means the game needs a specific plant to
 # answer them. Kept as a name list rather than folded into the tier keys so a
 # test can assert the partition still holds after a data regeneration.
-THREAT_TAGS = ("jester", "iceblock", "air", "blocker", "shield", "summon")
+THREAT_TAGS = ("jester", "iceblock", "air", "blocker", "shield", "summon",
+               "fireproof")
 
 # Geometric width of one HP band, as the generator used it. A test reads this
 # to assert no tier spans more than one band's worth of HP.
@@ -779,7 +814,8 @@ def main() -> int:
     bundle = Bundle(root)
     zombies = Zombies(find_table(root, "ZombieTypes"),
                       find_table(root, "ZombieProps"),
-                      find_table(root, "ArmorProps"), find_armor_types(root))
+                      find_table(root, "ArmorProps"), find_armor_types(root),
+                      find_fireproof(root))
     print(f"  {len(zombies.types)} zombie types, {len(zombies.props)} property "
           f"sheets, {len(zombies.armors)} armors")
 

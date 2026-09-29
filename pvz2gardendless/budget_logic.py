@@ -28,7 +28,8 @@ What changes under budget mode:
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from . import zombie_roll
-from .constants import (EGYPT_SUN_CUT, FIRE_AURA_PLANTS, JESTER_COUNTER_PLANTS,
+from .constants import (EGYPT_SUN_CUT, FIRE_AURA_PLANTS, FIRE_DAMAGE_PLANTS,
+                        JESTER_COUNTER_PLANTS,
                         POWER_DRAW_COUNT, SIDE_PATH_CHAIN, SIDE_PATH_REGIONS,
                         SIDE_PATH_UNLOCK, SPHERE_ONE_LEVELS, STARTER_PLANTS,
                         UNREACHABLE_LOCATIONS, WORLD_REGIONS, plants_clearing)
@@ -123,6 +124,11 @@ def affordable(group, budget: int) -> List[str]:
     """The members one copy of which fits the budget; the whole group if none do."""
     fits = [p for p in group if sun_cost(p) <= budget]
     return fits or list(group)
+
+
+def non_fire_attackers(group) -> List[str]:
+    """The members that deal damage other than fire."""
+    return sorted(p for p in group if p in PLANT_LAWN_DPS and p not in FIRE_DAMAGE_PLANTS)
 
 
 # ── where a level sits ───────────────────────────────────────────────────────
@@ -434,6 +440,12 @@ def level_hazard_groups(world, name: str) -> List[Tuple[List[str], bool]]:
         groups.append((affordable(AIR_COUNTERS, budget), True))
     if "dino" in hazards:
         groups.append((list(DINO_COUNTERS), True))
+    if "fireproof" in hazards:
+        # [user] An attacker that is not fire, strong enough for the level's
+        # power rule where it has one: a lawn of fire plants cannot kill it.
+        need = power_need(world, name)
+        pool = plants_clearing_at(*need) if need else ()
+        groups.append((non_fire_attackers(pool) or non_fire_attackers(PLANT_LAWN_DPS), True))
     # [user] Narrowed to the slot's power selection (power_logic.select), like
     # the loadout rules, so a counter group promotes the plants the seed chose
     # rather than every member.

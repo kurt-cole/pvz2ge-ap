@@ -105,6 +105,9 @@ for seed in SEEDS:
             problems.append(f"{name} fields Far Future flyers without a Blover rule")
         if "dino" in hazards and ["Perfume-shroom"] not in groups:
             problems.append(f"{name} fields dinos without a Perfume-shroom rule")
+        if "fireproof" in hazards and not any(
+                g and not set(g) & set(C.FIRE_DAMAGE_PLANTS) for g in groups):
+            problems.append(f"{name} fields a fireproof zombie without a non-fire attacker rule")
         if "jester" in hazards and sorted(w.logic_jesters) not in groups:
             problems.append(f"{name} fields a Jester without the drawn counter")
         if ("air" in hazards and "far_future_flyer" not in hazards

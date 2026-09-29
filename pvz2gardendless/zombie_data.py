@@ -42,6 +42,9 @@ The tier key joins these with "-":
                    answer.
          summon    `ZombiesToSummon`, `SkunkType` and friends -- fields zombies of its own,
                    which a level's wave budget never accounted for.
+         fireproof `FireDamageMultiplier` 0 on the legacy `_ZOMBIEPROPERTIES`
+                   sheet -- takes no fire damage, so fire plants alone
+                   cannot answer it.
   5. `h{n}`, an effective-HP band: floor(log(hp) / log(1.35)), where hp is
      `Toughness`, every `StartingArmors` entry's toughness, and the toughness
      of every body the zombie brings with it whenever it spawns -- a
@@ -106,7 +109,7 @@ than being handled here: the camel matching games, the cannon levels,
 Beghouled, bowling, Last Stand and the other set pieces. See
 AP_BESPOKE_MODULES in build_pvzge_ap.py.
 
-262 zombies over 76 tiers, 231 of them (88%) with somebody to trade with.
+262 zombies over 77 tiers, 230 of them (87%) with somebody to trade with.
 Worst intra-tier HP ratio 1.33. 62 codenames excluded.
 """
 
@@ -121,6 +124,9 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
     't1-land-air-h19': [
         'birthday_jetpack', 'future_jetpack', 'future_jetpack_disco',
     ],  # 3
+    't1-land-fireproof-h17': [
+        'dark_imp_dragon',
+    ],  # 1
     't1-land-h0': [
         'chicken', 'chicken_pumpkin',
     ],  # 2
@@ -128,12 +134,12 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
         'iceage_weasel',
     ],  # 1
     't1-land-h17': [
-        'beach', 'beach_fem', 'birthday', 'bobsled', 'cowboy', 'dark',
-        'dark_imp_dragon', 'dino', 'easter', 'eighties', 'eighties_8bit',
-        'feastivus', 'feastivus_flag', 'foodfight', 'foodfight_flag',
-        'future', 'future_flag', 'halloween', 'iceage', 'lunar', 'mummy',
-        'pirate', 'ra', 'sportzball', 'stpatrick', 'tutorial', 'valentines',
-    ],  # 27
+        'beach', 'beach_fem', 'birthday', 'bobsled', 'cowboy', 'dark', 'dino',
+        'easter', 'eighties', 'eighties_8bit', 'feastivus', 'feastivus_flag',
+        'foodfight', 'foodfight_flag', 'future', 'future_flag', 'halloween',
+        'iceage', 'lunar', 'mummy', 'pirate', 'ra', 'sportzball', 'stpatrick',
+        'tutorial', 'valentines',
+    ],  # 26
     't1-land-h18': [
         'birthday_pharaoh_inner',
     ],  # 1
@@ -701,7 +707,8 @@ if _dupes:
 # Tiers whose special-mechanic tag means the game needs a specific plant to
 # answer them. Kept as a name list rather than folded into the tier keys so a
 # test can assert the partition still holds after a data regeneration.
-THREAT_TAGS = ("jester", "iceblock", "air", "blocker", "shield", "summon")
+THREAT_TAGS = ("jester", "iceblock", "air", "blocker", "shield", "summon",
+               "fireproof")
 
 # Geometric width of one HP band, as the generator used it. A test reads this
 # to assert no tier spans more than one band's worth of HP.

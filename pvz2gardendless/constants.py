@@ -669,6 +669,28 @@ FIRE_AURA_PLANTS = [
     "Inferno",
 ]
 
+# Plants whose damage is fire, for the fireproof hazard (dark_imp_dragon takes
+# none). A JUDGEMENT, not a property: the game's own Family == "Fire" attackers,
+# plus Torchwood, which turns peas passing through it into fire. Wide on
+# purpose: leaving a plant out of the counter group only means logic does not
+# count it, while counting a fire plant could leave a level unwinnable.
+FIRE_DAMAGE_PLANTS = [
+    "Fire Gourd",
+    "Fire Peashooter",
+    "Ghost Pepper",
+    "Hot Date",
+    "Inferno",
+    "Jack O' Lantern",
+    "Jalapeno",
+    "Lava Guava",
+    "Meteor Flower",
+    "Pepper-pult",
+    "Pyre Vine",
+    "Snap Dragon",
+    "Torchwood",
+    "Wasabi Whip",
+]
+
 # Plants a world needs on top of its unlock, as a list of requirements: the
 # player needs at least one plant from EACH list, so a world can ask for more
 # than one thing at once. rules.py ANDs them onto that world's entrance, and
