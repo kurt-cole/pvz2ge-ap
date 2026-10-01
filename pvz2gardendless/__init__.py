@@ -136,8 +136,17 @@ except ImportError:  # pragma: no cover - depends on the host AP version
         "installer will not appear in the Archipelago Launcher. Generation "
         "is unaffected.", exc_info=True)
 else:
+    # "ap:<module>/<file>" is AP's form for an icon shipped inside an apworld;
+    # __name__ is worlds.pvz2gardendless once installed, whatever the zip is called.
+    # Imported separately so an AP build without icon_paths still gets the entry.
+    try:
+        from worlds.LauncherComponents import icon_paths
+        icon_paths["pvz2ge_icon"] = f"ap:{__name__}/icon.png"
+        _icon = "pvz2ge_icon"
+    except ImportError:  # pragma: no cover - depends on the host AP version
+        _icon = "icon"
     components.append(Component("PvZ2 Gardendless Installer", func=_launch_installer,
-        component_type=Type.CLIENT,
+        component_type=Type.CLIENT, icon=_icon,
         description="Build and install the PvZ2 Gardendless Archipelago mod."))
 
 
