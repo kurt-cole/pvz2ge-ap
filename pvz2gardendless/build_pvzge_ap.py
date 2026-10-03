@@ -17,6 +17,8 @@ Usage: double-click this file, or run:
 import os
 import sys
 import json
+import hashlib
+import re
 import shutil
 import subprocess
 import signal
@@ -6291,18 +6293,117 @@ def check_for_updates(build_dir, log):
         if os.path.isfile(p):
             exe = p
             break
+    stamp = read_package_stamp(build_dir)
     if exe is None:
         stale = True
         lines.append("Packaged app: not built yet")
+    elif stamp is not None:
+        # Game and client load from the checkout, so the app's age relative
+        # to tmpPatch.js says nothing. Only its target folder matters here;
+        # UPDATE repackages anyway if main.js or Electron changed.
+        if os.path.normcase(stamp.get("docs", "")) != \
+                os.path.normcase(os.path.abspath(docs_dir)):
+            stale = True
+            lines.append(f"Packaged app: loads the game from {stamp.get('docs')}, "
+                         "not this folder")
+        else:
+            lines.append(f"Packaged app: {os.path.basename(exe)} "
+                         "(loads the game from this folder)")
     elif os.path.isfile(tmppatch_path) and \
             os.path.getmtime(exe) < os.path.getmtime(tmppatch_path):
         stale = True
         lines.append("Packaged app: older than the injected client, "
                      "so it does not contain it")
     else:
-        lines.append(f"Packaged app: {os.path.basename(exe)}")
+        lines.append(f"Packaged app: {os.path.basename(exe)} (game packaged inside; "
+                     "the next build moves it out so later updates are fast)")
 
     return stale, lines
+
+
+# ── External game data ────────────────────────────────────────────────────────
+# The packaged app does not carry the game. pvzge_web/docs is ~1.3GB, and
+# baking it in meant every client update re-ran electron-builder over all of
+# it (asar, then AppImage/7z compression) and made the Windows portable exe
+# unpack it on every launch. Instead main.js loads the game from the build
+# folder's checkout, by an absolute path written in at build time. A client
+# or game update is then a file write or a git fetch, and electron-builder
+# only reruns when what it packages (main.js, package.json, Electron) changes.
+#
+# The build folder is pvz2gardendless.build_directory in host.yaml, set from
+# the builder's folder picker. Choosing a different folder and building
+# rewrites the path, which changes main.js and so repackages.
+
+GAME_DOCS_MARKER = "AP_GAME_DOCS"
+GAME_DOCS_GLOB   = "pvzge_web/docs/**/*"
+PACKAGE_STAMP    = "ap_package.json"
+
+_UPSTREAM_LOADFILE = re.compile(
+    r"""win\.loadFile\((['"])pvzge_web/docs/index\.html\1\);""")
+_GAME_DOCS_CONST = re.compile(
+    r"^const " + GAME_DOCS_MARKER + r" = .*;$", re.MULTILINE)
+
+
+def _game_docs_loader():
+    """Replacement for upstream's relative loadFile. Fails loudly, not blank."""
+    return (
+        "const apIndex = require('path').join(" + GAME_DOCS_MARKER + ", 'index.html');\n"
+        "  if (!require('fs').existsSync(apIndex)) {\n"
+        "    require('electron').dialog.showErrorBox('PvZ2 Gardendless AP',\n"
+        "      'Game files not found at:\\n' + " + GAME_DOCS_MARKER + " + '\\n\\n' +\n"
+        "      'The game is loaded from the Archipelago build folder (host.yaml:\\n' +\n"
+        "      'pvz2gardendless.build_directory). Run the PvZ2 Gardendless builder\\n' +\n"
+        "      'from the Archipelago Launcher with that folder and press START BUILD.');\n"
+        "    app.quit();\n"
+        "    return;\n"
+        "  }\n"
+        "  win.loadFile(apIndex);"
+    )
+
+
+def externalize_game(main_js, docs_dir):
+    """Point main.js at docs_dir. Returns (main_js, ok).
+
+    Idempotent: an already-patched main.js only has its path line rewritten,
+    so a moved build folder takes effect on the next build. ok is False when
+    upstream's loadFile line is not recognised, and the caller then keeps the
+    game bundled as before rather than shipping an app that loads nothing.
+    """
+    const = f"const {GAME_DOCS_MARKER} = {json.dumps(os.path.abspath(docs_dir))};"
+    if _GAME_DOCS_CONST.search(main_js):
+        return _GAME_DOCS_CONST.sub(lambda _m: const, main_js, count=1), True
+    if not _UPSTREAM_LOADFILE.search(main_js) or "function createWindow" not in main_js:
+        return main_js, False
+    main_js = _UPSTREAM_LOADFILE.sub(lambda _m: _game_docs_loader(), main_js, count=1)
+    main_js = main_js.replace(
+        "function createWindow",
+        "// Written by the Archipelago builder: the game is not packaged.\n"
+        f"{const}\n\nfunction createWindow", 1)
+    return main_js, True
+
+
+def _package_fingerprint(electron_dir, plat):
+    """What electron-builder's output depends on, once the game is external."""
+    h = hashlib.sha256(plat.encode())
+    for rel in ("main.js", "package.json",
+                os.path.join("node_modules", "electron", "package.json"),
+                os.path.join("node_modules", "electron-builder", "package.json")):
+        p = os.path.join(electron_dir, rel)
+        h.update(rel.encode())
+        if os.path.isfile(p):
+            with open(p, "rb") as f:
+                h.update(f.read())
+    return h.hexdigest()
+
+
+def read_package_stamp(build_dir):
+    """The stamp the last external-game package left, or None (old or no build)."""
+    try:
+        with open(os.path.join(build_dir, PACKAGE_STAMP), "r", encoding="utf-8") as f:
+            stamp = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return stamp if isinstance(stamp, dict) else None
 
 
 # Electron ships its own helper executables next to the app binary. They are
@@ -6528,9 +6629,9 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
     fast=True is the update path: it requires an existing checkout, still pulls
     both repos (incremental on a shallow clone, so seconds rather than the
     ~300MB first fetch), and skips `npm install` when node_modules is already
-    there. electron-builder still runs -- the client is baked into the
-    executable, so there is no way to change what the player runs without
-    repackaging.
+    there. electron-builder is skipped too when the packaged app is unchanged:
+    the game and client load from the checkout (see externalize_game), so
+    rewriting tmpPatch.js is the whole update.
     """
 
     electron_dir = os.path.join(build_dir, "PVZGE-Electron")
@@ -6706,6 +6807,7 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
 
     # Patch main.js to enable devtools (F12) so the AP overlay errors are visible
     main_js_path = os.path.join(electron_dir, "main.js")
+    game_external = False  # stays False if main.js is missing or unrecognised
     if os.path.isfile(main_js_path):
         with open(main_js_path, "r", encoding="utf-8") as f:
             main_js = f.read()
@@ -6737,6 +6839,11 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
                 f"app.setPath('userData', app.getPath('userData') + {json.dumps(USER_DATA_SUFFIX)});\n"
                 "app.whenReady()", 1)
             log(f"  userData suffixed with {USER_DATA_SUFFIX!r} in main.js")
+        main_js, game_external = externalize_game(main_js, docs_dir)
+        if game_external:
+            log(f"  Game loads from {os.path.abspath(docs_dir)} (not packaged)")
+        else:
+            log("  Warning: main.js loadFile not recognised; packaging the game as before")
         with open(main_js_path, "w", encoding="utf-8") as f:
             f.write(main_js)
         log("  Enabled F12 devtools in main.js")
@@ -6779,6 +6886,18 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
             pkg_changed = True
             log(f"  Pinned @noble/hashes to {noble_hashes_pin} in package.json (avoids ERR_REQUIRE_ESM)")
 
+        # Keep the game out of the package once main.js loads it externally,
+        # and put it back if a future upstream main.js could not be patched.
+        files = pkg.setdefault("build", {}).setdefault("files", [])
+        if game_external and GAME_DOCS_GLOB in files:
+            files.remove(GAME_DOCS_GLOB)
+            pkg_changed = True
+            log("  Removed the game data from the packaged files")
+        elif not game_external and GAME_DOCS_GLOB not in files:
+            files.insert(0, GAME_DOCS_GLOB)
+            pkg_changed = True
+            log("  Restored the game data to the packaged files")
+
         if pkg_changed:
             with open(package_json_path, "w", encoding="utf-8") as f:
                 json.dump(pkg, f, indent=2)
@@ -6786,8 +6905,7 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
 
     # ── 5. npm install ────────────────────────────────────────────────────────
     # Skipped on the update path when node_modules is already populated. This
-    # is the one step an update genuinely saves: the clones above are
-    # incremental once they exist, and electron-builder below is unavoidable.
+    # saves a download: the clones above are incremental once they exist.
     # Still forced, even on the fast path, if the override above just changed
     # package.json or if an already-installed @noble/hashes is on the
     # ESM-only line (a node_modules left over from before this pin existed).
@@ -6823,7 +6941,21 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
         output_exts = [".AppImage", ".appimage"]
         output_name = "PvZ Gardendless AP.AppImage"
 
-    step(f"Building {plat} application (this takes 2-5 minutes)")
+    # With the game external, the package only needs rebuilding when what it
+    # contains changed. A build with no stamp predates this (game baked in),
+    # so it always repackages once and gets a stamp.
+    fingerprint = _package_fingerprint(electron_dir, plat)
+    stamp = read_package_stamp(build_dir)
+    if (fast and game_external and stamp
+            and stamp.get("fingerprint") == fingerprint
+            and os.path.isfile(stamp.get("output", ""))):
+        step("Packaged app unchanged — skipping electron-builder")
+        log("  The client and game load from the build folder, so the")
+        log("  existing app already runs this update.")
+        done_cb(stamp["output"])
+        return
+
+    step(f"Building {plat} application")
     rc = run_cmd(build_cmd, electron_dir, log)
     if rc != 0:
         error_cb("Build failed. See log above for details.")
@@ -6881,6 +7013,15 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
     if final_path is None:
         error_cb(f"Build succeeded but no runnable output was produced in:\n{release_dir}")
         return
+
+    stamp_path = os.path.join(build_dir, PACKAGE_STAMP)
+    if game_external:
+        with open(stamp_path, "w", encoding="utf-8") as f:
+            json.dump({"fingerprint": fingerprint,
+                       "docs": os.path.abspath(docs_dir),
+                       "output": final_path}, f, indent=2)
+    elif os.path.isfile(stamp_path):
+        os.remove(stamp_path)  # game is baked in again; updates must repackage
 
     done_cb(final_path)
 
@@ -7008,8 +7149,9 @@ class BuilderApp:
                       "  3. Inject the Archipelago client into the game\n"
                       "  4. Build the game application for your platform via npm\n\n"
                       "CHECK FOR UPDATES reads what you already have and says\n"
-                      "whether a rebuild would change anything. UPDATE then does\n"
-                      "steps 3 and 4 only, reusing the downloads.\n\n"
+                      "whether a rebuild would change anything. UPDATE pulls and\n"
+                      "re-injects, and repackages only if the app itself changed:\n"
+                      "the game loads from this build folder, so keep it in place.\n\n"
                       "Requirements: Git + Node.js (LTS) must be installed.",
                  font=(MONO, 9), bg=BG2, fg=MUTE, justify="left"
                  ).pack(anchor="w")
@@ -7164,9 +7306,9 @@ class BuilderApp:
             self.update_btn.configure(state="normal", fg="#6ee7b7")
             self.status_var.set("Updates available — press UPDATE.")
             self._log("  Something is out of date. UPDATE re-injects the client")
-            self._log("  and repackages the app, reusing what is already")
-            self._log("  downloaded. It still runs electron-builder (2-5 min),")
-            self._log("  because the client is baked into the executable.")
+            self._log("  and reuses what is already downloaded. It repackages")
+            self._log("  the app only when the app itself changed, or once for")
+            self._log("  a build that still has the game packaged inside.")
         else:
             self.update_btn.configure(state="disabled", fg="#64748b")
             self.status_var.set("✓ Everything is up to date.")
