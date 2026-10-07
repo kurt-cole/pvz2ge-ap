@@ -97,6 +97,8 @@ SHIPPED = {
     ".py": lambda rel: True,
     # the guides Archipelago's website serves, which live in docs/ only
     ".md": lambda rel: rel.parent.name == "docs",
+    # the Launcher icon, registered in __init__.py's icon_paths; package root only
+    ".png": lambda rel: rel.parts[1:] == ("icon.png",),
 }
 
 # Directories never walked into, by name, at any depth.
