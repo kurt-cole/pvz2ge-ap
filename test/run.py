@@ -56,6 +56,7 @@ JS_SUITES = [
     ("goal",     "goal_test.js",     "the win condition and what opens Modern Day"),
     ("worldgate","worldgate_test.js","progressive world unlocks, enforced in game"),
     ("tutorial", "tutorial_test.js", "a level is only checked once it is really finished"),
+    ("islands",  "island_test.js",   "a reward node on the map follows its level, not the item"),
 ]
 
 

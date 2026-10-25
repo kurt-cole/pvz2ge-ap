@@ -144,7 +144,7 @@ function isShopCommodityOffered(props){
 window._AP_isShopCommodityOffered = isShopCommodityOffered;
 
 function scoutShopLocations(){
-  if(!st.shopsanity) return;
+  if(!st.shopsanity || !slotLocationIds.size) return;
   const ids = Object.keys(locIds)
     .filter(n => n.startsWith('Shop: '))
     .map(n => locIds[n])

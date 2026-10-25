@@ -11,6 +11,7 @@ let cfg = { server:'localhost:38281', slot:'kurt', password:'' };
 const WS_SCHEMES  = ['wss://', 'ws://'];
 const WS_SCHEME_RE = /^wss?:\/\//i;
 let schemeProbed = false;
+let slotLocationIds = new Set();
 
 const AP_SLOT_IDX_KEY = 'ap_pvz2_slot_idx';
 
@@ -23,7 +24,8 @@ let savedCfg = 0;
 
 function setStatus(msg){ statuses.push(msg); }
 function log(){}
-function toast(){}
+const toasts = [];
+function toast(msg){ toasts.push(msg); }
 function svCfg(){ savedCfg++; }
 function onPkt(){}
 function findOrCreateAPSlot(){ return 0; }
@@ -58,8 +60,14 @@ class FakeWebSocket {
 const WebSocket = FakeWebSocket;
 
 // setTimeout is captured so tests can run the reconnect without real waiting.
+// Ids are unique so clearTimeout can take one out of the pending list.
 const timers = [];
-function setTimeout(fn, ms){ timers.push({fn, ms}); return timers.length; }
+let timerSeq = 0;
+function setTimeout(fn, ms){ const id = ++timerSeq; timers.push({fn, ms, id}); return id; }
+function clearTimeout(id){
+  const i = timers.findIndex(t => t.id === id);
+  if (i >= 0) timers.splice(i, 1);
+}
 
 // ── the copied client function ──────────────────────────────────────────────
 function connect() {
@@ -75,6 +83,9 @@ function connect() {
       return;
     }
     if(ws){try{ws.onclose=null;ws.close();}catch(e){}ws=null;}
+    // The last session's table may belong to another seed; this one's arrives
+    // with Connected. See scoutShopLocations().
+    slotLocationIds = new Set();
     setStatus('Connecting…','#fa0');
     // The address box takes a bare host:port, so the client picks the scheme.
     // Hosted rooms -- multiworld.gg, archipelago.gg -- are TLS only, and answer
@@ -99,12 +110,17 @@ function connect() {
       ws.onclose=()=>{
         const wasActive=sessionActive;
         conn=false;sessionActive=false;goalSent=false;ws=null;setStatus('Disconnected','#f44');
-        // A live session dropped mid-game: back to the title screen,
-        // reconnecting from there. See returnToMenu(). On the title screen
-        // there is nothing to leave, so it retries in place like a failed
-        // attempt; the reload lands on the title screen too, so a session
-        // that keeps dropping cannot reload in a loop.
-        if(wasActive && inGame()){ returnToMenu(true); return; }
+        // A live session dropped mid-game: a grace period of quick retries,
+        // then back to the title screen, reconnecting from there. See
+        // startGrace() and returnToMenu(). On the title screen there is
+        // nothing to leave, so it retries in place like a failed attempt; the
+        // reload lands on the title screen too, so a session that keeps
+        // dropping cannot reload in a loop.
+        if(wasActive && inGame()){ startGrace(); connect(); return; }
+        // A retry inside the grace period failed. The scheme is the one the
+        // session just used, so no probe, and a short wait: the backoff would
+        // spend the whole grace period on one attempt.
+        if(graceTimer){ rtimer=setTimeout(connect,GRACE_RETRY_MS); return; }
         // Closed without ever opening, on an address that named no scheme: the
         // OTHER scheme is worth one immediate try before the backoff loop, so a
         // plain-ws server is not stuck behind a 5s wait on every attempt. "The
@@ -131,6 +147,32 @@ function connect() {
     } catch(e) { setStatus('Connection failed: '+e.message,'#f44'); }
   }
 
+// Copied too: the grace period connect() hands a mid-game drop to.
+  const GRACE_SECS = 10, GRACE_RETRY_MS = 2000;
+  let graceTimer = null;
+  function startGrace(){
+    clearTimeout(rtimer);
+    graceTick(GRACE_SECS);
+  }
+  // One countdown step a second, shown on the toast (logged only the first
+  // time, so the panel log is not ten lines of countdown).
+  function graceTick(left){
+    if(left<=0){
+      graceTimer=null; clearTimeout(rtimer);
+      if(ws){try{ws.onclose=null;ws.close();}catch(e){}ws=null;}
+      returnToMenu(true);
+      return;
+    }
+    toast('Connection lost: reconnecting… '+left+'s','#fa0',left<GRACE_SECS);
+    graceTimer=setTimeout(()=>graceTick(left-1),1000);
+  }
+  // Stops the countdown, if one is running; true when it was.
+  function endGrace(){
+    if(!graceTimer) return false;
+    clearTimeout(graceTimer); graceTimer=null;
+    return true;
+  }
+
 // ── harness controls ────────────────────────────────────────────────────────
 function reset(server){
   ws=null; conn=false; rtimer=null; rdelay=5000;
@@ -138,6 +180,7 @@ function reset(server){
   cfg = { server: server, slot:'kurt', password:'' };
   attempts.length = 0; timers.length = 0; statuses = []; savedCfg = 0;
   sessionActive = false; menuReturns.length = 0; playing = true;
+  graceTimer = null; toasts.length = 0;
 }
 // What Connected does to the session flags, for the drop tests.
 function activate(){ conn = true; sessionActive = true; }
@@ -150,7 +193,20 @@ function runNextTimer(){
   return t ? t.ms : null;
 }
 
+// Runs the first pending timer of the given delay, leaving the rest queued --
+// the grace period has its countdown and a retry pending at the same time.
+function runTimer(ms){
+  const i = timers.findIndex(t => t.ms === ms);
+  if (i < 0) return false;
+  const [t] = timers.splice(i, 1);
+  t.fn();
+  return true;
+}
+// What Connected does on arrival, grace included.
+function connected(){ activate(); return endGrace(); }
+
 module.exports = {
+  runTimer, connected, toasts, inGrace: () => !!graceTimer,
   connect, reset, runNextTimer, attempts, timers, activate, menuReturns, setInGame,
   getCfg: () => cfg,
   getStatuses: () => statuses,

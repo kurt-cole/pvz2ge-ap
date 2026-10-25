@@ -252,5 +252,39 @@ const tables = B._apbTables(V.tables);
   else ok(`${never.map(f => f.level).join(', ')} (bespoke / runtime-generated) are never rolled`);
 }
 
+// ── lost-plants levels and old seeds ────────────────────────────────────────
+// cowboy23 caps plants lost at 1, so it never gains dinos. A seed rolled
+// before that rule has no plants_lost_rule in its tables, and its generation
+// may have given the level dinos: the client has to roll it the same way.
+{
+  const fx = V.fixtures.find(f => f.level === 'cowboy23');
+  function LC2() {}
+  LC2.prototype.module_SetLevelDefinition = function () { return 'orig'; };
+  B.installBudgetHook(LC2);
+  const dinosAt = (seed, tables) => {
+    B.st.zombieBudgetRoll = true;
+    B.st.zombieBudget = Object.assign({}, tables, { goal: 2, dinos: true });
+    B.st.zombieSeed = seed;
+    B.syncBudgetConfig();
+    B.setLevelKey('cowboy23');
+    const lc = new LC2();
+    lc.currentLevelObjects = clone(fx.objects);
+    lc.module_SetLevelDefinition();
+    return B._apbModel(lc.currentLevelObjects).dinos.length;
+  };
+  const oldTables = Object.assign({}, V.tables);
+  delete oldTables.plants_lost_rule;
+  delete oldTables.dino_permille;     // an old seed sends neither
+  let oldSeed = -1, newDinos = 0;
+  for (let seed = 0; seed < 400; seed++) {
+    newDinos += dinosAt(seed, V.tables);
+    if (oldSeed < 0 && dinosAt(seed, oldTables)) oldSeed = seed;
+  }
+  if (newDinos) fail(`cowboy23 gained dinos ${newDinos} times on a new seed`);
+  else ok('cowboy23 (lose at most 1 plant) never gains dinos on a new seed');
+  if (oldSeed < 0) fail('no old seed gave cowboy23 dinos, so the parity case is not exercised');
+  else ok(`an old seed still rolls cowboy23 with its dinos (seed ${oldSeed}), as its generation did`);
+}
+
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nBUDGET ROLL CLIENT OK');
 process.exit(failed ? 1 : 0);

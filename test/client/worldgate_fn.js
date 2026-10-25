@@ -22,6 +22,10 @@ const LOC_LEVELS = {
 };
 
 const toasts = [], logs = [];
+// Stands in for the client's Modern Day check, which reads the goal tables;
+// worldProgress() only asks it about a pre-progressive Modern Day Key.
+let modernKeyHeld = false;
+function canAccessModernDay(){ return modernKeyHeld; }
 
 // ── copied verbatim from build_pvzge_ap.py ───────────────────────────────────
 function rebuildLevelGates(){
@@ -58,6 +62,19 @@ function levelBlockedBy(level){
   const have = unlocksHeld(gate.item);
   if(have >= gate.need) return null;
   return { world: gate.world, item: gate.item, need: gate.need, have: have };
+}
+
+const FREE_OPENING_WORLD = 'Ancient Egypt';
+function worldProgress(world){
+  const g = (st.worldGates || {})[world];
+  if(!g || !g.item) return null;
+  const free  = world === FREE_OPENING_WORLD ? 1 : 0;
+  const gated = (g.stretches || []).length;
+  let open = Math.min(unlocksHeld(g.item), gated) + free;
+  // A Modern Day Key from a seed rolled before it became progressive still
+  // opens the world, and canAccessModernDay() is what says so.
+  if(world === 'Modern Day' && !open && canAccessModernDay()) open = 1;
+  return { open: open, total: gated + free, item: g.item };
 }
 
 function installLevelGateHook(KL) {
@@ -134,7 +151,8 @@ function gates(){
   };
 }
 
-module.exports = { rebuildLevelGates, unlocksHeld, levelBlockedBy,
+module.exports = { rebuildLevelGates, unlocksHeld, levelBlockedBy, worldProgress,
+                   setModernKey: v => { modernKeyHeld = v; },
                    installLevelGateHook, reset, makeKeyListener, gates,
                    toasts, logs, LOC_LEVELS, window,
                    worldOf: item => unlockWorldOf[item],

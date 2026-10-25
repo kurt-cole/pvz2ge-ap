@@ -293,6 +293,8 @@ function _apbModel(objs) {
       return o && /^(WaveGeneratorProperties|DangerRoom\w+)$/.test(o.objclass || '');
     }),
     own_plants: seedbank.SelectionMethod === 'chooser' && !conveyor,
+    // A lost-plants star challenge, at any cap. See _apbDinosAllowed.
+    plants_lost: objs.some(function (o) { return o && o.objclass === 'StarChallengePlantsLostProps'; }),
     // Playable lanes. The tutorial lawn rolls its sod out a strip at a time
     // and disables the rest; nothing else in the game narrows the lawn.
     lanes: Math.min.apply(null, objs.map(function (o) {
@@ -316,7 +318,9 @@ function _apbTables(data) {
               excluded: Object.create(null), pools: {}, poolHp: {}, tiers: Object.create(null),
               hazard: Object.create(null), field: {}, graveHp: (data && data.grave_hp) || {},
               carry: Object.create(null), multilane: Object.create(null),
-                nullifier: Object.create(null) };
+              dinoPermille: (data && Array.isArray(data.dino_permille))
+                ? data.dino_permille : APB.DINO_LEVEL_PERMILLE_BY_GOAL,
+              nullifier: Object.create(null) };
   for (const c of names) {
     const z = zombies[c];
     t.hp[c] = z[0]; t.cost[c] = z[1]; t.tier[c] = z[2] || ''; t.excluded[c] = z[3] || '';
@@ -325,9 +329,9 @@ function _apbTables(data) {
     // none of them putting bodies into a neighbouring lane.
     t.carry[c] = z.length > 4 ? !!z[4] : true;
     t.multilane[c] = z.length > 5 ? !!z[5] : false;
-      // [user] Absent (a seed rolled before the flag) reads as no nullifiers,
-      // which is what that roll kept out of the opening levels: nothing extra.
-      t.nullifier[c] = z.length > 6 ? !!z[6] : false;
+    // [user] Absent (a seed rolled before the flag) reads as no nullifiers,
+    // which is what that roll kept out of the opening levels: nothing extra.
+    t.nullifier[c] = z.length > 6 ? !!z[6] : false;
   }
   for (const b of APB.BUCKETS) t.pools[b] = [];
   for (const c of names) {
@@ -406,6 +410,9 @@ function _apbAccept(over) {
 
 function _apbDinosAllowed(level) {
   if (level.bespoke || level.generated || level.dinos.length || !level.waves || !level.own_plants) return false;
+  // [user] A dino eats or throws plants, and a lost-plants star challenge
+  // (cowboy23: lose at most 1) counts every one against the player.
+  if (level.plants_lost) return false;
   if (level.stage.indexOf('Beach') >= 0) return APB.DINO_TEST_BEACH;
   if (level.stage.indexOf('Pirate') >= 0) return APB.DINO_TEST_PIRATE && level.planks.length > 0;
   return true;
@@ -598,7 +605,7 @@ function _apbAttempt(t, seed, levelId, level, attempt, scale, vanilla, pools,
 // roll_level(), as the Python. null for a level the roll never touches.
 function _apbRoll(t, seed, levelId, level, dinos, goal) {
   if (!level || level.bespoke || level.generated ||
-      APB.NEVER_ROLLED.indexOf(levelId) >= 0) return null;
+    APB.NEVER_ROLLED.indexOf(levelId) >= 0) return null;
   const graves = _apbGravesHp(t, level);
   const budget = _apbGroupsHp(t, level.groups) + _apbDynamicHp(t, level, {}) + graves;
   const vanilla = Object.create(null);
@@ -626,9 +633,9 @@ function _apbRoll(t, seed, levelId, level, dinos, goal) {
     for (const b of APB.BUCKETS) {
       const names = t.pools[b].filter(function (c) {
         return vanilla[c] || ((bring || !t.hazard[c])
-                                && (!opening || !t.nullifier[c])
-                                && (!narrow || !t.multilane[c])
-                                && (!ceiling || t.hp[c] <= ceiling));
+                              && (!opening || !t.nullifier[c])
+                              && (!narrow || !t.multilane[c])
+                              && (!ceiling || t.hp[c] <= ceiling));
       });
       pools[b] = [names, names.map(function (c) { return t.hp[c]; })];
     }
@@ -651,7 +658,7 @@ function _apbRoll(t, seed, levelId, level, dinos, goal) {
   let added = [];
   // The draw runs first whatever the answer, so a level that cannot gain
   // dinos still leaves the stream where generation expects it.
-  if (dinoRng.below(1000) < (APB.DINO_LEVEL_PERMILLE_BY_GOAL[goal] || 0) &&
+  if (dinoRng.below(1000) < (t.dinoPermille[goal] || 0) &&
       dinos && !opening && _apbDinosAllowed(level)) {
     added = _apbDinoEvents(dinoRng, level, budget);
   }
@@ -677,6 +684,7 @@ function _apbRoll(t, seed, levelId, level, dinos, goal) {
   }
   return { attempt: -1, vanilla: true, budget: budget, ratio: 1000,
                 groups: level.groups, dynamic: {}, dinos: [] };
+  
 }
 
 // Rewrite a list source's Zombies[] to the rolled composition. A rolled
@@ -807,6 +815,9 @@ function _apbPrepareLevel(lc) {
   // model as generation did. A silent hook is what made a diverging roll
   // look like a logic bug rather than a parity one.
   const model = _apbModel(objs);
+  // A seed rolled before the lost-plants rule had dinos there, and its
+  // generation planned for them: roll it the way it was rolled.
+  if (!cfg.data.plants_lost_rule) model.plants_lost = false;
   const plan = _apbRoll(_apbTableCache, cfg.seed, levelId, model, cfg.dinos, cfg.goal);
   const shape = ' key=' + JSON.stringify(levelId) + ' seed=' + cfg.seed +
       ' own=' + (model.own_plants ? 1 : 0) + ' waves=' + model.waves +

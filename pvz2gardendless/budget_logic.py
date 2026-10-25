@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from . import zombie_roll
 from .constants import (EGYPT_SUN_CUT, FIRE_AURA_PLANTS, FIRE_DAMAGE_PLANTS,
-                        JESTER_COUNTER_PLANTS,
+                        JESTER_COUNTER_PLANTS, PARASOL_BOUNCED_PLANTS,
                         POWER_DRAW_COUNT, SIDE_PATH_CHAIN, SIDE_PATH_REGIONS,
                         SIDE_PATH_UNLOCK, SPHERE_ONE_LEVELS, STARTER_PLANTS,
                         UNREACHABLE_LOCATIONS, WORLD_REGIONS, plants_clearing)
@@ -45,6 +45,14 @@ DINO_COUNTERS = ["Perfume-shroom"]
 # A runtime-generated level has no static roster to read hazards from, so it
 # keeps the counter its world asked for before the budget roll existed.
 GENERATED_WORLD_HAZARD = {"dark": "jester", "future": "far_future_flyer", "dino": "dino"}
+
+# [user] Parasol Zombie bounces lobbed shots, so a level fielding her where the
+# player brings the plants asks for an attacker that does not lob. Logic only:
+# deliberately NOT a zombie_roll HAZARD_TAG, which would change what the roll
+# (and the client's copy of it) may place, and so every existing seed's levels.
+# A conveyor or preset level is left to the client, whose belt and seed bank
+# hooks keep a plant she cannot bounce.
+PARASOL_ZOMBIES = frozenset({"lostcity_jane"})
 
 # The ceiling LEVEL_REQUIRED_DPS is already clamped to (the 12th best plant).
 POWER_CEILING = max(LEVEL_REQUIRED_DPS.values())
@@ -131,6 +139,11 @@ def non_fire_attackers(group) -> List[str]:
     return sorted(p for p in group if p in PLANT_LAWN_DPS and p not in FIRE_DAMAGE_PLANTS)
 
 
+def non_lobbed_attackers(group) -> List[str]:
+    """The members that deal damage Parasol Zombie does not bounce."""
+    return sorted(p for p in group if p in PLANT_LAWN_DPS and p not in PARASOL_BOUNCED_PLANTS)
+
+
 # ── where a level sits ───────────────────────────────────────────────────────
 
 _OPENING: Optional[Set[str]] = None
@@ -180,7 +193,15 @@ def compute(world) -> None:
     """Roll every built level and record plans and hazards on the world."""
     world.budget_mode = enabled(world)
     world.budget_plans, world.budget_hazards = {}, {}
+    world.parasol_levels = set()
     if not world.budget_mode:
+        # Vanilla zombies: only the Parasol rule is per level in this mode.
+        levels = zombie_roll.tables().model["levels"]
+        for loc in world.active_locations():
+            level = levels.get(loc.name)
+            if level is not None and not level["generated"] and level["own_plants"] and \
+                    zombie_roll.fielded(_vanilla_plan(loc.name)) & PARASOL_ZOMBIES:
+                world.parasol_levels.add(loc.name)
         return
     levels = zombie_roll.tables().model["levels"]
     goal = world.options.goal_type.value
@@ -199,6 +220,9 @@ def compute(world) -> None:
             hazards = zombie_roll.hazards(_vanilla_plan(loc.name))
         world.budget_plans[loc.name] = plan
         world.budget_hazards[loc.name] = hazards
+        if level["own_plants"] and (plan is not None or not level["generated"]) and \
+                zombie_roll.fielded(plan or _vanilla_plan(loc.name)) & PARASOL_ZOMBIES:
+            world.parasol_levels.add(loc.name)
 
 
 def level_required_dps(world, name: str) -> Optional[float]:
@@ -370,6 +394,13 @@ def client_tables(world) -> Dict[str, Any]:
         "field_names": {k: sorted(v) for k, v in t.field_names.items()},
         "goal": world.options.goal_type.value,
         "dinos": bool(getattr(world.options, "travelling_dinos", 0)),
+        # Seeds rolled before 2026-10-15 put dinos on lost-plants levels too.
+        # Their tables lack this key, and the client then ignores the
+        # challenge, so it still rolls what their generation rolled.
+        "plants_lost_rule": 1,
+        # The dino chance per goal. Sent, not shared as a client constant, so a
+        # re-derived chance cannot change the roll of a seed already played.
+        "dino_permille": list(zombie_roll.DINO_LEVEL_PERMILLE_BY_GOAL),
     }
 
 
@@ -446,6 +477,12 @@ def level_hazard_groups(world, name: str) -> List[Tuple[List[str], bool]]:
         need = power_need(world, name)
         pool = plants_clearing_at(*need) if need else ()
         groups.append((non_fire_attackers(pool) or non_fire_attackers(PLANT_LAWN_DPS), True))
+    if name in getattr(world, "parasol_levels", ()):
+        # [user] The same shape for Parasol Zombie: an attacker she does not
+        # bounce, strong enough for the level's power rule where it has one.
+        need = power_need(world, name)
+        pool = plants_clearing_at(*need) if need else ()
+        groups.append((non_lobbed_attackers(pool) or non_lobbed_attackers(PLANT_LAWN_DPS), True))
     # [user] Narrowed to the slot's power selection (power_logic.select), like
     # the loadout rules, so a counter group promotes the plants the seed chose
     # rather than every member.
@@ -453,10 +490,16 @@ def level_hazard_groups(world, name: str) -> List[Tuple[List[str], bool]]:
     return [(power_logic.narrow(world, g), promoted) for g, promoted in groups]
 
 
+def _hazard_levels(world) -> List[str]:
+    """Every built level a hazard rule may sit on, sorted."""
+    return sorted(set(getattr(world, "budget_hazards", {})) |
+                  set(getattr(world, "parasol_levels", ())))
+
+
 def slot_level_hazard_groups(world) -> Dict[str, List[List[str]]]:
     """{level name: [plant group, ...]} for every built level with a hazard rule."""
     out = {}
-    for name in sorted(getattr(world, "budget_hazards", {})):
+    for name in _hazard_levels(world):
         groups = [g for g, _ in level_hazard_groups(world, name)]
         if groups:
             out[name] = groups
@@ -466,7 +509,7 @@ def slot_level_hazard_groups(world) -> Dict[str, List[List[str]]]:
 def slot_hazard_floor_groups(world) -> List[List[str]]:
     """Distinct groups the item-pool floor must cover, one plant each."""
     seen, out = set(), []
-    for name in sorted(getattr(world, "budget_hazards", {})):
+    for name in _hazard_levels(world):
         for group, promoted in level_hazard_groups(world, name):
             if not promoted:
                 continue  # covered by the jester power plants below
@@ -493,7 +536,7 @@ def slot_hazard_plants(world) -> Set[str]:
         plants.update(getattr(world, "logic_jester_power", ()))
     # ...and the Jester class-power groups themselves: a rule names every
     # member, so every member has to be progression to count.
-    for name in sorted(getattr(world, "budget_hazards", {})):
+    for name in _hazard_levels(world):
         for group, promoted in level_hazard_groups(world, name):
             if not promoted:
                 plants.update(group)

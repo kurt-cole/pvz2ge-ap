@@ -34,6 +34,8 @@ LEVEL_MODEL["levels"][level id] =
     tides       carries a TidalChangeWaveActionProps
     planks      PiratePlankProperties PlankRows, [] when the level has none
     sun         {sky, no_producers, max_sun}: the level's sun economy
+    plants_lost the level's star challenge caps how many plants may be lost
+                (StarChallengePlantsLostProps, any cap, 0 included)
     groups      [{w, k, id, z: [[codename, count]], f?, rows?, grid?, rep?}]
                 w     1-based wave index
                 k     source kind, see KINDS
@@ -223,6 +225,10 @@ class Level:
             # [data] the game can add or remove planks mid-level.
             "planks": sorted(self.data("PiratePlankProperties").get("PlankRows") or []),
             "sun": self._sun(definition, seedbank),
+            # [user] A dino eats or throws plants, which a lost-plants
+            # challenge counts against the player, so these levels never gain
+            # one. The cap itself does not matter: 14 is as easily blown.
+            "plants_lost": bool(self.of_class("StarChallengePlantsLostProps")),
             "groups": self.groups,
             "dynamic": self._dynamic(),
             "dinos": self.dinos,

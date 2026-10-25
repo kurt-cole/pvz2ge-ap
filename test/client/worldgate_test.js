@@ -180,5 +180,40 @@ if (G.unlocksHeld(EGYPT) !== 3) fail('the unlock count was not read back');
 else if (G.unlocksHeld('nothing') !== 0) fail('an unheld item did not count 0');
 else ok('unlock counts are read per item, and default to 0');
 
+// ── the Unlocks tab's count ─────────────────────────────────────────────────
+// "Ancient Egypt 1/3" at the start of a run: Egypt is entered for free, so its
+// opening counts as open before any unlock arrives.
+const KEYED = {
+  ...G.gates(),
+  'Pirate Seas': { item: 'Progressive Pirate Seas', stretches: [['p1'], ['p2'], ['p3']] },
+  // Levels past the goal left out: the Late stretch is not in the seed.
+  'Wild West':   { item: 'Progressive Wild West',   stretches: [['w1'], ['w2']] },
+  'Modern Day':  { item: 'Progressive Modern Day',  stretches: [['m1'], ['m2'], ['m3']] },
+};
+const prog = w => { const p = G.worldProgress(w); return p ? p.open + '/' + p.total : null; };
+const expect = (w, want, why) => {
+  const got = prog(w);
+  if (got !== want) fail(`${w} read ${got}, expected ${want}`);
+  else ok(why);
+};
+G.reset({ worldGates: KEYED, worldUnlocks: {} });
+expect('Ancient Egypt', '1/3', 'a fresh run shows Ancient Egypt 1/3');
+expect('Pirate Seas', '0/3', 'a keyed world shows 0/3 before its first unlock');
+expect('Wild West', '0/2', 'a world with its last stretch trimmed counts out of 2');
+if (G.worldProgress('Lost City') !== null) fail('a world this seed does not gate got a count');
+else ok('a world outside the seed has no row');
+
+G.reset({ worldGates: KEYED,
+          worldUnlocks: held(EGYPT, 1, 'Progressive Pirate Seas', 3, 'Progressive Wild West', 5) });
+expect('Ancient Egypt', '2/3', 'one Egypt unlock reads 2/3');
+expect('Pirate Seas', '3/3', 'all three Pirate Seas unlocks read 3/3');
+expect('Wild West', '2/2', 'surplus copies cap at the stretches the seed has');
+
+// A Modern Day Key from before the world went progressive still opens it.
+G.reset({ worldGates: KEYED, worldUnlocks: {} });
+G.setModernKey(true);
+expect('Modern Day', '1/3', 'an old Modern Day Key counts as its opening');
+G.setModernKey(false);
+
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nWORLD GATES OK');
 process.exit(failed ? 1 : 0);

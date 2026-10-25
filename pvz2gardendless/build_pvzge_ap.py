@@ -294,7 +294,8 @@ window.electron = electron;
     // Lower-case l: levelController.ts exports 'levelController', not
     // 'LevelController'. module_SetConveyor lives on its prototype.
     'levelController': function(v) {
-      window._AP_levelController = v; installConveyorHook(v); installBudgetHook(v);
+      window._AP_levelController = v; installConveyorHook(v); installSeedBankHook(v);
+      installBudgetHook(v);
     },
     // Same module, different class. levelController.ts exports the Cocos
     // component (whose prototype carries module_SetConveyor) AND LevelPlay,
@@ -328,6 +329,8 @@ window.electron = electron;
     'mainScene': function(v) { installTitleGate(v); },
     // The world map, which owns the zen garden button.
     'worldMapScene': function(v) { installZenGardenBlock(v); },
+    // WorldMap.ts: the map component that owns the level islands.
+    'WorldMap': function(v) { installRewardIslandGate(v); },
   };
 
   // The zen garden is not modelled by the logic, so under AP there is no way
@@ -352,6 +355,49 @@ window.electron = electron;
       return Promise.resolve();
     };
     W._ap_hooked_zen = true;
+  }
+
+  // A world map's plant and upgrade islands -- the reward nodes between two
+  // levels -- count as finished when the player OWNS that plant or upgrade
+  // (LevelIsland.start), and a finished island unlocks the next one when the
+  // map loads (laterStart). Under AP the reward is an item, so receiving
+  // Wall-nut First Aid opened the level past its node with the level before it
+  // unbeaten, and beating that level with the item not yet received left the
+  // next one shut. Here a reward island is finished exactly when the level
+  // island before it is, which is the chain the vanilla game walks.
+  //
+  // LevelIsland is not exported, so its prototype is reached through the
+  // islands WorldMap holds: setIslandActive() runs after every island's start()
+  // and before the laterStart() pass, on each map load.
+  function _apRewardIslandFinished(island) {
+    let prev = island.formalIsland;
+    for (let hops = 0; prev && !prev._levelNode && hops < 8; hops++) prev = prev.formalIsland;
+    // No level before it (a map opening on a reward node): the game's own answer.
+    return (prev && prev._levelNode) ? !!prev._finished : island._finished;
+  }
+  function installRewardIslandGate(WM) {
+    if (!WM || !WM.prototype || WM._ap_hooked_islands) return;
+    const P = WM.prototype;
+    const origActive = P.setIslandActive;
+    if (typeof origActive !== 'function') return;
+    P.setIslandActive = function () {
+      try {
+        const isl = (this.levelIslands || [])[0];
+        const IP = isl && Object.getPrototypeOf(isl);
+        if (IP && !IP._ap_hooked_reward && typeof IP.laterStart === 'function') {
+          const origLater = IP.laterStart;
+          IP.laterStart = function () {
+            try {
+              if (this._plantOnDisplay || this._upgradeOnDisplay) this._finished = _apRewardIslandFinished(this);
+            } catch (e) { /* fall back to the game's own state */ }
+            return origLater.apply(this, arguments);
+          };
+          IP._ap_hooked_reward = true;
+        }
+      } catch (e) { /* never stop the map from drawing over this */ }
+      return origActive.apply(this, arguments);
+    };
+    WM._ap_hooked_islands = true;
   }
 
   // mainScene.update() writes currentPlayer.name into its label every
@@ -628,6 +674,52 @@ window.electron = electron;
     };
   }
 
+  // [user] A Frostbite level always hands out a fire plant, whether or not its
+  // belt is randomized -- vanilla iceage3, 10, 18, 25 and 33 and sweetpotato0
+  // ship belts with none, and iceage39 a preset seed bank with only Hot Potato.
+  // [user] A level fielding Jesters (its own or zombie shuffle's) always hands
+  // out a counter the same way: the swap keeps one where it can, and a belt or
+  // preset bank still without one gains Bonk Choy, which punches rather than
+  // shoots and so has nothing for him to juggle back. A Parasol Zombie's
+  // belt or bank likewise keeps a plant that does not lob, else gains
+  // Peashooter.
+  // Returns the plant to add for each such threat the level fields when none
+  // of `plants` (the codenames a belt or preset bank holds) answers it.
+  const AP_WARM_PLANT = 'firepeashooter';
+  const AP_THREAT_FALLBACK = { cold: AP_WARM_PLANT, jester: 'bonkchoy', parasol: 'peashooter' };
+  function _apMissingAnswers(lc, plants) {
+    const answers = window._AP_conveyorThreatAnswers || {};
+    const threats = (window._AP_levelThreats && window._AP_levelThreats(lc)) || [];
+    return threats.filter(k => AP_THREAT_FALLBACK[k] && answers[k] &&
+                               !plants.some(cn => answers[k].has(cn)))
+                  .map(k => AP_THREAT_FALLBACK[k]);
+  }
+
+  // The preset half of that rule. module_SetSeedBank sizes the bank to
+  // PresetPlantList, so Fire Peashooter arrives as one more slot and every
+  // plant the level chose stays. Copied, not written back, for the same
+  // reason as the conveyor: the level's properties are cached for a replay.
+  function installSeedBankHook(LC) {
+    if (!LC || LC._ap_hooked_seedbank || !LC.prototype || !LC.prototype.module_SetSeedBank) return;
+    const _origSetSeedBank = LC.prototype.module_SetSeedBank;
+    LC.prototype.module_SetSeedBank = function (props) {
+      let patched = props;
+      try {
+        const list = (props && props.SelectionMethod === 'preset' &&
+                      Array.isArray(props.PresetPlantList)) ? props.PresetPlantList : null;
+        const add = list && list.length ? _apMissingAnswers(this, list.map(e => e && e.PlantType)) : [];
+        if (add.length) {
+          patched = Object.assign(Object.create(Object.getPrototypeOf(props) || Object.prototype), props);
+          patched.PresetPlantList = list.concat(add.map(cn => ({ PlantType: cn })));
+        }
+      } catch (e) { /* never stop a level from loading over this */ }
+      const args = Array.prototype.slice.call(arguments);
+      args[0] = patched;
+      return _origSetSeedBank.apply(this, args);
+    };
+    LC._ap_hooked_seedbank = true;
+  }
+
   function installConveyorHook(LC) {
     if (!LC || LC._ap_hooked_conveyor || !LC.prototype || !LC.prototype.module_SetConveyor) return;
     const _origSetConveyor = LC.prototype.module_SetConveyor;
@@ -869,6 +961,28 @@ window.electron = electron;
           // roll its own output and the level would drift on every attempt.
           patched = Object.assign(Object.create(Object.getPrototypeOf(props) || Object.prototype), props);
           patched.InitialPlantList = newList;
+        }
+      } catch (e) { /* never stop a level from loading over this */ }
+      // Randomized or not, a Frostbite belt ends up holding a fire plant. The
+      // swap keeps or restores one where a slot can take it (the cold threat);
+      // a belt left with none gets Fire Peashooter added at the back, paced to
+      // arrive early (MinCount 1) and stop at four on the lawn. A belt dealing
+      // no plant at all (the bowling minigames' tool_projectile_* belts) is a
+      // minigame, not a lawn to keep warm, and is left alone. A Jester belt
+      // left without a counter gains Bonk Choy the same way.
+      try {
+        const cur = patched && Array.isArray(patched.InitialPlantList) ? patched.InitialPlantList : null;
+        const known = window._AP_conveyorKnown;
+        const add = cur && cur.some(e => e && known && known.has(e.PlantType))
+          ? _apMissingAnswers(this, cur.map(e => e && e.PlantType)) : [];
+        if (add.length) {
+          const weight = Math.round(cur.reduce((s, e) => s + (+(e && e.Weight) || 0), 0) / cur.length);
+          const warm = Object.assign(Object.create(Object.getPrototypeOf(patched) || Object.prototype), patched);
+          warm.InitialPlantList = cur.concat(add.map(cn => ({
+            PlantType: cn, Weight: Math.max(1, weight),
+            MinCount: 1, MinWeightFactor: 2, MaxCount: 4, MaxWeightFactor: 0,
+          })));
+          patched = warm;
         }
       } catch (e) { /* never stop a level from loading over this */ }
       const args = Array.prototype.slice.call(arguments);
@@ -1172,6 +1286,14 @@ window.electron = electron;
   const AP_THREAT_RES = {
     excavator: /\blostcity_excavator\b/,
     torch: /\b(?:abbot_torch|explorer|explorer_veteran|kongfu_torch|monk_torch)\b/,
+    // [user] Frostbite Caves' cold wind freezes plants, so its lawn is a threat
+    // in itself: every level staged on it hands out a fire plant.
+    cold: /RTID\(Iceage(?:Tutorial)?Stage@/,
+    // [user] Jesters juggle projectiles back, so a level fielding one keeps a
+    // counter on its belt. zombie_data.py's t3-land-jester tier.
+    jester: /\b(?:birthday_juggler|dark_juggler|foodfight_chefster)\b/,
+    // [user] Parasol Zombie bounces lobbed shots; see CONVEYOR_PARASOL_ANSWERS.
+    parasol: /\blostcity_jane\b/,
   };
   function _apLevelThreats(lc) {
     const out = [];
@@ -1248,6 +1370,8 @@ window.electron = electron;
     CAP_MULT: 3, CAP_ADD: 4, LEVEL_OK: [900, 1100], LEVEL_HARD: [750, 1333], CEILING_PERMILLE: 1500, TRIES: 8,
     SHARE_KNEE: 200, SHARE_HALF: 50, DINO_BUDGET_PERMILLE: 100,
     DINO_TYPES: ['ankylo', 'ptero', 'raptor', 'stego', 'tyranno'],
+    // What every seed before 2026-10-15 was rolled with. Newer seeds send
+    // their own as zombie_budget.dino_permille; see _apbTables.
     DINO_LEVEL_PERMILLE_BY_GOAL: [262, 232, 236],
     DINO_BANDS: [[4192, 500, 600, 3, [0, 7, 24, 8, 11]],
                  [5331, 500, 777, 3, [3, 12, 34, 10, 5]],
@@ -1491,6 +1615,8 @@ window.electron = electron;
         return o && /^(WaveGeneratorProperties|DangerRoom\w+)$/.test(o.objclass || '');
       }),
       own_plants: seedbank.SelectionMethod === 'chooser' && !conveyor,
+      // A lost-plants star challenge, at any cap. See _apbDinosAllowed.
+      plants_lost: objs.some(function (o) { return o && o.objclass === 'StarChallengePlantsLostProps'; }),
       // Playable lanes. The tutorial lawn rolls its sod out a strip at a time
       // and disables the rest; nothing else in the game narrows the lawn.
       lanes: Math.min.apply(null, objs.map(function (o) {
@@ -1514,6 +1640,8 @@ window.electron = electron;
                 excluded: Object.create(null), pools: {}, poolHp: {}, tiers: Object.create(null),
                 hazard: Object.create(null), field: {}, graveHp: (data && data.grave_hp) || {},
                 carry: Object.create(null), multilane: Object.create(null),
+                dinoPermille: (data && Array.isArray(data.dino_permille))
+                  ? data.dino_permille : APB.DINO_LEVEL_PERMILLE_BY_GOAL,
                 nullifier: Object.create(null) };
     for (const c of names) {
       const z = zombies[c];
@@ -1604,6 +1732,9 @@ window.electron = electron;
 
   function _apbDinosAllowed(level) {
     if (level.bespoke || level.generated || level.dinos.length || !level.waves || !level.own_plants) return false;
+    // [user] A dino eats or throws plants, and a lost-plants star challenge
+    // (cowboy23: lose at most 1) counts every one against the player.
+    if (level.plants_lost) return false;
     if (level.stage.indexOf('Beach') >= 0) return APB.DINO_TEST_BEACH;
     if (level.stage.indexOf('Pirate') >= 0) return APB.DINO_TEST_PIRATE && level.planks.length > 0;
     return true;
@@ -1849,7 +1980,7 @@ window.electron = electron;
     let added = [];
     // The draw runs first whatever the answer, so a level that cannot gain
     // dinos still leaves the stream where generation expects it.
-    if (dinoRng.below(1000) < (APB.DINO_LEVEL_PERMILLE_BY_GOAL[goal] || 0) &&
+    if (dinoRng.below(1000) < (t.dinoPermille[goal] || 0) &&
         dinos && !opening && _apbDinosAllowed(level)) {
       added = _apbDinoEvents(dinoRng, level, budget);
     }
@@ -2006,6 +2137,9 @@ window.electron = electron;
     // model as generation did. A silent hook is what made a diverging roll
     // look like a logic bug rather than a parity one.
     const model = _apbModel(objs);
+    // A seed rolled before the lost-plants rule had dinos there, and its
+    // generation planned for them: roll it the way it was rolled.
+    if (!cfg.data.plants_lost_rule) model.plants_lost = false;
     const plan = _apbRoll(_apbTableCache, cfg.seed, levelId, model, cfg.dinos, cfg.goal);
     const shape = ' key=' + JSON.stringify(levelId) + ' seed=' + cfg.seed +
         ' own=' + (model.own_plants ? 1 : 0) + ' waves=' + model.waves +
@@ -2041,7 +2175,7 @@ window.electron = electron;
   const _origRegister = System.register.bind(System);
   System.register = function(name, deps, declare) {
     if (typeof name === 'string' &&
-        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity|levelController|Zombies|KeyListener|mainScene|worldMapScene)\.ts/.test(name)) {
+        /(?:PlayerProperties|UI|CoinCount|GemCount|Square|StoreCommodity|levelController|Zombies|KeyListener|mainScene|worldMapScene|WorldMap)\.ts/.test(name)) {
       const _origDeclare = declare;
       declare = function(_export, _context) {
         return _origDeclare(function(exportName, value) {
@@ -2469,9 +2603,57 @@ window.electron = electron;
     'coldsnapdragon', 'iceburg', 'iceweed', 'missiletoe', 'snowdrop', 'snowpea',
     'wintermelon',
   ]);
+  // [user] Fire plants for a Frostbite lawn: FIRE_DAMAGE_PLANTS in
+  // constants.py, which takes in every warming plant. Hot Potato is not one,
+  // as there: it thaws a single plant once.
+  const CONVEYOR_COLD_ANSWERS = new Set([
+    'firegourd', 'firepeashooter', 'ghostpepper', 'hotdate', 'inferno',
+    'jackolantern', 'jalapeno', 'lavaguava', 'meteorflower', 'pepperpult',
+    'pyrevine', 'snapdragon', 'torchwood', 'wasabiwhip',
+  ]);
+  // [user] Jester counters: JESTER_COUNTER_PLANTS in constants.py, the same
+  // 42 the generation logic draws this slot's counter from.
+  const CONVEYOR_JESTER_ANSWERS = new Set([
+    'bambooshoot', 'banana', 'bonkchoy', 'buttercup', 'cactus',
+    'celerystalker', 'cherry_bomb', 'chilibean', 'chillypepper', 'chomper',
+    'coldsnapdragon', 'doomshroom', 'electriccurrant', 'electricpeashooter',
+    'endurian', 'escaperoot', 'fumeshroom', 'ghostpepper', 'gloomvine',
+    'grapeshot', 'hollyknight', 'iceweed', 'inferno', 'jalapeno', 'laser_bean',
+    'lavaguava', 'lightningreed', 'missiletoe', 'parsnip', 'phatbeet',
+    'potatomine', 'primalpotatomine', 'primalwallnut', 'pyrevine',
+    'shadowshroom', 'snapdragon', 'snappea', 'spikerock', 'spikeweed',
+    'squash', 'torchwood', 'wasabiwhip',
+  ]);
+  // [user] Parasol Zombie (lostcity_jane) bounces lobbed shots: her sheet's
+  // BounceableProjectiles are Cabbage-, Kernel-, Melon- and Pepper-pult, Winter
+  // Melon, Akee, Spore-shroom, Blooming Heart, Dusk Lobber, Apple Mortar, Sling
+  // Pea and Blastberry. An answer is any belt attacker that does not lob one of
+  // those and deals damage (no Chard Guard, Sap-fling, Explode-O-Nut), or a
+  // killing instant.
+  const CONVEYOR_PARASOL_ANSWERS = new Set([
+    'bambooshoot', 'bamboozle', 'banana', 'bloomerang', 'bonkchoy',
+    'bowlingbulb', 'buttercup', 'cactus', 'cantaloupe', 'celerystalker',
+    'cherry_bomb', 'chilibean', 'chomper', 'citron', 'coconutcannon',
+    'coldsnapdragon', 'cranjelly', 'dandelion', 'darkmatterdragonfruit',
+    'doomshroom', 'electriccurrant', 'electricpeashooter', 'endurian',
+    'firegourd', 'firepeashooter', 'fumeshroom', 'gatling', 'ghostpepper',
+    'gloomshroom', 'gloomvine', 'grapeshot', 'grimrose', 'guacodile',
+    'homingthistle', 'hotdate', 'hypnoshroom', 'iceweed', 'jackolantern',
+    'jalapeno', 'laser_bean', 'lavaguava', 'lightningreed', 'lychee',
+    'magnifyinggrass', 'meteorflower', 'missiletoe', 'nightshade', 'parsnip',
+    'peanut', 'peapod', 'peashooter', 'phatbeet', 'potatomine',
+    'primalpeashooter', 'primalpotatomine', 'puffshroom', 'pvine',
+    'redstinger', 'repeater', 'scaredyshroom', 'seashroom', 'shadowshroom',
+    'shootingstarfruit', 'skyshooter', 'snapdragon', 'snowdrop', 'snowpea',
+    'spikerock', 'spikeweed', 'splitpea', 'squash', 'starfruit', 'strawburst',
+    'tanglekelp', 'threepeater', 'torchwood', 'turkeypult', 'vamporcini',
+  ]);
   window._AP_conveyorThreatAnswers = {
     excavator: CONVEYOR_EXCAVATOR_ANSWERS,
     torch: CONVEYOR_TORCH_ANSWERS,
+    cold: CONVEYOR_COLD_ANSWERS,
+    jester: CONVEYOR_JESTER_ANSWERS,
+    parasol: CONVEYOR_PARASOL_ANSWERS,
   };
 
   // Conveyor randomization pool, also exposed for the hook in that IIFE.
@@ -4251,8 +4433,15 @@ window.electron = electron;
   // locIds is the GAME's table, not the slot's: it lists all 40 shop entries
   // while a seed builds 34, and scouting one of the other six is fatal --
   // 'No location 3517167295 for player 1' and the connection is dropped.
+  //
+  // Nothing goes out until this session's Connected has filled slotLocationIds.
+  // The DataPackage reply usually lands BEFORE Connected (it is requested
+  // first), and slotHasLocation() reads an empty table as "allow", so scouting
+  // from there sent all 40 entries and got the client dropped on every first
+  // connect; the retry only worked because the table survived the close.
+  // Connected calls this itself once the table is in.
   function scoutShopLocations(){
-    if(!st.shopsanity) return;
+    if(!st.shopsanity || !slotLocationIds.size) return;
     const ids = Object.keys(locIds)
       .filter(n => n.startsWith('Shop: '))
       .map(n => locIds[n])
@@ -4303,6 +4492,9 @@ window.electron = electron;
       return;
     }
     if(ws){try{ws.onclose=null;ws.close();}catch(e){}ws=null;}
+    // The last session's table may belong to another seed; this one's arrives
+    // with Connected. See scoutShopLocations().
+    slotLocationIds = new Set();
     setStatus('Connecting…','#fa0');
     // The address box takes a bare host:port, so the client picks the scheme.
     // Hosted rooms -- multiworld.gg, archipelago.gg -- are TLS only, and answer
@@ -4327,12 +4519,17 @@ window.electron = electron;
       ws.onclose=()=>{
         const wasActive=sessionActive;
         conn=false;sessionActive=false;goalSent=false;ws=null;setStatus('Disconnected','#f44');
-        // A live session dropped mid-game: back to the title screen,
-        // reconnecting from there. See returnToMenu(). On the title screen
-        // there is nothing to leave, so it retries in place like a failed
-        // attempt; the reload lands on the title screen too, so a session
-        // that keeps dropping cannot reload in a loop.
-        if(wasActive && inGame()){ returnToMenu(true); return; }
+        // A live session dropped mid-game: a grace period of quick retries,
+        // then back to the title screen, reconnecting from there. See
+        // startGrace() and returnToMenu(). On the title screen there is
+        // nothing to leave, so it retries in place like a failed attempt; the
+        // reload lands on the title screen too, so a session that keeps
+        // dropping cannot reload in a loop.
+        if(wasActive && inGame()){ startGrace(); connect(); return; }
+        // A retry inside the grace period failed. The scheme is the one the
+        // session just used, so no probe, and a short wait: the backoff would
+        // spend the whole grace period on one attempt.
+        if(graceTimer){ rtimer=setTimeout(connect,GRACE_RETRY_MS); return; }
         // Closed without ever opening, on an address that named no scheme: the
         // OTHER scheme is worth one immediate try before the backoff loop, so a
         // plain-ws server is not stuck behind a 5s wait on every attempt. "The
@@ -4357,6 +4554,37 @@ window.electron = electron;
       };
       ws.onerror=()=>{};
     } catch(e) { setStatus('Connection failed: '+e.message,'#f44'); }
+  }
+
+  // ── Disconnect grace period ───────────────────────────────────────────────
+  // A session that drops mid-game gets GRACE_SECS to come back before the
+  // player is sent to the title screen, so a blip (a server restart, a wifi
+  // hiccup) no longer throws away the level in progress. The level keeps
+  // running meanwhile: checks finished in the gap are still found by the poll
+  // once Connected lands, and Connected re-sends everything in st.checked.
+  const GRACE_SECS = 10, GRACE_RETRY_MS = 2000;
+  let graceTimer = null;
+  function startGrace(){
+    clearTimeout(rtimer);
+    graceTick(GRACE_SECS);
+  }
+  // One countdown step a second, shown on the toast (logged only the first
+  // time, so the panel log is not ten lines of countdown).
+  function graceTick(left){
+    if(left<=0){
+      graceTimer=null; clearTimeout(rtimer);
+      if(ws){try{ws.onclose=null;ws.close();}catch(e){}ws=null;}
+      returnToMenu(true);
+      return;
+    }
+    toast('Connection lost: reconnecting… '+left+'s','#fa0',left<GRACE_SECS);
+    graceTimer=setTimeout(()=>graceTick(left-1),1000);
+  }
+  // Stops the countdown, if one is running; true when it was.
+  function endGrace(){
+    if(!graceTimer) return false;
+    clearTimeout(graceTimer); graceTimer=null;
+    return true;
   }
 
   function send(pkts){if(ws&&ws.readyState===1)ws.send(JSON.stringify(pkts));}
@@ -4407,6 +4635,7 @@ window.electron = electron;
         break;
       case 'Connected':
         conn=true;sessionActive=true;setStatus('✓ '+cfg.slot,'#4f4');
+        if(endGrace()) toast('✓ Reconnected','#4f4');
         syncSaveName(true);
         apTeam   = pkt.team || 0;
         apSlotId = pkt.slot || 0;
@@ -4705,7 +4934,11 @@ window.electron = electron;
       if(!st.worldUnlocks) st.worldUnlocks = {};
       st.worldUnlocks[name] = (st.worldUnlocks[name]||0) + 1;
       svSt();
-      toast('🔓 '+unlockedWorld+' '+st.worldUnlocks[name]+'/2','#4f4');
+      // The same count the Unlocks tab shows. This used to be a fixed "/2",
+      // which was only ever right for Ancient Egypt's unlocks.
+      const p = worldProgress(unlockedWorld);
+      toast('🔓 '+unlockedWorld+(p ? ' '+p.open+'/'+p.total : ''),'#4f4');
+      renderUnlocks();
       return;
     }
     if(ITEM_PLANT[name]!==undefined){ toast('🌱 '+name,'#4f4'); return; }
@@ -4743,6 +4976,7 @@ window.electron = electron;
       const label = upgradeCns.length > 1
         ? name + ' (' + held + '/' + upgradeCns.length + ')' : name;
       toast('⭐ '+label,'#a78bfa');
+      renderUnlocks();
       return;
     }
     // Currency fillers (e.g. "500 Coins", "20 Gems"). Only the cumulative
@@ -5443,6 +5677,25 @@ window.electron = electron;
     return { world: gate.world, item: gate.item, need: gate.need, have: have };
   }
 
+  // How far a world is open, in stretches: "Ancient Egypt 1/3" at the start
+  // of a run. world_gates lists only the stretches that need an unlock, so a
+  // world entered for free (Ancient Egypt, where the run starts) has one more
+  // stretch than its gate shows, already open. A stretch the seed trimmed
+  // (levels past the goal left out) is not in the gate and so not in the
+  // total. null for a world this seed does not gate.
+  const FREE_OPENING_WORLD = 'Ancient Egypt';
+  function worldProgress(world){
+    const g = (st.worldGates || {})[world];
+    if(!g || !g.item) return null;
+    const free  = world === FREE_OPENING_WORLD ? 1 : 0;
+    const gated = (g.stretches || []).length;
+    let open = Math.min(unlocksHeld(g.item), gated) + free;
+    // A Modern Day Key from a seed rolled before it became progressive still
+    // opens the world, and canAccessModernDay() is what says so.
+    if(world === 'Modern Day' && !open && canAccessModernDay()) open = 1;
+    return { open: open, total: gated + free, item: g.item };
+  }
+
   // How many of this seed's worlds are complete, and whether that is the win.
   // One goal location per world; which level it is comes from the goal_type
   // option, and generation has already dropped the worlds this seed left out.
@@ -5481,6 +5734,7 @@ window.electron = electron;
     // poll: this is the moment the goal is met, and a poll is two seconds away.
     maybeSendGoal();
     updateGoalTracker();
+    renderGoals();
     return true;
   }
 
@@ -5501,6 +5755,36 @@ window.electron = electron;
     let done = 0;
     for(const l of goalLocs) if(goalPlayed(l)) done++;
     return { done: done, need: worldsReq, total: goalLocs.length };
+  }
+
+  // The Goal tab's rows: one per goal level, in game order. done follows the
+  // counter above it -- a McGuffin seed counts the location (its McGuffin is
+  // locked there and arrives the moment it is checked), an older seed counts
+  // the level actually beaten, exactly as goalProgress() does. A level not
+  // yet done is locked when the game would refuse to start it.
+  const GOAL_WORLD_PREFIX = [
+    ['egypt','Ancient Egypt'], ['pirate','Pirate Seas'], ['cowboy','Wild West'],
+    ['future','Far Future'], ['dark','Dark Ages'], ['beach','Big Wave Beach'],
+    ['iceage','Frostbite Caves'], ['lostcity','Lost City'], ['kongfu','Kongfu Temple'],
+    ['neon','Neon Mixtape Tour'], ['dino','Jurassic Marsh'], ['sky','Aerial Fortress'],
+    ['modern','Modern Day'],
+  ];
+  function goalChecklist(){
+    const rows = [];
+    GOAL_WORLD_PREFIX.forEach(([prefix, world], order) => {
+      for(const loc of (st.goalLocs || [])){
+        if(loc.indexOf(prefix) !== 0) continue;
+        const num = /(\d+)$/.exec(loc);
+        const label = /zomboss/.test(loc) ? 'Zomboss' : (num ? 'Level ' + num[1] : loc);
+        const done = st.goalItem ? isChecked(loc) : goalPlayed(loc);
+        const level = LOC_LEVELS[loc];
+        const locked = !done && (
+          (world === 'Modern Day' && !canAccessModernDay()) ||
+          !!(level && levelBlockedBy(level)));
+        rows.push({ world: world, label: label, state: done ? 'done' : (locked ? 'locked' : 'open'), order: order });
+      }
+    });
+    return rows;
   }
 
   function goalMet(){
@@ -5554,6 +5838,8 @@ window.electron = electron;
       // only thing that moves it, and that is what the poll is watching for.
       updateGoalTracker();
     }
+    renderUnlocks();
+    renderGoals();
     rebuildAPSave();
     // The level-start hook, retried until it takes: KeyListener.goToLevel is
     // assigned while the module runs, so the export can be captured before it
@@ -5600,7 +5886,7 @@ window.electron = electron;
   }
 
   // ── UI ────────────────────────────────────────────────────────────────────
-  let statusEl=null, logEl=null, goalEl=null, panel=null, logs=[];
+  let statusEl=null, logEl=null, goalEl=null, unlocksEl=null, goalsEl=null, panel=null, logs=[];
 
   function buildUI(){
     const s=document.createElement('style');
@@ -5635,6 +5921,33 @@ window.electron = electron;
       #ap-goal.ap-goal-done{border-color:#059669;background:#052e1a}
       #ap-log{margin-top:8px;max-height:100px;overflow-y:auto;background:#020617;
         border-radius:5px;padding:6px;font-size:10px;color:#64748b;line-height:1.5}
+      #ap-tabs{display:flex;gap:4px;margin:2px 0 4px;border-bottom:1px solid #1e293b}
+      #ap-panel button.ap-tabbtn{background:none;color:#64748b;border:none;
+        border-bottom:2px solid transparent;border-radius:0;padding:4px 10px;margin:0}
+      #ap-panel button.ap-tabbtn:hover{background:none;color:#e2e8f0}
+      #ap-panel button.ap-tabbtn.ap-on{color:#6ee7b7;border-bottom-color:#059669}
+      #ap-unlocks,#ap-goals{max-height:360px;overflow-y:auto}
+      #ap-goals .ap-sum{margin:4px 0 8px;padding:6px 8px;background:#020617;border-radius:5px;
+        border:1px solid #1e293b}
+      #ap-goals .ap-sum b{color:#6ee7b7;font-size:13px}
+      #ap-goals .ap-sum.ap-full{border-color:#059669;background:#052e1a}
+      .ap-row .ap-lvl{color:#64748b;font-size:11px}
+      .ap-mark{width:16px;text-align:center}
+      .ap-row.ap-done .ap-mark{color:#6ee7b7}
+      .ap-row.ap-done .ap-name{color:#6ee7b7}
+      .ap-row.ap-locked .ap-name{color:#64748b}
+      #ap-unlocks h4,#ap-goals h4{margin:10px 0 4px;color:#94a3b8;font-size:11px;font-weight:normal;
+        text-transform:uppercase;letter-spacing:.08em}
+      #ap-unlocks h4:first-child,#ap-goals h4:first-child{margin-top:4px}
+      .ap-row{display:flex;align-items:center;gap:8px;padding:3px 0;color:#e2e8f0}
+      .ap-row .ap-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .ap-row.ap-none .ap-name{color:#64748b}
+      .ap-row.ap-full .ap-name{color:#6ee7b7}
+      .ap-pips{display:flex;gap:2px}
+      .ap-pip{width:8px;height:8px;border-radius:2px;background:#1e293b;border:1px solid #334155}
+      .ap-pip.ap-lit{background:#059669;border-color:#10b981}
+      .ap-count{width:30px;text-align:right;color:#94a3b8;font-variant-numeric:tabular-nums}
+      .ap-empty{color:#64748b;padding:6px 0}
       #ap-toast{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);
         z-index:99999;background:#0f172a;color:#e2e8f0;border:1px solid #059669;
         border-radius:8px;padding:8px 20px;font:13px monospace;
@@ -5649,6 +5962,10 @@ window.electron = electron;
 
     panel=document.createElement('div');panel.id='ap-panel';
     panel.innerHTML=`<div style="font-weight:bold;font-size:13px;color:#6ee7b7;margin-bottom:4px">🏝 Archipelago</div>
+      <div id=ap-tabs><button class=ap-tabbtn data-tab=conn>Connection</button><button class=ap-tabbtn data-tab=unlocks>Unlocks</button><button class=ap-tabbtn data-tab=goal>Goal</button></div>
+      <div id=ap-unlocks></div>
+      <div id=ap-goals></div>
+      <div id=ap-conn>
       <label>Server<br><input id=ap-srv placeholder="localhost:38281"></label>
       <label>Slot Name<br><input id=ap-slt placeholder="Player"></label>
       <label>Password<br><input id=ap-pwd type=password placeholder="(optional)"></label>
@@ -5656,8 +5973,14 @@ window.electron = electron;
       <button id=ap-go>Connect</button><button id=ap-disc>Disconnect</button><button id=ap-reset>Reset</button>
       <div id=ap-status style="color:#64748b">Not connected</div>
       <div id=ap-goal></div>
-      <div id=ap-log></div>`;
+      <div id=ap-log></div>
+      </div>`;
     document.body.appendChild(panel);
+
+    unlocksEl=document.getElementById('ap-unlocks');
+    goalsEl=document.getElementById('ap-goals');
+    for(const b of panel.querySelectorAll('.ap-tabbtn')) b.onclick=()=>showTab(b.dataset.tab);
+    showTab(cfg.tab||'conn');
 
     statusEl=document.getElementById('ap-status');
     goalEl=document.getElementById('ap-goal');
@@ -5686,7 +6009,9 @@ window.electron = electron;
     document.getElementById('ap-disc').onclick=()=>{
       clearTimeout(rtimer);
       if(ws){ws.onclose=null;ws.close();ws=null;}
-      const wasActive=sessionActive;
+      // Mid-grace the session flags are already down, but the player is
+      // still in a level that was live: leave it the same way.
+      const wasActive=sessionActive||endGrace();
       conn=false;sessionActive=false;goalSent=false;setStatus('Disconnected','#f44');
       if(wasActive) returnToMenu(false);
     };
@@ -5757,8 +6082,102 @@ window.electron = electron;
         ? '<span class="ap-goal-sub">goal complete</span>' : '');
   }
 
-  function toast(msg,color){
-    pushLog(msg);
+  // ── Unlocks tab ───────────────────────────────────────────────────────────
+  // A checklist of what this run has opened: each world's stretches as pips,
+  // "Ancient Egypt ■□□ 1/3", then the upgrades when they are shuffled. Reads
+  // the same worldProgress() the gates and the unlock toast use, so the tab
+  // cannot claim a stretch is open that the game would refuse.
+  // Game order, which world_gates (sorted by name) does not keep.
+  const UNLOCK_WORLD_ORDER = ['Ancient Egypt'].concat(
+    Object.keys(WORLD_KEY_MAP).map(k => k.replace(/ Key$/, '')));
+
+  function showTab(tab){
+    if(tab !== 'unlocks' && tab !== 'goal') tab = 'conn';
+    if(cfg.tab !== tab){ cfg.tab = tab; svCfg(); }
+    for(const b of panel.querySelectorAll('.ap-tabbtn'))
+      b.classList.toggle('ap-on', b.dataset.tab === tab);
+    document.getElementById('ap-conn').style.display = tab === 'conn' ? '' : 'none';
+    unlocksEl.style.display = tab === 'unlocks' ? '' : 'none';
+    goalsEl.style.display = tab === 'goal' ? '' : 'none';
+    renderUnlocks();
+    renderGoals();
+  }
+
+  function unlockRow(name, open, total){
+    const cls = open >= total ? ' ap-full' : (open ? '' : ' ap-none');
+    let pips = '';
+    for(let i = 0; i < total; i++)
+      pips += '<span class="ap-pip' + (i < open ? ' ap-lit' : '') + '"></span>';
+    return '<div class="ap-row' + cls + '"><span class=ap-name>' + name +
+           '</span><span class=ap-pips>' + pips + '</span><span class=ap-count>' +
+           open + '/' + total + '</span></div>';
+  }
+
+  // Only redraws while the tab is showing; showTab() draws it on the way in.
+  function renderUnlocks(){
+    if(!unlocksEl || unlocksEl.style.display === 'none') return;
+    const gates = st.worldGates || {};
+    const worlds = UNLOCK_WORLD_ORDER.filter(w => gates[w])
+      .concat(Object.keys(gates).filter(w => UNLOCK_WORLD_ORDER.indexOf(w) < 0));
+    let html = '';
+    for(const w of worlds){
+      const p = worldProgress(w);
+      if(p) html += unlockRow(w, p.open, p.total);
+    }
+    html = html ? '<h4>Worlds</h4>' + html
+                : '<div class=ap-empty>' + (playAllowed()
+                    ? 'This seed has no progressive world unlocks.'
+                    : 'Connect to a slot to see its unlocks.') + '</div>';
+    if(st.shuffleUpgrades){
+      const items = st.upgradeItems || {};
+      const names = Object.keys(items).sort();
+      if(names.length){
+        html += '<h4>Upgrades</h4>';
+        for(const n of names){
+          const total = (items[n] || []).length || 1;
+          const have  = Math.min((st.upgradeCounts || {})[n] || 0, total);
+          html += unlockRow(n, have, total);
+        }
+      }
+    }
+    if(unlocksEl.innerHTML !== html) unlocksEl.innerHTML = html;
+  }
+
+  const GOAL_HEADING = {
+    world_key:  'World Key levels',
+    zomboss:    'Zomboss fights',
+    completion: 'Final levels',
+  };
+  const GOAL_MARK = { done: '✓', open: '○', locked: '🔒' };
+
+  // The same count as the #ap-goal line on the Connection tab, then the list.
+  function renderGoals(){
+    if(!goalsEl || goalsEl.style.display === 'none') return;
+    const rows = goalChecklist();
+    let html;
+    if(!rows.length){
+      html = '<div class=ap-empty>' + (playAllowed()
+        ? 'This seed has no goal levels.'
+        : 'Connect to a slot to see its goal.') + '</div>';
+    } else {
+      const g = goalProgress();
+      const label = st.goalItemPlural || GOAL_LABEL[st.goalType] || GOAL_LABEL.world_key;
+      const met = g.need && g.done >= g.need;
+      html = '<div class="ap-sum' + (met ? ' ap-full' : '') + '"><b>' +
+             g.done + '/' + g.need + '</b> ' + label +
+             (met ? ' · goal complete' : '') + '</div>' +
+             '<h4>' + (GOAL_HEADING[st.goalType] || GOAL_HEADING.world_key) + '</h4>';
+      for(const r of rows)
+        html += '<div class="ap-row ap-' + r.state + '"><span class=ap-name>' + r.world +
+                '</span><span class=ap-lvl>' + r.label + '</span><span class=ap-mark>' +
+                GOAL_MARK[r.state] + '</span></div>';
+    }
+    if(goalsEl.innerHTML !== html) goalsEl.innerHTML = html;
+  }
+
+  // quiet: show it without adding a line to the panel log.
+  function toast(msg,color,quiet){
+    if(!quiet) pushLog(msg);
     const el=document.getElementById('ap-toast');if(!el)return;
     el.textContent=msg;el.style.color=color||'#e2e8f0';el.style.opacity='1';
     clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.style.opacity='0',3500);
@@ -6284,11 +6703,17 @@ def check_for_updates(build_dir, log):
     # Even with everything above current, the packaged app can predate the
     # patch: electron-builder bakes the client into the executable, so editing
     # tmpPatch.js alone changes nothing the player runs.
+    # The Windows unpacked folder comes first; the portable exe after it is
+    # what builds before WIN_TARGET left. "PvZ Gardendless AP.sh" is the Linux
+    # unpacked-build launcher, checked last: it is the fallback for machines
+    # that cannot mount an AppImage.
     exe = None
-    # "PvZ Gardendless AP.sh" is the Linux unpacked-build launcher, checked
-    # last: it is the fallback for machines that cannot mount an AppImage.
-    for name in ("PvZ Gardendless AP.exe", "PvZ Gardendless AP.dmg",
-                 "PvZ Gardendless AP.AppImage", "PvZ Gardendless AP.sh"):
+    win_dir = os.path.join(build_dir, WIN_APP_DIR)
+    if os.path.isdir(win_dir):
+        exe = _find_unpacked_binary(win_dir)
+    for name in ([] if exe else
+                 (WIN_PORTABLE, "PvZ Gardendless AP.dmg",
+                  "PvZ Gardendless AP.AppImage", "PvZ Gardendless AP.sh")):
         p = os.path.join(build_dir, name)
         if os.path.isfile(p):
             exe = p
@@ -6337,6 +6762,13 @@ def check_for_updates(build_dir, log):
 GAME_DOCS_MARKER = "AP_GAME_DOCS"
 GAME_DOCS_GLOB   = "pvzge_web/docs/**/*"
 PACKAGE_STAMP    = "ap_package.json"
+
+# Windows ships electron-builder's unpacked tree, copied into this folder of
+# the build directory. The portable exe it replaces (PvZ Gardendless AP.exe)
+# is removed when the folder is installed.
+WIN_TARGET   = "dir"
+WIN_APP_DIR  = "PvZ Gardendless AP"
+WIN_PORTABLE = "PvZ Gardendless AP.exe"
 
 _UPSTREAM_LOADFILE = re.compile(
     r"""win\.loadFile\((['"])pvzge_web/docs/index\.html\1\);""")
@@ -6522,7 +6954,7 @@ def _ensure_electron_binary(electron_dir, log):
 
 
 def _find_unpacked_binary(unpacked_dir, package_json_path=None):
-    """The app executable inside electron-builder's unpacked output.
+    """The app executable inside electron-builder's unpacked output (Linux or Windows).
 
     electron-builder names it after package.json's "name" (or "productName"
     when set), so read that first and only fall back to scanning.
@@ -6534,9 +6966,10 @@ def _find_unpacked_binary(unpacked_dir, package_json_path=None):
             for key in ("productName", "name"):
                 named = pkg.get(key)
                 if named:
-                    p = os.path.join(unpacked_dir, named)
-                    if os.path.isfile(p) and os.access(p, os.X_OK):
-                        return p
+                    for p in (os.path.join(unpacked_dir, named),
+                              os.path.join(unpacked_dir, named + ".exe")):
+                        if os.path.isfile(p) and os.access(p, os.X_OK):
+                            return p
         except (OSError, ValueError):
             pass
 
@@ -6550,6 +6983,8 @@ def _find_unpacked_binary(unpacked_dir, package_json_path=None):
             continue
         if entry in _ELECTRON_HELPERS:
             continue
+        if entry.lower().endswith(".exe"):  # win-unpacked holds only the app's
+            return p
         if entry.endswith((".so", ".bin", ".pak", ".dat", ".json", ".sh", ".txt", ".html")):
             continue
         if ".so." in entry:  # libvulkan.so.1 and friends
@@ -6621,6 +7056,77 @@ def _write_linux_launcher(build_dir, unpacked_dir, log, package_json_path=None):
     log(f"  Unpacked build: {unpacked_dir}")
     log(f"  Launcher:       {launcher}")
     return launcher
+
+
+def _install_windows_app(build_dir, unpacked_dir, log, package_json_path=None):
+    """Copy the unpacked Windows build into the build folder; return its exe.
+
+    Copied rather than run from release/, which electron-builder rewrites on
+    every package. The old tree is renamed aside first: Windows refuses that
+    while the game is running from it, which is the signal to stop before
+    anything is half replaced. Returns None (reason logged) on failure.
+    """
+    dest = os.path.join(build_dir, WIN_APP_DIR)
+    old = dest + ".old"
+    shutil.rmtree(old, ignore_errors=True)
+    if os.path.isdir(dest):
+        try:
+            os.rename(dest, old)
+        except OSError as e:
+            log(f"  Could not replace {dest}: {e}")
+            log("  The game is probably still open from it.")
+            return None
+    try:
+        shutil.copytree(unpacked_dir, dest)
+    except OSError as e:
+        log(f"  Could not copy the app into {dest}: {e}")
+        shutil.rmtree(dest, ignore_errors=True)
+        if os.path.isdir(old):
+            try:
+                os.rename(old, dest)
+            except OSError:
+                pass
+        return None
+    shutil.rmtree(old, ignore_errors=True)
+
+    exe = _find_unpacked_binary(dest, package_json_path)
+    if exe is None:
+        log(f"  No executable found in {dest}")
+        return None
+
+    # The slow portable exe this replaces would otherwise sit at the top of the
+    # build folder looking like the thing to run.
+    portable = os.path.join(build_dir, WIN_PORTABLE)
+    if os.path.isfile(portable):
+        try:
+            os.remove(portable)
+            log(f"  Removed the old portable app: {portable}")
+        except OSError:
+            log(f"  Could not remove the old portable app (still open?): {portable}")
+            log("  Delete it by hand; the new app replaces it.")
+
+    # A shortcut at the top level keeps a single thing to double-click.
+    # Non-fatal: the exe inside the folder runs the same app.
+    shortcut = os.path.join(build_dir, WIN_APP_DIR + ".lnk")
+    q = lambda v: v.replace("'", "''")
+    ps = ("$s = (New-Object -ComObject WScript.Shell).CreateShortcut('" + q(shortcut) + "'); "
+          "$s.TargetPath = '" + q(exe) + "'; "
+          "$s.WorkingDirectory = '" + q(dest) + "'; "
+          "$s.Save()")
+    try:
+        subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+                       capture_output=True, timeout=60,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    size = sum(os.path.getsize(os.path.join(r, f))
+               for r, _, fs in os.walk(dest) for f in fs)
+    log(f"\n  Output:   {exe}")
+    if os.path.isfile(shortcut):
+        log(f"  Shortcut: {shortcut}")
+    log(f"  Size:     {size/1024/1024:.0f} MB")
+    return exe
 
 
 def build(build_dir, log, done_cb, error_cb, fast=False):
@@ -6898,6 +7404,15 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
             pkg_changed = True
             log("  Restored the game data to the packaged files")
 
+        # Upstream builds Windows as "portable", a self-extractor that unpacks
+        # all of Electron into %TEMP% on every launch (seconds, plus Defender
+        # scanning each file). "dir" is that same tree, run in place.
+        win_cfg = pkg["build"].setdefault("win", {})
+        if win_cfg.get("target") != WIN_TARGET:
+            win_cfg["target"] = WIN_TARGET
+            pkg_changed = True
+            log(f"  Set the Windows build target to {WIN_TARGET!r} (no unpack on launch)")
+
         if pkg_changed:
             with open(package_json_path, "w", encoding="utf-8") as f:
                 json.dump(pkg, f, indent=2)
@@ -6968,47 +7483,60 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
 
     # ── 7. Find and copy output ───────────────────────────────────────────────
     step("Locating output file")
-    built_path = None
-    for root, dirs, files in os.walk(release_dir):
-        for f in files:
-            if any(f.endswith(ext) for ext in output_exts):
-                built_path = os.path.join(root, f)
-                break
-        if built_path:
-            break
-
-    # electron-builder always leaves its unpacked staging tree behind, even
-    # when the only requested target is AppImage. That tree is the same
-    # application and needs no FUSE runtime to run, so it is the fallback for
-    # machines that cannot mount an AppImage. Only treat a missing AppImage as
-    # fatal if the unpacked build is missing too.
-    unpacked_dir = None
-    if plat == "Linux":
-        for entry in sorted(os.listdir(release_dir)) if os.path.isdir(release_dir) else []:
-            p = os.path.join(release_dir, entry)
-            if os.path.isdir(p) and entry.endswith("unpacked"):
-                unpacked_dir = p
-                break
-
-    if not built_path and not unpacked_dir:
-        error_cb(f"Build succeeded but no output found in:\n{release_dir}\n\nExpected: {output_exts}")
-        return
-
+    # Windows: install the unpacked tree (see WIN_TARGET). A win-unpacked
+    # missing here means the target change did not take; fall through to the
+    # old single-file search so a portable exe still ships.
     final_path = None
-    if built_path:
-        final_path = os.path.join(build_dir, output_name)
-        shutil.copy2(built_path, final_path)
-        # Make executable on Linux/Mac
-        if plat != "Windows":
-            os.chmod(final_path, 0o755)
-        log(f"\n  Output: {final_path}")
-        log(f"  Size:   {os.path.getsize(final_path)/1024/1024:.0f} MB")
+    win_unpacked = os.path.join(release_dir, "win-unpacked")
+    if plat == "Windows" and os.path.isdir(win_unpacked):
+        final_path = _install_windows_app(build_dir, win_unpacked, log,
+                                          os.path.join(electron_dir, "package.json"))
+        if final_path is None:
+            error_cb("The Windows app was built but could not be installed into\n"
+                     f"{build_dir}\n\nSee the log above. If the game is open, close it "
+                     "and build again.")
+            return
+    else:
+        built_path = None
+        for root, dirs, files in os.walk(release_dir):
+            for f in files:
+                if any(f.endswith(ext) for ext in output_exts):
+                    built_path = os.path.join(root, f)
+                    break
+            if built_path:
+                break
 
-    if unpacked_dir:
-        launcher = _write_linux_launcher(build_dir, unpacked_dir, log,
-                                         os.path.join(electron_dir, "package.json"))
-        if launcher and final_path is None:
-            final_path = launcher
+        # electron-builder always leaves its unpacked staging tree behind, even
+        # when the only requested target is AppImage. That tree is the same
+        # application and needs no FUSE runtime to run, so it is the fallback for
+        # machines that cannot mount an AppImage. Only treat a missing AppImage as
+        # fatal if the unpacked build is missing too.
+        unpacked_dir = None
+        if plat == "Linux":
+            for entry in sorted(os.listdir(release_dir)) if os.path.isdir(release_dir) else []:
+                p = os.path.join(release_dir, entry)
+                if os.path.isdir(p) and entry.endswith("unpacked"):
+                    unpacked_dir = p
+                    break
+
+        if not built_path and not unpacked_dir:
+            error_cb(f"Build succeeded but no output found in:\n{release_dir}\n\nExpected: {output_exts}")
+            return
+
+        if built_path:
+            final_path = os.path.join(build_dir, output_name)
+            shutil.copy2(built_path, final_path)
+            # Make executable on Linux/Mac
+            if plat != "Windows":
+                os.chmod(final_path, 0o755)
+            log(f"\n  Output: {final_path}")
+            log(f"  Size:   {os.path.getsize(final_path)/1024/1024:.0f} MB")
+
+        if unpacked_dir:
+            launcher = _write_linux_launcher(build_dir, unpacked_dir, log,
+                                             os.path.join(electron_dir, "package.json"))
+            if launcher and final_path is None:
+                final_path = launcher
 
     if final_path is None:
         error_cb(f"Build succeeded but no runnable output was produced in:\n{release_dir}")

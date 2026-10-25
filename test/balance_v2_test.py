@@ -318,5 +318,30 @@ if gained or dinoed:
 else:
     ok(f"no level before egypt6 gains a hazard or a dino, over {rolled} rolls")
 
+# [user] A lost-plants star challenge (cowboy23: lose at most 1) never gains
+# dinos, which eat and throw plants. Rolled with the field cleared as well, so
+# the test also shows the rule is what keeps them off.
+lost = sorted(lid for lid in eligible if levels[lid].get("plants_lost"))
+with_rule, without = [], 0
+for lid in lost:
+    for seed in range(40):
+        for goal in (0, 1, 2):
+            plan = R.roll_level(seed, lid, dinos=True, goal_type=goal)
+            if plan and plan["dinos"]:
+                with_rule.append(f"{lid} seed {seed} goal {goal}")
+            levels[lid]["plants_lost"] = False
+            try:
+                plan = R.roll_level(seed, lid, dinos=True, goal_type=goal)
+            finally:
+                levels[lid]["plants_lost"] = True
+            if plan and plan["dinos"]:
+                without += 1
+if with_rule:
+    fail(f"a lost-plants level gained dinos: {with_rule[:3]}")
+elif not without:
+    fail("no lost-plants level would gain dinos without the rule; the test proves nothing")
+else:
+    ok(f"{len(lost)} lost-plants levels never gain dinos ({without} rolls would without the rule)")
+
 print(f"\n{failed} FAILURE(S)" if failed else "\nBUDGET ROLL OK")
 sys.exit(1 if failed else 0)

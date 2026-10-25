@@ -222,6 +222,52 @@ function _apRng(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+// [user] A Frostbite level always hands out a fire plant, whether or not its
+// belt is randomized -- vanilla iceage3, 10, 18, 25 and 33 and sweetpotato0
+// ship belts with none, and iceage39 a preset seed bank with only Hot Potato.
+// [user] A level fielding Jesters (its own or zombie shuffle's) always hands
+// out a counter the same way: the swap keeps one where it can, and a belt or
+// preset bank still without one gains Bonk Choy, which punches rather than
+// shoots and so has nothing for him to juggle back. A Parasol Zombie's
+// belt or bank likewise keeps a plant that does not lob, else gains
+// Peashooter.
+// Returns the plant to add for each such threat the level fields when none
+// of `plants` (the codenames a belt or preset bank holds) answers it.
+const AP_WARM_PLANT = 'firepeashooter';
+const AP_THREAT_FALLBACK = { cold: AP_WARM_PLANT, jester: 'bonkchoy', parasol: 'peashooter' };
+function _apMissingAnswers(lc, plants) {
+  const answers = window._AP_conveyorThreatAnswers || {};
+  const threats = (window._AP_levelThreats && window._AP_levelThreats(lc)) || [];
+  return threats.filter(k => AP_THREAT_FALLBACK[k] && answers[k] &&
+                             !plants.some(cn => answers[k].has(cn)))
+                .map(k => AP_THREAT_FALLBACK[k]);
+}
+
+// The preset half of that rule. module_SetSeedBank sizes the bank to
+// PresetPlantList, so Fire Peashooter arrives as one more slot and every
+// plant the level chose stays. Copied, not written back, for the same
+// reason as the conveyor: the level's properties are cached for a replay.
+function installSeedBankHook(LC) {
+  if (!LC || LC._ap_hooked_seedbank || !LC.prototype || !LC.prototype.module_SetSeedBank) return;
+  const _origSetSeedBank = LC.prototype.module_SetSeedBank;
+  LC.prototype.module_SetSeedBank = function (props) {
+    let patched = props;
+    try {
+      const list = (props && props.SelectionMethod === 'preset' &&
+                    Array.isArray(props.PresetPlantList)) ? props.PresetPlantList : null;
+      const add = list && list.length ? _apMissingAnswers(this, list.map(e => e && e.PlantType)) : [];
+      if (add.length) {
+        patched = Object.assign(Object.create(Object.getPrototypeOf(props) || Object.prototype), props);
+        patched.PresetPlantList = list.concat(add.map(cn => ({ PlantType: cn })));
+      }
+    } catch (e) { /* never stop a level from loading over this */ }
+    const args = Array.prototype.slice.call(arguments);
+    args[0] = patched;
+    return _origSetSeedBank.apply(this, args);
+  };
+  LC._ap_hooked_seedbank = true;
+}
+
 function installConveyorHook(LC) {
   if (!LC || LC._ap_hooked_conveyor || !LC.prototype || !LC.prototype.module_SetConveyor) return;
   const _origSetConveyor = LC.prototype.module_SetConveyor;
@@ -465,6 +511,28 @@ function installConveyorHook(LC) {
         patched.InitialPlantList = newList;
       }
     } catch (e) { /* never stop a level from loading over this */ }
+    // Randomized or not, a Frostbite belt ends up holding a fire plant. The
+    // swap keeps or restores one where a slot can take it (the cold threat);
+    // a belt left with none gets Fire Peashooter added at the back, paced to
+    // arrive early (MinCount 1) and stop at four on the lawn. A belt dealing
+    // no plant at all (the bowling minigames' tool_projectile_* belts) is a
+    // minigame, not a lawn to keep warm, and is left alone. A Jester belt
+    // left without a counter gains Bonk Choy the same way.
+    try {
+      const cur = patched && Array.isArray(patched.InitialPlantList) ? patched.InitialPlantList : null;
+      const known = window._AP_conveyorKnown;
+      const add = cur && cur.some(e => e && known && known.has(e.PlantType))
+        ? _apMissingAnswers(this, cur.map(e => e && e.PlantType)) : [];
+      if (add.length) {
+        const weight = Math.round(cur.reduce((s, e) => s + (+(e && e.Weight) || 0), 0) / cur.length);
+        const warm = Object.assign(Object.create(Object.getPrototypeOf(patched) || Object.prototype), patched);
+        warm.InitialPlantList = cur.concat(add.map(cn => ({
+          PlantType: cn, Weight: Math.max(1, weight),
+          MinCount: 1, MinWeightFactor: 2, MaxCount: 4, MaxWeightFactor: 0,
+        })));
+        patched = warm;
+      }
+    } catch (e) { /* never stop a level from loading over this */ }
     const args = Array.prototype.slice.call(arguments);
     args[0] = patched;
     return _origSetConveyor.apply(this, args);
@@ -518,9 +586,57 @@ const CONVEYOR_TORCH_ANSWERS = new Set([
   'coldsnapdragon', 'iceburg', 'iceweed', 'missiletoe', 'snowdrop', 'snowpea',
   'wintermelon',
 ]);
+// [user] Fire plants for a Frostbite lawn: FIRE_DAMAGE_PLANTS in
+// constants.py, which takes in every warming plant. Hot Potato is not one,
+// as there: it thaws a single plant once.
+const CONVEYOR_COLD_ANSWERS = new Set([
+  'firegourd', 'firepeashooter', 'ghostpepper', 'hotdate', 'inferno',
+  'jackolantern', 'jalapeno', 'lavaguava', 'meteorflower', 'pepperpult',
+  'pyrevine', 'snapdragon', 'torchwood', 'wasabiwhip',
+]);
+// [user] Jester counters: JESTER_COUNTER_PLANTS in constants.py, the same
+// 42 the generation logic draws this slot's counter from.
+const CONVEYOR_JESTER_ANSWERS = new Set([
+  'bambooshoot', 'banana', 'bonkchoy', 'buttercup', 'cactus',
+  'celerystalker', 'cherry_bomb', 'chilibean', 'chillypepper', 'chomper',
+  'coldsnapdragon', 'doomshroom', 'electriccurrant', 'electricpeashooter',
+  'endurian', 'escaperoot', 'fumeshroom', 'ghostpepper', 'gloomvine',
+  'grapeshot', 'hollyknight', 'iceweed', 'inferno', 'jalapeno', 'laser_bean',
+  'lavaguava', 'lightningreed', 'missiletoe', 'parsnip', 'phatbeet',
+  'potatomine', 'primalpotatomine', 'primalwallnut', 'pyrevine',
+  'shadowshroom', 'snapdragon', 'snappea', 'spikerock', 'spikeweed',
+  'squash', 'torchwood', 'wasabiwhip',
+]);
+// [user] Parasol Zombie (lostcity_jane) bounces lobbed shots: her sheet's
+// BounceableProjectiles are Cabbage-, Kernel-, Melon- and Pepper-pult, Winter
+// Melon, Akee, Spore-shroom, Blooming Heart, Dusk Lobber, Apple Mortar, Sling
+// Pea and Blastberry. An answer is any belt attacker that does not lob one of
+// those and deals damage (no Chard Guard, Sap-fling, Explode-O-Nut), or a
+// killing instant.
+const CONVEYOR_PARASOL_ANSWERS = new Set([
+  'bambooshoot', 'bamboozle', 'banana', 'bloomerang', 'bonkchoy',
+  'bowlingbulb', 'buttercup', 'cactus', 'cantaloupe', 'celerystalker',
+  'cherry_bomb', 'chilibean', 'chomper', 'citron', 'coconutcannon',
+  'coldsnapdragon', 'cranjelly', 'dandelion', 'darkmatterdragonfruit',
+  'doomshroom', 'electriccurrant', 'electricpeashooter', 'endurian',
+  'firegourd', 'firepeashooter', 'fumeshroom', 'gatling', 'ghostpepper',
+  'gloomshroom', 'gloomvine', 'grapeshot', 'grimrose', 'guacodile',
+  'homingthistle', 'hotdate', 'hypnoshroom', 'iceweed', 'jackolantern',
+  'jalapeno', 'laser_bean', 'lavaguava', 'lightningreed', 'lychee',
+  'magnifyinggrass', 'meteorflower', 'missiletoe', 'nightshade', 'parsnip',
+  'peanut', 'peapod', 'peashooter', 'phatbeet', 'potatomine',
+  'primalpeashooter', 'primalpotatomine', 'puffshroom', 'pvine',
+  'redstinger', 'repeater', 'scaredyshroom', 'seashroom', 'shadowshroom',
+  'shootingstarfruit', 'skyshooter', 'snapdragon', 'snowdrop', 'snowpea',
+  'spikerock', 'spikeweed', 'splitpea', 'squash', 'starfruit', 'strawburst',
+  'tanglekelp', 'threepeater', 'torchwood', 'turkeypult', 'vamporcini',
+]);
 window._AP_conveyorThreatAnswers = {
   excavator: CONVEYOR_EXCAVATOR_ANSWERS,
   torch: CONVEYOR_TORCH_ANSWERS,
+  cold: CONVEYOR_COLD_ANSWERS,
+  jester: CONVEYOR_JESTER_ANSWERS,
+  parasol: CONVEYOR_PARASOL_ANSWERS,
 };
 // The real check reads the level's objects; the suite sets the answer.
 window._AP_levelThreats=function(){ return window._testThreats || []; };
@@ -548,6 +664,6 @@ function setLevelWater(haveWater) {
   window._AP_LevelPlay = { component: { haveWater: haveWater } };
 }
 
-module.exports={installConveyorHook, window, CONVEYOR_GROUPS, CONVEYOR_FAMILIES, CONVEYOR_DPS,
+module.exports={installConveyorHook, installSeedBankHook, AP_WARM_PLANT, window, CONVEYOR_GROUPS, CONVEYOR_FAMILIES, CONVEYOR_DPS,
   CONVEYOR_SHADOW, CONVEYOR_SHADOW_CHANCE, setLevelWater,
   CONVEYOR_WATER_ONLY, CONVEYOR_TILE_LOCKED, CONVEYOR_BELT_LOCKED};

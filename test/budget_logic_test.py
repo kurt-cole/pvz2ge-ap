@@ -74,8 +74,13 @@ _, w_tier, sd_tier = build(seed=1, shuffle_zombies=1, **EVERY)
 # [user] The budget roll replaced the tier shuffle: shuffle_zombies turns it on.
 if w_off.budget_mode or not w_tier.budget_mode:
     fail("budget mode does not follow shuffle_zombies")
-elif B.slot_level_hazard_groups(w_off):
-    fail("hazard rules exist outside budget mode")
+elif set(B.slot_level_hazard_groups(w_off)) != w_off.parasol_levels:
+    fail("hazard rules other than Parasol's exist outside budget mode")
+elif not w_off.parasol_levels:
+    fail("no vanilla level asks for a Parasol answer")
+elif any(not g or set(g) & set(C.PARASOL_BOUNCED_PLANTS)
+         for gs in B.slot_level_hazard_groups(w_off).values() for g in gs):
+    fail("a vanilla Parasol rule names a plant she bounces")
 elif not sd_tier["zombie_budget_roll"]:
     fail("shuffle_zombies seed does not tell the client to use the budget roll")
 elif (sd_off["zombie_budget_roll"], sd_off["travelling_dinos"], sd_off["logic_jester_power"]) != (False, False, []):
@@ -130,6 +135,20 @@ for seed in SEEDS:
         if need and not any(PLANT_LAWN_DPS.get(p, 0) >= need for p in w.logic_jesters):
             if not set(w.logic_jester_power) & set(groups[1] if len(groups) > 1 else []):
                 problems.append(f"{name} needs Jester class power the draw does not cover")
+
+    # [user] Parasol Zombie: every level she is rolled onto where the player
+    # brings the plants asks for an attacker she does not bounce; none other.
+    for name in w.budget_hazards:
+        plan, level = w.budget_plans[name], levels[name]
+        fields = (plan is not None or not level["generated"]) and \
+            bool(R.fielded(plan or {"level": name, "groups": level["groups"], "dynamic": {}, "dinos": []})
+                 & B.PARASOL_ZOMBIES)
+        want = fields and level["own_plants"]
+        if want != (name in w.parasol_levels):
+            problems.append(f"{name}: Parasol rule {'missing' if want else 'where she is not'}")
+        if want and not any(g and not set(g) & set(C.PARASOL_BOUNCED_PLANTS)
+                            for g in rules.get(name, [])):
+            problems.append(f"{name} fields Parasol Zombie without a non-lobbing attacker rule")
 
     progression = {i.name for i in mw.itempool if i.classification == IC.progression}
     progression |= {i.name for i in mw.precollected}

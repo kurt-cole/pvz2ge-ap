@@ -101,19 +101,57 @@ if (C.attempts.some(u => u.startsWith('ws://')))
   fail('still opening with plain ws:// against a hosted room');
 else ok('a hosted room is never contacted over plain ws:// first');
 
-// ── a live session that drops goes back to the title screen ─────────────────
-// Play is refused while disconnected, so a drop reloads to the title screen
-// and reconnects from there instead of retrying in place.
-C.reset(HOSTED);
-C.connect();
+// ── a live session that drops gets a grace period ─────────────────────────
+// A drop mid-game retries at once and counts down GRACE_SECS before giving up
+// to the title screen, rather than reloading on the spot.
+function dropMidGame(){
+  C.reset(HOSTED);
+  C.getCfg().scheme = 'wss://';
+  C.connect();
+  C.lastSocket().fireOpen();
+  C.activate();
+  C.lastSocket().fireClose();
+}
+
+dropMidGame();
+if (C.menuReturns.length) fail('a mid-game drop went straight to the title screen');
+else if (!C.inGrace()) fail('a mid-game drop did not start the grace period');
+else if (C.attempts.length !== 2) fail(`a mid-game drop did not retry at once (${C.attempts.length} attempts)`);
+else ok('a mid-game drop starts a grace period and retries immediately');
+
+// Reconnecting inside the window keeps the player in the level.
 C.lastSocket().fireOpen();
-C.activate();
-C.lastSocket().fireClose();
+C.connected();
+for (let i = 0; i < 12; i++) C.runTimer(1000);
+if (C.menuReturns.length) fail('a reconnect inside the grace period still left the level');
+else if (C.inGrace()) fail('the countdown kept running after the reconnect');
+else ok('reconnecting within the grace period keeps the player in the level');
+
+// Retries inside the window are quick and do not probe the other scheme.
+dropMidGame();
+C.lastSocket().fireClose();                 // the immediate retry fails
+if (!C.timers.some(t => t.ms === 2000)) fail('a failed grace retry did not schedule the 2s retry');
+else if (C.timers.some(t => t.ms === 300 || t.ms === 5000)) fail('a grace retry probed or backed off');
+else ok('a failed retry in the grace period tries again in 2s on the same scheme');
+C.runTimer(2000);
+if (C.attempts[2] !== 'wss://' + HOSTED) fail(`grace retry went to ${C.attempts[2]}`);
+else ok('grace retries stay on the scheme the session used');
+
+// The server never comes back: after 10 ticks, the title screen (resuming).
+dropMidGame();
+for (let i = 0; i < 9; i++) {
+  C.runTimer(1000);
+  if (C.lastSocket().readyState === 0 && i % 2) { C.lastSocket().fireClose(); C.runTimer(2000); }
+}
+if (C.menuReturns.length) fail('gave up before the grace period ran out');
+C.runTimer(1000);
 if (C.menuReturns.length !== 1 || C.menuReturns[0] !== true)
-  fail(`a dropped session returned to menu ${JSON.stringify(C.menuReturns)}, expected [true]`);
-else if (C.timers.length)
-  fail('a dropped session also scheduled an in-place retry');
-else ok('a dropped live session returns to the title screen to reconnect');
+  fail(`after the grace period menuReturns was ${JSON.stringify(C.menuReturns)}, expected [true]`);
+else if (C.timers.length) fail('timers were left running after giving up: ' + JSON.stringify(C.timers.map(t=>t.ms)));
+else ok('no reconnect within 10s returns to the title screen and resumes from there');
+if (C.toasts.filter(t => /reconnecting/.test(t)).length !== 10)
+  fail('the countdown was not shown each second');
+else ok('the countdown is shown each second');
 
 // A failed attempt is not a session: it keeps the ordinary retry loop, so a
 // server that is down cannot reload the page on every attempt.
