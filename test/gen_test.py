@@ -2089,14 +2089,15 @@ _og_flat = [o for g in _OG for o in g.options]
 _og_declared = [f.type for f in _dc_og.fields(W.PvZ2Options)]
 
 # Literals, not len(OPTION_GROUPS) / len(fields) -- an expectation read from the
-# thing under test passes whatever that thing says. 24 is every option in
-# PvZ2Options as of 2026-09-16 (zombie_budget_roll removed and
+# thing under test passes whatever that thing says. 25 is every option in
+# PvZ2Options as of 2026-09-27 (useful_plant_order added; 24 from 2026-09-16,
+# zombie_budget_roll removed and
 # power_loadouts_per_level added that day, 22 before zombie_budget_roll and
 # travelling_dinos, 21 before plant_power_logic, 20 before
 # include_levels_past_goal); 7 is the groups options.py declares.
 assert len(_OG) == 7, f"expected 7 option groups, got {len(_OG)}"
-assert len(_og_declared) == 24, \
-    f"PvZ2Options declares {len(_og_declared)} options, not 24 -- if that is " \
+assert len(_og_declared) == 25, \
+    f"PvZ2Options declares {len(_og_declared)} options, not 25 -- if that is " \
     "intended, update this literal AND put the new option in a group"
 
 _og_missing = [o.__name__ for o in _og_declared if o not in _og_flat]

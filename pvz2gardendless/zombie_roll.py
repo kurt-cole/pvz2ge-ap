@@ -82,7 +82,11 @@ DINO_TYPES = ("ankylo", "ptero", "raptor", "stego", "tyranno")
 # Marsh has. Main world levels only; side paths and danger rooms are not
 # counted. Flipping a DINO_TEST_* flag changes the denominator, and
 # test/balance_v2_test.py re-derives these.
-DINO_LEVEL_PERMILLE_BY_GOAL = (262, 232, 236)   # 16/61, 33/142, 44/186
+# Sent in slot_data (budget_logic.client_tables, dino_permille), so changing
+# them does not move an older seed's roll: the client falls back to the
+# (262, 232, 236) every seed before 2026-10-15 was rolled with. Those were
+# 16/61, 33/142, 44/186, before lost-plants levels left the denominator.
+DINO_LEVEL_PERMILLE_BY_GOAL = (271, 250, 254)   # 16/59, 33/132, 44/173
 
 # The Jurassic Marsh difficulty curve. Every Jurassic level that fields dinos,
 # sorted by vanilla HP per wave and cut into DINO_BAND_COUNT bands. Per band:
@@ -318,6 +322,10 @@ def dinos_allowed(level) -> bool:
             or not level["own_plants"]):
         # own_plants: Perfume-shroom cannot be asked of a level that hands the
         # player its plants.
+        return False
+    if level.get("plants_lost"):
+        # [user] A dino eats or throws plants, and a lost-plants star challenge
+        # (cowboy23: lose at most 1) counts every one against the player.
         return False
     if "Beach" in level["stage"]:
         return DINO_TEST_BEACH
@@ -646,15 +654,21 @@ def roster(plan) -> Counter:
     return counts
 
 
+def fielded(plan) -> set:
+    """Every codename the plan can spawn: its roster and its dynamic pools."""
+    level = tables().model["levels"][plan["level"]]
+    names = set(roster(plan))
+    for entry in level["dynamic"]:
+        names.update(plan["dynamic"].get(c, c) for c in entry["pool"])
+    return names
+
+
 def hazards(plan) -> set:
     """Hazard names the plan fields: tier tags, Far Future flyers, dinos."""
     t = tables()
     level = t.model["levels"][plan["level"]]
-    names = set(roster(plan))
-    for entry in level["dynamic"]:
-        names.update(plan["dynamic"].get(c, c) for c in entry["pool"])
     out = set()
-    for c in names:
+    for c in fielded(plan):
         tier = t.tier.get(c, "")
         out.update(tag for tag in HAZARD_TAGS if f"-{tag}" in tier)
         if c in FAR_FUTURE_FLYERS:

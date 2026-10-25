@@ -691,6 +691,23 @@ FIRE_DAMAGE_PLANTS = [
     "Wasabi Whip",
 ]
 
+# [user] Plants whose shots Parasol Zombie (lostcity_jane) bounces, for the
+# parasol hazard. DERIVED FROM GAME DATA: her BounceableProjectiles, mapped to
+# the plants that fire them. Akee and Blastberry are on her list too but are
+# not items here.
+PARASOL_BOUNCED_PLANTS = [
+    "Apple Mortar",
+    "Blooming Heart",
+    "Cabbage-pult",
+    "Dusk Lobber",
+    "Kernel-pult",
+    "Melon-Pult",
+    "Pepper-pult",
+    "Sling Pea",
+    "Spore-shroom",
+    "Winter Melon",
+]
+
 # Plants a world needs on top of its unlock, as a list of requirements: the
 # player needs at least one plant from EACH list, so a world can ask for more
 # than one thing at once. rules.py ANDs them onto that world's entrance, and

@@ -50,13 +50,14 @@ FIXTURES = [
     "egypt20_1",    # runtime-generated waves: never rolled
     "cowboy11",     # MaximumSun level, preset plants or not
     "tutorial3",    # three lanes: no multi-lane spawner may be rolled into it
+    "cowboy23",     # lost-plants star challenge: never gains dinos
 ]
 FIXTURE_CASES = [(1, False, 2), (2 ** 31 + 5, True, 0), (424242, True, 2)]
 ROLL_STEP = 9               # every ninth eligible level, sorted
 ROLL_CASES = [(987654321, True, 1)]
 
 MODEL_KEYS = ("waves", "stage", "bespoke", "generated", "own_plants", "planks",
-              "lanes", "flag", "dynamic", "dinos", "graves")
+              "lanes", "flag", "dynamic", "dinos", "graves", "plants_lost")
 GROUP_KEYS = ("k", "id", "w", "z", "f", "p", "rep", "bring", "pf")
 PLAN_KEYS = ("attempt", "vanilla", "budget", "ratio", "dynamic", "dinos")
 
@@ -101,6 +102,10 @@ def main() -> int:
                     for c, z in sorted(t.zombies.items())},
         "grave_hp": dict(sorted(t.model["grave_hp"].items())),
         "field_names": {k: sorted(v) for k, v in t.field_names.items()},
+        # budget_logic.client_tables sends it on every seed rolled since the
+        # lost-plants rule; without it the client rolls the old way.
+        "plants_lost_rule": 1,
+        "dino_permille": list(R.DINO_LEVEL_PERMILLE_BY_GOAL),
     }
 
     fixtures = []

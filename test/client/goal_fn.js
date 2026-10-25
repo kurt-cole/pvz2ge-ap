@@ -32,6 +32,12 @@ function victoryLoc(){ return st.victoryLoc || 'modern_zomboss_01_egypt'; }
 // the distinction goalPlayed() draws.
 const LOC_LEVELS = new Proxy({}, { get: (_, k) => 'lvl:' + String(k) });
 function isFinished(levelId){ return (st.levels || []).indexOf(levelId) >= 0; }
+// The world gate, reduced to "is this level shut": st.blocked lists level ids.
+function levelBlockedBy(level){ return (st.blocked || []).indexOf(level) >= 0 ? {} : null; }
+
+// The Goal tab's redraw. Counted so a test can see the McGuffin asked for one.
+let goalRenders = 0;
+function renderGoals(){ goalRenders++; }
 
 // The #ap-goal div. Only what updateGoalTracker writes.
 let goalEl = { innerHTML: '', className: '', style: { display: '' } };
@@ -85,6 +91,7 @@ function receiveGoalItem(name){
   // poll: this is the moment the goal is met, and a poll is two seconds away.
   maybeSendGoal();
   updateGoalTracker();
+  renderGoals();
   return true;
 }
 
@@ -98,6 +105,31 @@ function goalProgress(){
   let done = 0;
   for(const l of goalLocs) if(goalPlayed(l)) done++;
   return { done: done, need: worldsReq, total: goalLocs.length };
+}
+
+const GOAL_WORLD_PREFIX = [
+  ['egypt','Ancient Egypt'], ['pirate','Pirate Seas'], ['cowboy','Wild West'],
+  ['future','Far Future'], ['dark','Dark Ages'], ['beach','Big Wave Beach'],
+  ['iceage','Frostbite Caves'], ['lostcity','Lost City'], ['kongfu','Kongfu Temple'],
+  ['neon','Neon Mixtape Tour'], ['dino','Jurassic Marsh'], ['sky','Aerial Fortress'],
+  ['modern','Modern Day'],
+];
+function goalChecklist(){
+  const rows = [];
+  GOAL_WORLD_PREFIX.forEach(([prefix, world], order) => {
+    for(const loc of (st.goalLocs || [])){
+      if(loc.indexOf(prefix) !== 0) continue;
+      const num = /(\d+)$/.exec(loc);
+      const label = /zomboss/.test(loc) ? 'Zomboss' : (num ? 'Level ' + num[1] : loc);
+      const done = st.goalItem ? isChecked(loc) : goalPlayed(loc);
+      const level = LOC_LEVELS[loc];
+      const locked = !done && (
+        (world === 'Modern Day' && !canAccessModernDay()) ||
+        !!(level && levelBlockedBy(level)));
+      rows.push({ world: world, label: label, state: done ? 'done' : (locked ? 'locked' : 'open'), order: order });
+    }
+  });
+  return rows;
 }
 
 function goalMet(){
@@ -166,7 +198,7 @@ function check(loc){ st.checked.push(loc); }
 // Beating a level in game, which is what goalPlayed() actually asks about.
 function play(loc){ (st.levels = st.levels || []).push(LOC_LEVELS[loc]); }
 
-module.exports = { canAccessModernDay, goalMet, goalProgress, goalPlayed,
+module.exports = { goalChecklist, goalRenders: () => goalRenders, canAccessModernDay, goalMet, goalProgress, goalPlayed,
                    receiveGoalItem,
                    updateGoalTracker, goalEl: () => goalEl,
                    maybeSendGoal, victoryLoc,

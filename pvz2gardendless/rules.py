@@ -366,7 +366,8 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
     # HAZARD COUNTERS, under the budget zombie roll. The level's own roll says
     # which hazards it fields, so the counter goes on that level's location,
     # the same footing as the power rule above. See budget_logic.py for what
-    # each hazard asks. Empty in every other mode.
+    # each hazard asks. In every other mode only the Parasol Zombie rule, read
+    # from the vanilla rosters.
     for loc_name, groups in budget_logic.slot_level_hazard_groups(world).items():
         for group in groups:
             need(loc_name, "group", group)

@@ -38,7 +38,8 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          "connect_fn.js:returnToMenu", "connect_fn.js:activate",
          "connect_fn.js:setTimeout", "connect_fn.js:reset",
          "connect_fn.js:runNextTimer", "connect_fn.js:inGame",
-         "connect_fn.js:setInGame",
+         "connect_fn.js:setInGame", "connect_fn.js:clearTimeout",
+         "connect_fn.js:runTimer", "connect_fn.js:connected",
          # deathlink_fn.js harness: gameUI() stands in for the game's UI class
          # and the LevelPlay component behind it, so a test can call loseDarken
          # the way the death screen does. installUILoseHook itself IS a copy and
@@ -51,6 +52,7 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # separable is the entire point of counting levels played rather than
          # locations checked.
          "goal_fn.js:isFinished", "goal_fn.js:play",
+         "goal_fn.js:levelBlockedBy", "goal_fn.js:renderGoals",
          # store_fn.js harness: stand-ins for the client's socket and module
          # scope, plus applyLocationInfo, which mirrors a switch arm rather
          # than a function and so has nothing to match verbatim.
@@ -87,7 +89,7 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # unlocksHeld, levelBlockedBy and installLevelGateHook themselves ARE
          # copies and are checked.
          "worldgate_fn.js:reset", "worldgate_fn.js:makeKeyListener",
-         "worldgate_fn.js:gates",
+         "worldgate_fn.js:gates", "worldgate_fn.js:canAccessModernDay",
          # budget_fn.js harness: _apLevelKey reads the game's LevelPlay
          # statics in the client, so the harness sets the level id through
          # setLevelKey instead, and _apLog records instead of writing to the

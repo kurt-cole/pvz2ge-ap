@@ -374,5 +374,36 @@ G.reset(keyed({ worldsReq: 2 }));
 if (G.receiveGoalItem('Time Key')) fail('a McGuffin counted on a seed that ships none');
 else ok('a seed with no goal_item ignores a McGuffin it could not have');
 
+// ── the Goal tab's checklist ────────────────────────────────────────────────
+// Rows come out in game order whatever order slot_data lists them in, each
+// labelled by its level, and done follows the same rule as the counter.
+G.reset({ goalLocs: ['modern16', 'pirate8', 'egypt8', 'dark10'], worldsReq: 3,
+          goalItem: 'Time Key', checked: ['pirate8'], blocked: ['lvl:dark10'] });
+const rows = G.goalChecklist();
+const shape = rows.map(r => r.world + ':' + r.label + ':' + r.state).join(' ');
+const want = 'Ancient Egypt:Level 8:open Pirate Seas:Level 8:done Dark Ages:Level 10:locked Modern Day:Level 16:locked';
+if (shape !== want) fail(`checklist read\n    ${shape}\n  expected\n    ${want}`);
+else ok('goal rows run in game order, marked done, open or locked');
+
+// An older seed with no McGuffin counts levels beaten, not locations checked.
+G.reset({ goalLocs: ['egypt25', 'pirate25'], worldsReq: 2, goalItem: '',
+          checked: ['egypt25'], levels: ['lvl:pirate25'] });
+const old = G.goalChecklist().map(r => r.state).join(',');
+if (old !== 'open,done') fail(`a McGuffin-less seed read ${old}, expected open,done`);
+else ok('without a McGuffin a row is done only once the level is beaten');
+
+const zb = (G.reset({ goalLocs: ['modern_zomboss_01_egypt'], worldsReq: 1, modernKeyed: true,
+                      worldGates: { 'Modern Day': { item: 'Progressive Modern Day' } },
+                      worldUnlocks: { 'Progressive Modern Day': 1 } }), G.goalChecklist()[0]);
+if (zb.label !== 'Zomboss' || zb.state !== 'open') fail(`Modern Day Zomboss row read ${zb.label}/${zb.state}`);
+else ok('a Zomboss goal reads "Zomboss", open once Modern Day is');
+
+// A McGuffin redraws the Goal tab on arrival rather than on the next poll.
+G.reset({ goalLocs: ['egypt8'], worldsReq: 1, goalItem: 'Time Key' });
+const before = G.goalRenders();
+G.receiveGoalItem('Time Key');
+if (G.goalRenders() !== before + 1) fail('a McGuffin did not redraw the Goal tab');
+else ok('a McGuffin redraws the Goal tab straight away');
+
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nGOAL OK');
 process.exit(failed ? 1 : 0);

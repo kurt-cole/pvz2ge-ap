@@ -1,7 +1,7 @@
 // Drives the REAL installConveyorHook() from build_pvzge_ap.py against level
 // data pulled out of the shipped game, through a stand-in levelController.
 const fs = require('fs');
-const { installConveyorHook, window } = require('./conveyor_fn.js');
+const { installConveyorHook, installSeedBankHook, AP_WARM_PLANT, window } = require('./conveyor_fn.js');
 
 const path = require('path');
 const LEVELS = JSON.parse(fs.readFileSync(path.join(__dirname, 'conveyor_levels.json'), 'utf8'));
@@ -575,6 +575,155 @@ setLevelWater(false);
   window._AP_conveyorSeed = 123456789;
   if (bad.length) fail(`${bad.length} belt(s) missing an answer: ${bad.slice(0, 5).join(', ')}`);
   else ok('torch levels keep an ice plant, and lostcity16 with both threats keeps both answers');
+}
+
+// ── [user] a Frostbite lawn always hands out a fire plant ────────────────────
+// Belts as the shipped levels have them. iceage16 is the reported one: its
+// Pepper-pult and Hot Potato were both swapped away on about 28% of seeds.
+{
+  const FIRE = window._AP_conveyorThreatAnswers.cold;
+  const belt = (...cns) => ({ InitialPlantList: cns.map(cn => ({ PlantType: cn, Weight: 10, MaxCount: 5 })) });
+  const FROST = {
+    iceage3:    belt('hurrikale', 'peashooter', 'repeater', 'spikeweed'),
+    iceage16:   belt('chardguard', 'hotpotato', 'pepperpult', 'repeater', 'spikeweed'),
+    iceage21:   belt('firepeashooter'),
+    iceage25:   belt('xshot'),
+    appease2_0: belt('torchwood', 'gatling'),
+    pepper0:    belt('pyrevine'),
+  };
+  const bad = [];
+  for (const rand of [false, true]) {
+    window._AP_randomizeConveyor = rand;
+    for (const [id, l] of Object.entries(FROST)) {
+      for (let seed = 1; seed <= (rand ? 300 : 1); seed++) {
+        window._AP_conveyorSeed = seed;
+        window._testThreats = ['cold'];
+        const input = clone(l);
+        const got = run(input).InitialPlantList;
+        if (JSON.stringify(input) !== JSON.stringify(l)) bad.push(`${id}: source mutated`);
+        if (!got.some(e => FIRE.has(e.PlantType))) bad.push(`${id}@${seed} rand=${rand}: no fire plant`);
+        // Off: a belt that ships fire is left exactly alone, and one that ships
+        // none keeps every planned entry and gains Fire Peashooter at the back.
+        if (!rand) {
+          const shipped = l.InitialPlantList.some(e => FIRE.has(e.PlantType));
+          const want = shipped ? l.InitialPlantList
+            : l.InitialPlantList.concat([{ PlantType: AP_WARM_PLANT }]);
+          if (got.length !== want.length || want.some((e, i) => e.PlantType !== got[i].PlantType)) {
+            bad.push(`${id} off: got [${got.map(e => e.PlantType)}]`);
+          }
+        }
+      }
+    }
+  }
+  // Not Frostbite's lawn: iceage3's belt is left alone with the option off.
+  window._AP_randomizeConveyor = false;
+  window._testThreats = [];
+  if (JSON.stringify(run(clone(FROST.iceage3))) !== JSON.stringify(FROST.iceage3)) bad.push('non-cold belt changed');
+  // A bowling belt (beach_dangerroom_minigame_iceage) deals no plant: left alone.
+  window._testThreats = ['cold'];
+  const bowl = belt('tool_projectile_bowlingbulb1');
+  if (JSON.stringify(run(clone(bowl))) !== JSON.stringify(bowl)) bad.push('bowling belt changed');
+  window._testThreats = [];
+  window._AP_conveyorSeed = 123456789;
+  if (bad.length) fail(`${bad.length} Frostbite belt problem(s): ${bad.slice(0, 5).join(', ')}`);
+  else ok('every Frostbite belt holds a fire plant, randomized (300 seeds) or not, and only Frostbite belts gain one');
+
+  // Preset seed banks: iceage39 ships Hot Potato as its only warmth.
+  let banked = [];
+  function SB() {}
+  SB.prototype.module_SetSeedBank = function (props) { banked.push(props); };
+  installSeedBankHook(SB);
+  installSeedBankHook(SB);   // idempotent, like the conveyor hook
+  const sb = new SB();
+  const bank = (method, ...cns) => ({ SelectionMethod: method, PresetPlantList: cns.map(cn => ({ PlantType: cn })) });
+  const plantsOf = props => { banked = []; sb.module_SetSeedBank(props); return banked[0].PresetPlantList.map(e => e.PlantType).join(','); };
+  const sbBad = [];
+  window._testThreats = ['cold'];
+  const i39 = bank('preset', 'hotpotato', 'spikerock', 'stunion', 'sunflower');
+  const i39in = clone(i39);
+  if (plantsOf(i39in) !== 'hotpotato,spikerock,stunion,sunflower,' + AP_WARM_PLANT) sbBad.push('iceage39 did not gain Fire Peashooter');
+  if (JSON.stringify(i39in) !== JSON.stringify(i39)) sbBad.push('iceage39 source mutated');
+  if (plantsOf(bank('preset', 'firepeashooter', 'stunion')) !== 'firepeashooter,stunion') sbBad.push('a bank with fire changed');
+  if (plantsOf(bank('preset', 'pepperpult', 'splitpea')) !== 'pepperpult,splitpea') sbBad.push('Pepper-pult does not count as fire');
+  const chooser = { SelectionMethod: 'chooser', PresetPlantList: [{ PlantType: 'sunflower' }] };
+  if (plantsOf(chooser) !== 'sunflower') sbBad.push('a chooser bank changed');
+  window._testThreats = [];
+  if (plantsOf(bank('preset', 'hotpotato', 'sunflower')) !== 'hotpotato,sunflower') sbBad.push('a non-Frostbite bank changed');
+  if (sbBad.length) fail('seed bank: ' + sbBad.join(', '));
+  else ok('a Frostbite preset seed bank with no fire plant gains Fire Peashooter; others are untouched');
+}
+
+// ── [user] a level fielding Jesters always hands out a counter ───────────────
+// Every shipped belt, as if zombie shuffle had put a Jester on its level.
+// Before the rule about 46% of randomized belts held none.
+{
+  const COUNTER = window._AP_conveyorThreatAnswers.jester;
+  const bad = [];
+  let appended = 0;
+  for (const rand of [false, true]) {
+    window._AP_randomizeConveyor = rand;
+    for (const l of LEVELS) {
+      if (!l.InitialPlantList.some(e => window._AP_conveyorKnown.has(e.PlantType))) continue;
+      for (let seed = 1; seed <= (rand ? 20 : 1); seed++) {
+        window._AP_conveyorSeed = seed;
+        window._testThreats = ['jester'];
+        const input = clone(l);
+        const got = run(input).InitialPlantList;
+        if (JSON.stringify(input) !== JSON.stringify(l)) bad.push(`${l._file}: source mutated`);
+        if (!got.some(e => COUNTER.has(e.PlantType))) bad.push(`${l._file}@${seed} rand=${rand}: no counter`);
+        if (got.length > l.InitialPlantList.length) {
+          appended++;
+          if (got[got.length - 1].PlantType !== 'bonkchoy') bad.push(`${l._file}: appended ${got[got.length - 1].PlantType}`);
+        }
+      }
+    }
+  }
+  // Both threats, neither answered: Fire Peashooter and Bonk Choy both arrive.
+  window._AP_randomizeConveyor = false;
+  window._testThreats = ['cold', 'jester'];
+  const both = { InitialPlantList: [{ PlantType: 'peashooter', Weight: 10 }] };
+  const bothGot = run(clone(both)).InitialPlantList.map(e => e.PlantType).join(',');
+  if (bothGot !== 'peashooter,firepeashooter,bonkchoy') bad.push(`cold+jester: ${bothGot}`);
+  // Fire Peashooter is no Jester counter, but Inferno answers both.
+  const inf = { InitialPlantList: [{ PlantType: 'inferno', Weight: 10 }] };
+  if (run(clone(inf)).InitialPlantList.length !== 1) bad.push('Inferno belt gained a plant');
+  window._testThreats = [];
+  window._AP_conveyorSeed = 123456789;
+  if (bad.length) fail(`${bad.length} Jester belt problem(s): ${bad.slice(0, 5).join(', ')}`);
+  else ok(`every belt facing a Jester holds a counter, randomized (20 seeds) or not; ${appended} needed Bonk Choy added`);
+}
+
+// ── [user] a level fielding Parasol Zombie keeps a plant that does not lob ───
+// Before the rule about 18% of randomized belts on such a level held only
+// plants whose shots she bounces.
+{
+  const ANSWER = window._AP_conveyorThreatAnswers.parasol;
+  const bad = [];
+  for (const rand of [false, true]) {
+    window._AP_randomizeConveyor = rand;
+    for (const l of LEVELS) {
+      if (!l.InitialPlantList.some(e => window._AP_conveyorKnown.has(e.PlantType))) continue;
+      for (let seed = 1; seed <= (rand ? 20 : 1); seed++) {
+        window._AP_conveyorSeed = seed;
+        window._testThreats = ['parasol'];
+        const got = run(clone(l)).InitialPlantList;
+        if (!got.some(e => ANSWER.has(e.PlantType))) bad.push(`${l._file}@${seed} rand=${rand}: only lobbers`);
+      }
+    }
+  }
+  // An all-lobber belt gains Peashooter; a lobber is never counted as an answer.
+  window._AP_randomizeConveyor = false;
+  const lob = { InitialPlantList: ['cabbagepult', 'melonpult', 'kernelpult'].map(cn => ({ PlantType: cn, Weight: 10 })) };
+  const lobGot = run(clone(lob)).InitialPlantList.map(e => e.PlantType).join(',');
+  if (lobGot !== 'cabbagepult,melonpult,kernelpult,peashooter') bad.push(`all-lobber belt: ${lobGot}`);
+  for (const cn of ['cabbagepult', 'kernelpult', 'melonpult', 'wintermelon', 'pepperpult', 'akee',
+                    'sporeshroom', 'bloominghearts', 'dusklobber', 'applemortar', 'sapfling']) {
+    if (ANSWER.has(cn)) bad.push(`${cn} counted as a Parasol answer`);
+  }
+  window._testThreats = [];
+  window._AP_conveyorSeed = 123456789;
+  if (bad.length) fail(`${bad.length} Parasol belt problem(s): ${bad.slice(0, 5).join(', ')}`);
+  else ok('every belt facing a Parasol Zombie holds a plant she cannot bounce, randomized (20 seeds) or not');
 }
 
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nCONVEYOR HOOK OK');

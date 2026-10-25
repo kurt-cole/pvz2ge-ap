@@ -131,6 +131,8 @@ function setupRoom(opts) {
 }
 
 setupRoom();
+// Connected has landed: the slot has every shop location the room names.
+require('./store_fn.js').setSlotLocations([3520000, 3520001, 3520002]);
 scoutShopLocations();
 {
   const scout = sent.find(p => p.cmd === 'LocationScouts');
@@ -210,14 +212,22 @@ if (sent.some(p => p.cmd === 'LocationScouts'))
   fail('scouted when the slot has no shop locations');
 else ok('a slot with no shop locations sends no scout');
 
-// Before Connected lands the set is empty, which must mean "not known yet"
-// rather than "none" -- otherwise the scout would never fire on a normal boot.
+// Before Connected lands the set is empty, and the scout must WAIT: the
+// DataPackage reply usually arrives first, and scouting the game's whole table
+// from there got the client dropped on every first connect
+//     KeyError: 'No location 3517167293 for player 2'
+// Connected fills the table and scouts again, so a normal boot still scouts.
 setupRoom();
 setSlotLocations([]);
 scoutShopLocations();
+if (sent.some(p => p.cmd === 'LocationScouts'))
+  fail('scouted before Connected filled the slot table');
+else ok('no scout until this slot\'s locations are known');
+setSlotLocations([3520000, 3520001, 3520002]);
+scoutShopLocations();
 if (!sent.some(p => p.cmd === 'LocationScouts'))
-  fail('an empty slot table suppressed the scout instead of allowing it');
-else ok('an empty slot table is treated as "not known yet", not as "none"');
+  fail('no scout once Connected filled the slot table');
+else ok('scouts once Connected has filled the slot table');
 
 setupRoom();
 applyLocationInfo([
