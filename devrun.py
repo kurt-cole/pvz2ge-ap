@@ -2,17 +2,17 @@
 """
 Fast dev loop for the AP client JS.
 
-The full installer re-clones the game source, runs `npm install`, and then
-packages an exe with electron-builder -- that last step is the 2-5 minute
-one. None of it is needed when the only thing that changed is the injected
-client, which is a single file: pvzge_web/docs/tmpPatch.js.
+The full installer checks both upstream repos for changes before it touches
+anything. None of that is needed when the only thing that changed is the
+injected client, which is a single file: pvzge_web/docs/tmpPatch.js.
 
 This script rewrites just that file from build_pvzge_ap.py's TMPPATCH_CONTENT
-and launches the app unpackaged via `npm start` (electron .), which loads the
-exact same pvzge_web/docs/index.html the packaged build would.
+and launches the installed app, which loads pvzge_web/docs/index.html from the
+build folder. A build folder from before the installer stopped using npm has
+no installed app to launch, and falls back to `npm start` (electron .).
 
 Requires the full installer to have been run at least once, since it reuses
-that build directory (node_modules, cloned game source, patched main.js).
+that build directory (downloaded game, patched main.js, installed app).
 
 Usage:
   python devrun.py                    # patch + launch
@@ -77,6 +77,29 @@ def resolve_electron_dir(args):
     return candidates[0]
 
 
+def installed_app(electron_dir):
+    """The app the installer set up for this build folder, or None.
+
+    Read from the installer's stamp (layout 2 and later); an npm-era stamp
+    names a packaged app that may not load this folder's tmpPatch.js.
+    """
+    import json
+    try:
+        with open(os.path.join(os.path.dirname(electron_dir), "ap_package.json"),
+                  "r", encoding="utf-8") as f:
+            stamp = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(stamp, dict) or not stamp.get("layout"):
+        return None
+    # Linux's launcher script decides on --no-sandbox; prefer it over the binary.
+    for key in ("output", "exe"):
+        exe = stamp.get(key)
+        if exe and os.path.isfile(exe) and (key == "exe" or exe.endswith(".sh")):
+            return exe
+    return None
+
+
 def load_patch_content() -> str:
     spec = importlib.util.spec_from_file_location("build_pvzge_ap", SOURCE)
     mod = importlib.util.module_from_spec(spec)
@@ -101,6 +124,11 @@ def main() -> None:
 
     if "--patch-only" in sys.argv:
         return
+
+    exe = installed_app(electron_dir)
+    if exe:
+        print(f"Launching: {exe}")
+        raise SystemExit(subprocess.call([exe]))
 
     print(f"Launching: npm start  (cwd={electron_dir})")
     raise SystemExit(subprocess.call("npm start", cwd=electron_dir, shell=True))

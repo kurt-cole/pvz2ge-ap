@@ -18,6 +18,7 @@ including `CollectionState`/`sweep`, `early_items`, `get_regions` and
 | `gen_test.py` | Item pool exactly fills locations, no stray keys or regions for disabled worlds, goal clamping, upgrade copies, append-only item IDs, the starting plant, the early sun producer, `early_world_keys` placement |
 | `sphere_test.py` | Everything is reachable with the full item set, spheres actually layer rather than opening at once, and each world's entry rules bite |
 | `drift_test.py` | Every function in `client/*_fn.js` still matches `build_pvzge_ap.py` |
+| `installer_test.py` | The installer's git-free sync (blob-SHA diff, manifest, removals) and main.js patches, against a faked GitHub |
 | `client/upgrade_test.js` | Progressive upgrade grants and prefix logic |
 | `client/store_test.js` | A bought store card does not come back |
 | `client/conveyor_test.js` | Belt swaps stay inside a plant's power band and are deterministic |

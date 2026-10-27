@@ -21,7 +21,12 @@ import hashlib
 import re
 import shutil
 import subprocess
-import signal
+import stat
+import time
+import zipfile
+import urllib.error
+import urllib.parse
+import urllib.request
 import threading
 import platform as _sys_platform
 import tkinter as tk
@@ -6291,26 +6296,23 @@ window.electron = electron;
 
 
 # ── Build steps ───────────────────────────────────────────────────────────────
+# Nothing here needs git, node or npm. The game and the few files the Electron
+# wrapper contributes come from GitHub over HTTPS, and the app is a stock
+# Electron release with the wrapper dropped into resources/app, which Electron
+# runs as-is: there is nothing to package. Everything below is Python's
+# standard library, which Archipelago already ships.
 
-STEPS = [
-    ("Checking requirements",        "check_requirements"),
-    ("Cloning Electron wrapper",      "clone_electron"),
-    ("Cloning game source",           "clone_game"),
-    ("Patching tmpPatch.js",          "patch_tmpatch"),
-    ("Installing Node dependencies",  "npm_install"),
-    ("Building executable",           "npm_build"),
-    ("Copying output",                "copy_output"),
-]
+
+class BuildError(Exception):
+    """A failure worded for the player; the GUI shows the message as is."""
 
 
 # Environment variables that make a bundled runtime's libraries win over the
 # host's. Archipelago's Linux release runs from an AppImage (or a PyInstaller
 # one-file build), and both point the dynamic loader at their own bundled
-# copies of libcrypto/libssl/libstdc++. A host `git` spawned with that
-# environment loads the bundle's older libcrypto and then dies on the host
-# libcurl that needs a newer one -- "OPENSSL_3.3.0 not found required by
-# /usr/lib/libcurl". Every tool we spawn here is a host tool, so it must be
-# spawned with the environment the host would have given it.
+# copies of libcrypto/libssl/libstdc++. A host tool spawned with that
+# environment (ldd below) loads the bundle's libraries instead of its own, so
+# it must be spawned with the environment the host would have given it.
 _BUNDLE_ENV_VARS = (
     "LD_LIBRARY_PATH", "LD_PRELOAD", "GTK_PATH", "GDK_PIXBUF_MODULE_FILE",
     "GIO_MODULE_DIR", "GCONV_PATH", "GSETTINGS_SCHEMA_DIR", "PYTHONHOME",
@@ -6347,12 +6349,6 @@ def _bundle_prefixes():
     return [p for p in out if p]
 
 
-# Set by tool_version when pruning the loader variables was not enough and
-# they had to go entirely. It sticks for the rest of the build, so npm, git and
-# electron-builder are spawned with the environment that was proven to work.
-_drop_bundle_vars = False
-
-
 def host_env():
     """A copy of os.environ safe to hand to a host tool.
 
@@ -6362,12 +6358,6 @@ def host_env():
     bundle paths is removed entirely.
     """
     env = os.environ.copy()
-    if _drop_bundle_vars:
-        for var in _BUNDLE_ENV_VARS:
-            env.pop(var, None)
-            env.pop(var + "_ORIG", None)
-            env.pop(var + "_OLD", None)
-        return env
     prefixes = tuple(_bundle_prefixes())
     for var in _BUNDLE_ENV_VARS:
         orig = env.pop(var + "_ORIG", None)
@@ -6388,245 +6378,315 @@ def host_env():
             env[var] = os.pathsep.join(kept)
         else:
             env.pop(var, None)
-    # find_tool's PATH additions live in os.environ, so they come along.
     return env
 
 
-def tool_version(tool):
-    """(True, version) for a working host tool, else (False, what it printed).
+# ── Downloading without git ───────────────────────────────────────────────────
+# What git used to give, done over HTTPS: one GitHub API call lists every file
+# at the branch's current commit with its git blob SHA, the same hash is
+# computed for what is on disk, and only files that differ are downloaded. A
+# manifest per repo caches each file's SHA against its size and mtime, so an
+# update re-hashes only files that changed on disk since the last run.
 
-    The retry matters more than the version string does. host_env() prunes the
-    bundle's directories out of the loader variables, but it can only prune
-    prefixes it recognises; a frozen build laid out in a way this does not know
-    about would still poison every tool it spawns. Dropping the variables
-    outright is always safe here -- everything spawned from this point on is a
-    host binary that wants the host's libraries -- so if the pruned environment
-    fails, fall back to no bundle variables at all and keep that environment
-    for the rest of the build.
+GITHUB_API = "https://api.github.com"
+
+# (owner, repo, ref). PVZGE-Electron is read at its default branch; pvzge_web
+# always at master, never the submodule pin in the wrapper, which may lag.
+WRAPPER_REPO = ("Twig6943", "PVZGE-Electron", "HEAD")
+GAME_REPO    = ("Gzh0821", "pvzge_web", "master")
+
+# Only these paths of each repo are used, so nothing else is downloaded.
+WRAPPER_PATHS = ("main.js", "package.json", "assets/icons/")
+GAME_PATHS    = ("docs/",)
+
+SYNC_MANIFEST = "ap_sync_{}.json"
+
+# Past this much to fetch, one archive download beats per-file requests. A
+# first install is ~8,000 files and ~1.3GB.
+ARCHIVE_MIN_FILES = 300
+ARCHIVE_MIN_BYTES = 100 * 1024 * 1024
+FETCH_WORKERS     = 8
+
+_MB = 1024 * 1024
+_ssl_ctx = None
+
+
+def _ssl_context():
+    """Default verification, plus certifi's bundle when it is importable.
+
+    Frozen Pythons do not always find the system's CA store; certifi covers
+    that, and loading it in addition never weakens anything.
     """
-    global _drop_bundle_vars
-    attempts = [host_env()]
-    stripped = host_env()
-    for var in _BUNDLE_ENV_VARS:
-        stripped.pop(var, None)
-    if stripped != attempts[0]:
-        attempts.append(stripped)
-    last = ""
-    for i, env in enumerate(attempts):
+    global _ssl_ctx
+    if _ssl_ctx is None:
+        import ssl
+        ctx = ssl.create_default_context()
         try:
-            proc = subprocess.run(
-                f"{tool} --version", shell=True, capture_output=True,
-                text=True, timeout=60, env=env,
-            )
-        except (OSError, subprocess.SubprocessError) as e:
-            last = str(e)
-            continue
-        if proc.returncode == 0 and (proc.stdout or "").strip():
-            if i:
-                _drop_bundle_vars = True
-            return True, proc.stdout.strip()
-        last = ((proc.stderr or "") + (proc.stdout or "")).strip() or \
-            f"exit status {proc.returncode}"
-    return False, last
-
-
-def run_cmd(cmd, cwd, log):
-    """Run a shell command, streaming output to log callback. Returns returncode."""
-    proc = subprocess.Popen(
-        cmd, cwd=cwd, shell=True, env=host_env(),
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, bufsize=1
-    )
-    for line in proc.stdout:
-        log(line.rstrip())
-    proc.wait()
-    return proc.returncode
-
-
-# Directories that hold a home-directory node/npm/git on the systems this has
-# to work on. Archipelago is often launched from a desktop entry or Steam, and
-# that process inherits a bare PATH -- not the one a login shell builds -- so
-# shutil.which() alone reports "not installed" for a perfectly good nvm, fnm,
-# Homebrew or ~/.local install. Every entry here is a user-writable prefix,
-# which is exactly where SteamOS/Bazzite users have to put these tools.
-_EXTRA_TOOL_GLOBS = (
-    "~/.nvm/versions/node/*/bin",
-    "~/.local/share/fnm/node-versions/*/installation/bin",
-    "~/.local/share/nvm/*/bin",
-    "~/.volta/bin",
-    "~/.asdf/shims",
-    "~/.bun/bin",
-    "~/.local/bin",
-    "~/bin",
-    "/home/linuxbrew/.linuxbrew/bin",
-    "~/.linuxbrew/bin",
-    "/opt/homebrew/bin",
-    "/usr/local/bin",
-    "/usr/bin",
-    "/var/lib/flatpak/exports/bin",
-    "~/.local/share/flatpak/exports/bin",
-)
-
-_login_path_cache = None
-
-
-def _shell_path_probe(shell):
-    """The command that makes `shell` print its PATH colon-separated.
-
-    fish keeps PATH as a list, so the POSIX `printf %s "$PATH"` prints it
-    space-separated there and the result parses as one nonsense directory.
-    """
-    if os.path.basename(shell) == "fish":
-        return "string join : $PATH"
-    return 'printf %s "$PATH"'
-
-
-def _run_shell_path(shell, args, timeout):
-    """Run one shell PATH probe, returning its stdout or "".
-
-    Every guard here exists because this runs under a GUI-launched
-    Archipelago, where a hang has no visible cause and no way out:
-
-      * stdin is /dev/null, so an rc file that prompts gets EOF instead of
-        blocking forever on a terminal that is not there.
-      * the shell gets its own process group, and a timeout kills the group.
-        Killing only the shell leaves any background job it started holding
-        the stdout pipe, and the read that follows never returns -- that is
-        subprocess.run(timeout=...) hanging *past* its own timeout.
-      * stderr is discarded rather than merged, so rc-file noise cannot be
-        mistaken for output.
-    """
-    try:
-        proc = subprocess.Popen(
-            [shell] + args,
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, text=True, env=host_env(),
-            start_new_session=True,
-        )
-    except (OSError, ValueError):
-        return ""
-    try:
-        out, _ = proc.communicate(timeout=timeout)
-        return out or ""
-    except subprocess.TimeoutExpired:
-        try:
-            os.killpg(proc.pid, signal.SIGKILL)
-        except (OSError, AttributeError):
-            proc.kill()
-        # The group is gone, so this cannot block on an inherited pipe.
-        try:
-            proc.communicate(timeout=5)
-        except (subprocess.SubprocessError, OSError):
+            import certifi
+            ctx.load_verify_locations(certifi.where())
+        except Exception:
             pass
-        return ""
-    except (OSError, subprocess.SubprocessError):
-        return ""
+        _ssl_ctx = ctx
+    return _ssl_ctx
 
 
-def _login_shell_path():
-    """PATH as the user's own login shell builds it.
-
-    This is the cheapest way to pick up whatever nvm/fnm/brew line lives in a
-    .bashrc or .zshrc without reimplementing any of them. Cached: it spawns a
-    shell, and find_tool is called repeatedly.
-
-    The non-interactive login shell is tried first and the interactive one only
-    if that came back empty: -i is what runs the parts of an rc file that
-    assume a terminal, and those are what hang.
-    """
-    global _login_path_cache
-    if _login_path_cache is not None:
-        return _login_path_cache
-    _login_path_cache = ""
-    shell = os.environ.get("SHELL")
-    if not shell or os.name == "nt" or not os.path.exists(shell):
-        return _login_path_cache
-    probe = _shell_path_probe(shell)
-    for flags, timeout in (("-lc", 10), ("-lic", 10)):
-        out = _run_shell_path(shell, [flags, probe], timeout)
-        # A chatty rc file prints banners; the PATH is the last non-empty line
-        # that actually looks like one.
-        for line in reversed(out.splitlines()):
-            if os.pathsep in line and "/" in line:
-                _login_path_cache = line.strip()
-                return _login_path_cache
-    return _login_path_cache
+def _open(url, accept=None, timeout=60):
+    headers = {"User-Agent": "pvz2gardendless-ap-builder"}
+    if accept:
+        headers["Accept"] = accept
+    # Optional: lifts the API's 60 requests an hour to 5,000. An update uses
+    # four, so nobody should need it.
+    token = os.environ.get("GITHUB_TOKEN")
+    if token and url.startswith(GITHUB_API):
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers)
+    return urllib.request.urlopen(req, timeout=timeout, context=_ssl_context())
 
 
-def _glob_dirs():
-    """The known home-directory tool prefixes that exist on this machine."""
-    dirs = []
-    import glob as _glob
-    for pattern in _EXTRA_TOOL_GLOBS:
-        for d in sorted(_glob.glob(os.path.expanduser(pattern))):
-            if os.path.isdir(d) and d not in dirs:
-                dirs.append(d)
-    return dirs
-
-
-def _login_shell_path_dirs():
-    return [c for c in _login_shell_path().split(os.pathsep) if c]
-
-
-def _candidate_dirs():
-    dirs = _glob_dirs()
-    for chunk in _login_shell_path().split(os.pathsep):
-        if chunk and chunk not in dirs:
-            dirs.append(chunk)
-    return dirs
-
-
-def find_tool(name):
-    """Locate a required tool, then make it visible to every later subprocess.
-
-    On success the tool's directory is prepended to this process's PATH, so the
-    shell=True build commands (npm install, git clone, electron-builder and the
-    npm scripts it spawns) find it too -- not just this lookup.
-
-    The glob prefixes are searched before the login shell is asked, because
-    asking means spawning the user's shell and sourcing their rc files. A
-    system-packaged node in /usr/bin answers the question without that.
-    """
-    found = shutil.which(name)
-    if found:
-        return found
-    for finder in (_glob_dirs, _login_shell_path_dirs):
-        for d in finder():
-            found = shutil.which(name, path=d)
-            if found:
-                os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
-                return found
-    return None
-
-
-def git_capture(args, cwd):
-    """Run a git command and return (returncode, stripped stdout).
-
-    Quiet by design -- this is for reading repository state during an update
-    check, where streaming every line into the build log would bury the answer.
-    """
+def _read_api(url, accept="application/vnd.github+json"):
     try:
-        proc = subprocess.run(
-            ["git"] + args, cwd=cwd, capture_output=True, text=True,
-            timeout=120, env=host_env(),
-        )
-    except (OSError, subprocess.SubprocessError) as e:
-        return 1, str(e)
-    return proc.returncode, (proc.stdout or proc.stderr or "").strip()
+        with _open(url, accept) as r:
+            return r.read()
+    except urllib.error.HTTPError as e:
+        if e.code in (403, 429) and e.headers.get("X-RateLimit-Remaining") == "0":
+            reset = e.headers.get("X-RateLimit-Reset", "")
+            when = (time.strftime("%H:%M", time.localtime(int(reset)))
+                    if reset.isdigit() else "an hour")
+            raise BuildError(
+                "GitHub allows 60 requests an hour from one network, and that\n"
+                f"is used up. Try again after {when}.") from e
+        raise BuildError(f"GitHub answered {e.code} for\n{url}") from e
+    except (urllib.error.URLError, OSError) as e:
+        raise BuildError(f"Could not reach GitHub ({getattr(e, 'reason', e)}).\n"
+                         "Check your internet connection.") from e
 
 
-def _remote_head(repo_dir):
-    """Resolve this repo's upstream commit, whatever its default branch is.
+def remote_commit(repo):
+    """The commit SHA `repo`'s ref points at right now."""
+    owner, name, ref = repo
+    sha = _read_api(f"{GITHUB_API}/repos/{owner}/{name}/commits/{ref}",
+                    "application/vnd.github.sha").decode("ascii", "replace").strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise BuildError(f"GitHub returned no commit for {owner}/{name}.")
+    return sha
 
-    The clones here are --depth=1, so origin/HEAD is often not set and the
-    branch is not always master -- PVZGE-Electron and pvzge_web do not agree.
-    Ask for each candidate in turn rather than assuming one.
+
+def remote_tree(repo, commit, prefixes):
+    """{path: (blob sha, size)} for the files under `prefixes` at `commit`."""
+    owner, name, _ = repo
+    data = json.loads(_read_api(
+        f"{GITHUB_API}/repos/{owner}/{name}/git/trees/{commit}?recursive=1"))
+    if data.get("truncated"):
+        # GitHub stops listing at 100,000 entries; pvzge_web has ~9,000.
+        raise BuildError(f"{owner}/{name} has outgrown a single file listing.\n"
+                         "This installer needs an update to handle it.")
+    return {e["path"]: (e["sha"], e.get("size", 0))
+            for e in data.get("tree", [])
+            if e.get("type") == "blob" and e.get("mode") != "120000"
+            and e["path"].startswith(prefixes)}
+
+
+def _git_blob_sha(data):
+    h = hashlib.sha1(b"blob %d\0" % len(data))
+    h.update(data)
+    return h.hexdigest()
+
+
+def blob_sha(path):
+    """git's blob SHA-1 of a file on disk, without reading it in one piece."""
+    h = hashlib.sha1(b"blob %d\0" % os.path.getsize(path))
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(_MB), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def read_manifest(path):
+    """{"commit": sha or None, "files": {path: [sha, size, mtime_ns]}}."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and isinstance(data.get("files"), dict):
+            return {"commit": data.get("commit"), "files": data["files"]}
+    except (OSError, ValueError):
+        pass
+    return {"commit": None, "files": {}}
+
+
+def _stat_key(path):
+    st = os.stat(path)
+    return [st.st_size, st.st_mtime_ns]
+
+
+def _local(root, rel):
+    return os.path.join(root, *rel.split("/"))
+
+
+def _place(root, rel, data):
+    """Write one file atomically, so an interrupted run leaves no torn file."""
+    path = _local(root, rel)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".aptmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, path)
+
+
+def _download(url, dest, log, label):
+    """Stream `url` to `dest`, logging progress every 50MB."""
+    tmp = dest + ".part"
+    try:
+        with _open(url, timeout=120) as r, open(tmp, "wb") as f:
+            total = int(r.headers.get("Content-Length") or 0)
+            got, mark = 0, 0
+            for chunk in iter(lambda: r.read(_MB), b""):
+                f.write(chunk)
+                got += len(chunk)
+                if got >= mark:
+                    of = f" of {total / _MB:,.0f}" if total else ""
+                    log(f"  {label}: {got / _MB:,.0f}{of} MB")
+                    mark = got + 50 * _MB
+        os.replace(tmp, dest)
+    except (urllib.error.URLError, OSError) as e:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise BuildError(f"Download failed ({getattr(e, 'reason', e)}):\n{url}\n\n"
+                         "Check your internet connection and free disk space.") from e
+    log(f"  {label}: done ({got / _MB:,.0f} MB)")
+
+
+def _fetch_raw(repo, commit, rel, want):
+    """One file's bytes at `commit`, checked against its blob SHA."""
+    owner, name, _ = repo
+    url = (f"https://raw.githubusercontent.com/{owner}/{name}/{commit}/"
+           f"{urllib.parse.quote(rel)}")
+    last = None
+    for _attempt in range(3):
+        try:
+            with _open(url, timeout=120) as r:
+                data = r.read()
+        except (urllib.error.URLError, OSError) as e:
+            last = getattr(e, "reason", e)
+            continue
+        if _git_blob_sha(data) == want:
+            return data
+        last = "the download did not match GitHub's hash"
+    raise BuildError(f"Could not download {rel}:\n{last}")
+
+
+def _fetch_archive(repo, commit, root, wanted, tree, log, tmp_dir):
+    """Download `repo` at `commit` as one zip and extract the `wanted` paths.
+
+    Returns the set it wrote with the expected hash; anything else is left for
+    the caller to fetch singly. The zip is deleted afterwards.
     """
-    for ref in ("origin/HEAD", "origin/master", "origin/main"):
-        rc, out = git_capture(["rev-parse", ref], repo_dir)
-        if rc == 0 and out:
-            return out
-    return None
+    owner, name, _ = repo
+    zpath = os.path.join(tmp_dir, f".ap_{name}_{commit[:12]}.zip")
+    _download(f"https://codeload.github.com/{owner}/{name}/zip/{commit}",
+              zpath, log, f"{name} archive")
+    done = set()
+    try:
+        log("  Extracting...")
+        with zipfile.ZipFile(zpath) as zf:
+            for info in zf.infolist():
+                if info.is_dir() or "/" not in info.filename:
+                    continue
+                rel = info.filename.split("/", 1)[1]  # drop "<repo>-<sha>/"
+                if rel not in wanted:
+                    continue
+                data = zf.read(info)
+                _place(root, rel, data)
+                if _git_blob_sha(data) == tree[rel][0]:
+                    done.add(rel)
+    except (zipfile.BadZipFile, OSError) as e:
+        raise BuildError(f"Could not extract the {name} download: {e}") from e
+    finally:
+        try:
+            os.remove(zpath)
+        except OSError:
+            pass
+    return done
+
+
+def sync_repo(repo, root, prefixes, manifest_path, log, tmp_dir, rehash=False):
+    """Make `root`'s copy of `prefixes` match `repo`'s current commit.
+
+    Anything the manifest cannot vouch for is hashed: no manifest (a former git
+    checkout), a file touched since, or rehash=True. A file removed upstream is
+    deleted only when the manifest says this put it there, so nothing else in
+    the folder is ever touched. Returns (commit, fetched, removed).
+    """
+    commit = remote_commit(repo)
+    tree = remote_tree(repo, commit, prefixes)
+    if not tree:
+        raise BuildError(f"{repo[0]}/{repo[1]} has none of the files this needs "
+                         f"({', '.join(prefixes)}).")
+    known = read_manifest(manifest_path)["files"]
+
+    have, hashed = {}, 0
+    for rel in tree:
+        path = _local(root, rel)
+        try:
+            key = _stat_key(path)
+        except OSError:
+            continue
+        entry = known.get(rel)
+        if not rehash and isinstance(entry, list) and entry[1:] == key:
+            have[rel] = entry[0]
+            continue
+        if hashed == 0:
+            log("  Checking the files already on disk...")
+        have[rel] = blob_sha(path)
+        hashed += 1
+        if hashed % 2000 == 0:
+            log(f"  Checked {hashed:,} files")
+    if hashed:
+        log(f"  Checked {hashed:,} file(s)")
+
+    removed = 0
+    for rel in known:
+        if rel not in tree:
+            try:
+                os.remove(_local(root, rel))
+                removed += 1
+            except OSError:
+                pass
+
+    wanted = {rel for rel, (sha, _) in tree.items() if have.get(rel) != sha}
+    if wanted:
+        size = sum(tree[rel][1] for rel in wanted)
+        log(f"  {len(wanted):,} file(s) to download ({size / _MB:,.1f} MB)")
+        done = set()
+        if len(wanted) >= ARCHIVE_MIN_FILES or size >= ARCHIVE_MIN_BYTES:
+            done = _fetch_archive(repo, commit, root, wanted, tree, log, tmp_dir)
+        rest = sorted(wanted - done)
+        if rest:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            ex = ThreadPoolExecutor(FETCH_WORKERS)
+            try:
+                futs = {ex.submit(_fetch_raw, repo, commit, rel, tree[rel][0]): rel
+                        for rel in rest}
+                for i, fut in enumerate(as_completed(futs), 1):
+                    _place(root, futs[fut], fut.result())
+                    if i % 200 == 0 or i == len(rest):
+                        log(f"  Downloaded {i:,} of {len(rest):,}")
+            finally:
+                ex.shutdown(wait=True, cancel_futures=True)
+
+    # Every listed file now has the tree's hash: matched, written and verified,
+    # or the run raised before reaching here and left the old manifest.
+    files = {}
+    for rel, (sha, _) in tree.items():
+        try:
+            files[rel] = [sha] + _stat_key(_local(root, rel))
+        except OSError:
+            pass
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump({"repo": f"{repo[0]}/{repo[1]}", "commit": commit,
+                   "files": files}, f, separators=(",", ":"))
+    return commit, len(wanted), removed
 
 
 def check_for_updates(build_dir, log):
@@ -6636,9 +6696,7 @@ def check_for_updates(build_dir, log):
     actually change something, so the caller can offer the update rather than
     making the user guess.
 
-    Reads only: fetches refs and compares hashes, never touches the working
-    tree. A fetch is cheap on an existing shallow clone, unlike the ~300MB
-    first clone.
+    Reads only: two API calls for the upstream commits, then local files.
     """
     electron_dir  = os.path.join(build_dir, "PVZGE-Electron")
     pvzge_web_dir = os.path.join(electron_dir, "pvzge_web")
@@ -6646,44 +6704,31 @@ def check_for_updates(build_dir, log):
     lines = []
     stale = False
 
-    if not find_tool("git"):
-        return False, ["git is not installed, so no update check is possible."]
-
     if not os.path.isdir(docs_dir):
         return True, [
             "No build found in this folder yet.",
             "Run a full build first -- there is nothing to update.",
         ]
 
-    def check_repo(label, repo_dir, fetch_args):
-        nonlocal stale
-        if not os.path.isdir(os.path.join(repo_dir, ".git")):
-            lines.append(f"{label}: not a git checkout, cannot check")
-            return
-        log(f"  Fetching {label}...")
-        rc, out = git_capture(["fetch"] + fetch_args, repo_dir)
-        if rc != 0:
-            lines.append(f"{label}: could not reach GitHub ({out.splitlines()[-1] if out else 'no output'})")
-            return
-        _, local = git_capture(["rev-parse", "HEAD"], repo_dir)
-        remote = _remote_head(repo_dir)
-        if remote is None:
-            lines.append(f"{label}: no upstream ref to compare against")
-            return
-        if local == remote:
-            _, subject = git_capture(["log", "--oneline", "-1"], repo_dir)
-            lines.append(f"{label}: up to date  ({subject})")
+    for label, repo in (("Electron wrapper", WRAPPER_REPO), ("Game source", GAME_REPO)):
+        log(f"  Checking {label}...")
+        local = read_manifest(os.path.join(build_dir, SYNC_MANIFEST.format(repo[1])))["commit"]
+        try:
+            remote = remote_commit(repo)
+        except BuildError as e:
+            lines.append(f"{label}: {str(e).splitlines()[0]}")
+            continue
+        if not local:
+            stale = True
+            lines.append(f"{label}: from an older git-based build; UPDATE converts it")
+        elif local == remote:
+            lines.append(f"{label}: up to date  ({remote[:7]})")
         else:
             stale = True
-            rc, count = git_capture(["rev-list", "--count", f"HEAD..{remote}"], repo_dir)
-            n = count if rc == 0 and count.isdigit() else "new"
-            lines.append(f"{label}: {n} commit(s) behind upstream")
-
-    check_repo("Electron wrapper", electron_dir, ["origin"])
-    check_repo("Game source", pvzge_web_dir, ["origin", "master", "--depth=1"])
+            lines.append(f"{label}: changed upstream  ({local[:7]} -> {remote[:7]})")
 
     # The Archipelago client. This is the one that changes most often and the
-    # one a git fetch says nothing about -- it ships inside this apworld, so it
+    # one upstream says nothing about -- it ships inside this apworld, so it
     # moves when the apworld is updated, not when either repo does.
     tmppatch_path = os.path.join(docs_dir, "tmpPatch.js")
     if not os.path.isfile(tmppatch_path):
@@ -6700,75 +6745,39 @@ def check_for_updates(build_dir, log):
             lines.append(f"AP client: differs from this apworld "
                          f"({delta:+,} bytes)")
 
-    # Even with everything above current, the packaged app can predate the
-    # patch: electron-builder bakes the client into the executable, so editing
-    # tmpPatch.js alone changes nothing the player runs.
-    # The Windows unpacked folder comes first; the portable exe after it is
-    # what builds before WIN_TARGET left. "PvZ Gardendless AP.sh" is the Linux
-    # unpacked-build launcher, checked last: it is the fallback for machines
-    # that cannot mount an AppImage.
-    exe = None
-    win_dir = os.path.join(build_dir, WIN_APP_DIR)
-    if os.path.isdir(win_dir):
-        exe = _find_unpacked_binary(win_dir)
-    for name in ([] if exe else
-                 (WIN_PORTABLE, "PvZ Gardendless AP.dmg",
-                  "PvZ Gardendless AP.AppImage", "PvZ Gardendless AP.sh")):
-        p = os.path.join(build_dir, name)
-        if os.path.isfile(p):
-            exe = p
-            break
     stamp = read_package_stamp(build_dir)
-    if exe is None:
+    if not stamp or stamp.get("layout") != APP_LAYOUT:
         stale = True
-        lines.append("Packaged app: not built yet")
-    elif stamp is not None:
-        # Game and client load from the checkout, so the app's age relative
-        # to tmpPatch.js says nothing. Only its target folder matters here;
-        # UPDATE repackages anyway if main.js or Electron changed.
-        if os.path.normcase(stamp.get("docs", "")) != \
-                os.path.normcase(os.path.abspath(docs_dir)):
-            stale = True
-            lines.append(f"Packaged app: loads the game from {stamp.get('docs')}, "
-                         "not this folder")
+        if any(os.path.exists(os.path.join(build_dir, n)) for n in LEGACY_OUTPUTS):
+            lines.append("App: built with npm by an older installer; UPDATE "
+                         "replaces it (no Node.js or Git needed)")
         else:
-            lines.append(f"Packaged app: {os.path.basename(exe)} "
-                         "(loads the game from this folder)")
-    elif os.path.isfile(tmppatch_path) and \
-            os.path.getmtime(exe) < os.path.getmtime(tmppatch_path):
+            lines.append("App: not built yet")
+    elif not os.path.exists(stamp.get("output", "")):
         stale = True
-        lines.append("Packaged app: older than the injected client, "
-                     "so it does not contain it")
+        lines.append(f"App: missing ({stamp.get('output')})")
+    elif os.path.normcase(stamp.get("docs", "")) != \
+            os.path.normcase(os.path.abspath(docs_dir)):
+        stale = True
+        lines.append(f"App: loads the game from {stamp.get('docs')}, not this folder")
     else:
-        lines.append(f"Packaged app: {os.path.basename(exe)} (game packaged inside; "
-                     "the next build moves it out so later updates are fast)")
+        lines.append(f"App: Electron {stamp.get('electron')} "
+                     "(loads the game from this folder)")
 
     return stale, lines
 
 
 # ── External game data ────────────────────────────────────────────────────────
-# The packaged app does not carry the game. pvzge_web/docs is ~1.3GB, and
-# baking it in meant every client update re-ran electron-builder over all of
-# it (asar, then AppImage/7z compression) and made the Windows portable exe
-# unpack it on every launch. Instead main.js loads the game from the build
-# folder's checkout, by an absolute path written in at build time. A client
-# or game update is then a file write or a git fetch, and electron-builder
-# only reruns when what it packages (main.js, package.json, Electron) changes.
+# The app does not carry the game. pvzge_web/docs is ~1.3GB; main.js loads it
+# from the build folder's copy by an absolute path written in at build time,
+# so a client or game update is a file write and never touches the app.
 #
 # The build folder is pvz2gardendless.build_directory in host.yaml, set from
 # the builder's folder picker. Choosing a different folder and building
-# rewrites the path, which changes main.js and so repackages.
+# rewrites the path.
 
 GAME_DOCS_MARKER = "AP_GAME_DOCS"
-GAME_DOCS_GLOB   = "pvzge_web/docs/**/*"
 PACKAGE_STAMP    = "ap_package.json"
-
-# Windows ships electron-builder's unpacked tree, copied into this folder of
-# the build directory. The portable exe it replaces (PvZ Gardendless AP.exe)
-# is removed when the folder is installed.
-WIN_TARGET   = "dir"
-WIN_APP_DIR  = "PvZ Gardendless AP"
-WIN_PORTABLE = "PvZ Gardendless AP.exe"
 
 _UPSTREAM_LOADFILE = re.compile(
     r"""win\.loadFile\((['"])pvzge_web/docs/index\.html\1\);""")
@@ -6798,8 +6807,8 @@ def externalize_game(main_js, docs_dir):
 
     Idempotent: an already-patched main.js only has its path line rewritten,
     so a moved build folder takes effect on the next build. ok is False when
-    upstream's loadFile line is not recognised, and the caller then keeps the
-    game bundled as before rather than shipping an app that loads nothing.
+    upstream's loadFile line is not recognised; the app cannot carry the game
+    itself any more, so the caller stops there.
     """
     const = f"const {GAME_DOCS_MARKER} = {json.dumps(os.path.abspath(docs_dir))};"
     if _GAME_DOCS_CONST.search(main_js):
@@ -6814,22 +6823,22 @@ def externalize_game(main_js, docs_dir):
     return main_js, True
 
 
-def _package_fingerprint(electron_dir, plat):
-    """What electron-builder's output depends on, once the game is external."""
-    h = hashlib.sha256(plat.encode())
-    for rel in ("main.js", "package.json",
-                os.path.join("node_modules", "electron", "package.json"),
-                os.path.join("node_modules", "electron-builder", "package.json")):
-        p = os.path.join(electron_dir, rel)
-        h.update(rel.encode())
-        if os.path.isfile(p):
-            with open(p, "rb") as f:
-                h.update(f.read())
-    return h.hexdigest()
+# The stock Electron binary carries Electron's icon, not the game's. The window
+# (and with it the taskbar entry) takes the wrapper's own icon instead.
+_ICON_MARKER = "AP_ICON"
+_ICON_LINE = ("    // " + _ICON_MARKER + ": the stock Electron binary has no game icon.\n"
+              "    icon: require('path').join(__dirname, 'assets', 'icons',\n"
+              "      process.platform === 'win32' ? 'icon.ico' : 'icon.png'),\n")
+
+
+def add_window_icon(main_js):
+    if _ICON_MARKER in main_js or "new BrowserWindow({" not in main_js:
+        return main_js
+    return main_js.replace("new BrowserWindow({\n", "new BrowserWindow({\n" + _ICON_LINE, 1)
 
 
 def read_package_stamp(build_dir):
-    """The stamp the last external-game package left, or None (old or no build)."""
+    """The stamp the last build left, or None (old or no build)."""
     try:
         with open(os.path.join(build_dir, PACKAGE_STAMP), "r", encoding="utf-8") as f:
             stamp = json.load(f)
@@ -6838,179 +6847,191 @@ def read_package_stamp(build_dir):
     return stamp if isinstance(stamp, dict) else None
 
 
-# Electron ships its own helper executables next to the app binary. They are
-# ELF and they sort before most app names, so an unqualified scan finds
-# chrome-sandbox rather than the game.
-_ELECTRON_HELPERS = ("chrome-sandbox", "chrome_crashpad_handler")
+# ── The app: stock Electron plus resources/app ────────────────────────────────
+# Stamped with layout 2. Builds from before this (layout absent) were made by
+# electron-builder and are replaced, not patched: an old tree's app.asar would
+# take precedence over resources/app.
+
+APP_LAYOUT = 2
+APP_NAME   = "PvZ Gardendless AP"
+APP_EXE    = {"Windows": APP_NAME + ".exe", "Linux": "pvzge-ap"}
+
+# What electron-builder builds left at the top of the build folder. Removed once
+# the new app is in place; listed here so the update check can recognise them.
+LEGACY_OUTPUTS = (APP_NAME + ".exe", APP_NAME + ".AppImage", APP_NAME + ".dmg")
 
 
-def _electron_cache_dirs():
-    """Where @electron/get keeps downloaded Electron zips, per platform."""
-    override = os.environ.get("electron_config_cache")
-    if override:
-        return [override]
-    if _sys_platform.system() == "Windows":
-        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-        return [os.path.join(base, "electron", "Cache")]
-    if _sys_platform.system() == "Darwin":
-        return [os.path.expanduser("~/Library/Caches/electron")]
-    return [os.path.expanduser("~/.cache/electron")]
+def app_paths(build_dir, plat):
+    """(app root, executable, resources/app folder) for this platform."""
+    if plat == "Darwin":
+        root = os.path.join(build_dir, APP_NAME + ".app")
+        return (root, os.path.join(root, "Contents", "MacOS", "Electron"),
+                os.path.join(root, "Contents", "Resources", "app"))
+    root = os.path.join(build_dir, APP_NAME)
+    return (root, os.path.join(root, APP_EXE.get(plat, APP_EXE["Linux"])),
+            os.path.join(root, "resources", "app"))
 
 
-def _electron_is_installed(electron_pkg_dir, version):
-    """True when node_modules/electron holds a usable binary for `version`."""
-    dist = os.path.join(electron_pkg_dir, "dist")
-    try:
-        with open(os.path.join(dist, "version"), "r", encoding="utf-8") as f:
-            if f.read().strip().lstrip("v") != version:
-                return False
-    except OSError:
-        return False
-    if not os.path.isfile(os.path.join(electron_pkg_dir, "path.txt")):
-        return False
-    exe = "electron.exe" if _sys_platform.system() == "Windows" else "electron"
-    return os.path.isfile(os.path.join(dist, exe))
+def electron_version(package_json_path):
+    """The Electron version the wrapper declares, as a plain x.y.z.
 
-
-def _extract_electron_zip(zip_path, dist_dir, log):
-    """Extract an Electron release zip, preserving the executable bits.
-
-    Used in place of the package's own postinstall, whose extract-zip
-    dependency silently truncates the archive to its first entry on newer
-    Node versions: it writes one file, resolves successfully and exits 0.
-    zipfile has no such problem, but it does drop permissions, so the mode
-    bits are restored from the archive afterwards.
+    The range's floor (^39.8.7 -> 39.8.7): exactly the release the wrapper
+    names, and a fixed one, so an unchanged wrapper never re-downloads.
     """
-    import zipfile
+    try:
+        with open(package_json_path, "r", encoding="utf-8") as f:
+            pkg = json.load(f)
+    except (OSError, ValueError) as e:
+        raise BuildError(f"Could not read {package_json_path}: {e}") from e
+    spec = ((pkg.get("devDependencies") or {}).get("electron")
+            or (pkg.get("dependencies") or {}).get("electron") or "")
+    m = re.search(r"\d+\.\d+\.\d+", spec)
+    if not m:
+        raise BuildError("PVZGE-Electron's package.json does not name an Electron "
+                         f"version (found {spec!r}).")
+    return m.group(0)
+
+
+def electron_asset(version, plat):
+    """The release zip for this machine. Native arch, so Apple Silicon and
+    Windows on ARM do not run under emulation."""
+    os_name = {"Windows": "win32", "Darwin": "darwin"}.get(plat, "linux")
+    arch = "arm64" if _sys_platform.machine().lower() in ("arm64", "aarch64") else "x64"
+    return f"electron-v{version}-{os_name}-{arch}.zip"
+
+
+def _extract_zip(zip_path, dest):
+    """Extract keeping executable bits and symlinks, which zipfile drops.
+
+    macOS's Electron.app is built on framework symlinks; extracting them as
+    plain files leaves an app that will not start.
+    """
     with zipfile.ZipFile(zip_path) as zf:
-        zf.extractall(dist_dir)
         for info in zf.infolist():
             mode = info.external_attr >> 16
-            if mode:
-                try:
-                    os.chmod(os.path.join(dist_dir, info.filename), mode)
-                except OSError:
-                    pass
-    log(f"  Extracted {os.path.basename(zip_path)} ({len(os.listdir(dist_dir))} entries)")
+            target = os.path.join(dest, *info.filename.split("/"))
+            if stat.S_ISLNK(mode):
+                link = zf.read(info).decode("utf-8")
+                if os.path.isabs(link) or ".." in info.filename.split("/"):
+                    continue
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                os.symlink(link, target)
+                continue
+            zf.extract(info, dest)
+            if mode & 0o777 and not info.is_dir():
+                os.chmod(target, mode & 0o7777)
 
 
-def _ensure_electron_binary(electron_dir, log):
-    """Make `npm start` work by repairing node_modules/electron if needed.
-
-    Only devrun.py depends on this. electron-builder downloads its own copy of
-    Electron, so the packaged app builds and runs either way, which is why a
-    failure here is logged rather than fatal.
-    """
-    pkg_dir = os.path.join(electron_dir, "node_modules", "electron")
-    if not os.path.isdir(pkg_dir):
-        return  # npm install did not run or failed; nothing to repair
-
-    try:
-        with open(os.path.join(pkg_dir, "package.json"), "r", encoding="utf-8") as f:
-            version = json.load(f)["version"]
-    except (OSError, ValueError, KeyError):
-        return
-
-    if _electron_is_installed(pkg_dir, version):
-        return
-
-    log("  node_modules/electron has no usable binary; repairing...")
-
-    # electron-builder has already downloaded and verified this zip during the
-    # build, so prefer the cache over hitting the network again.
-    zip_name = None
-    dist_dir = os.path.join(pkg_dir, "dist")
-    for cache in _electron_cache_dirs():
-        if not os.path.isdir(cache):
-            continue
-        for root, _dirs, files in os.walk(cache):
-            for f in files:
-                if f.startswith(f"electron-v{version}-") and f.endswith(".zip"):
-                    zip_name = os.path.join(root, f)
-                    break
-            if zip_name:
-                break
-        if zip_name:
-            break
-
-    if zip_name is None:
-        log("  Warning: no cached Electron download found, so it could not be repaired.")
-        log("  The packaged app is unaffected; only `python devrun.py` needs this.")
-        return
-
-    try:
-        shutil.rmtree(dist_dir, ignore_errors=True)
-        os.makedirs(dist_dir, exist_ok=True)
-        _extract_electron_zip(zip_name, dist_dir, log)
-        exe = "electron.exe" if _sys_platform.system() == "Windows" else "electron"
-        with open(os.path.join(pkg_dir, "path.txt"), "w", encoding="utf-8") as f:
-            f.write(exe)
-        if _electron_is_installed(pkg_dir, version):
-            log(f"  Repaired node_modules/electron ({version}) — `npm start` will work")
-        else:
-            log("  Warning: repair did not produce a usable Electron binary.")
-    except (OSError, ValueError) as e:
-        log(f"  Warning: could not repair node_modules/electron: {e}")
-
-
-def _find_unpacked_binary(unpacked_dir, package_json_path=None):
-    """The app executable inside electron-builder's unpacked output (Linux or Windows).
-
-    electron-builder names it after package.json's "name" (or "productName"
-    when set), so read that first and only fall back to scanning.
-    """
-    if package_json_path and os.path.isfile(package_json_path):
+def _rmtree_force(path):
+    """rmtree that also removes read-only files (git's packs on Windows)."""
+    def _retry(func, p, _exc):
         try:
-            with open(package_json_path, "r", encoding="utf-8") as f:
-                pkg = json.load(f)
-            for key in ("productName", "name"):
-                named = pkg.get(key)
-                if named:
-                    for p in (os.path.join(unpacked_dir, named),
-                              os.path.join(unpacked_dir, named + ".exe")):
-                        if os.path.isfile(p) and os.access(p, os.X_OK):
-                            return p
-        except (OSError, ValueError):
+            os.chmod(p, stat.S_IWRITE)
+            func(p)
+        except OSError:
+            pass
+    shutil.rmtree(path, onerror=_retry)
+
+
+def _replace_dir(src, dest, log):
+    """Move `src` to `dest`, replacing it. False (reason logged) on failure.
+
+    The old tree is renamed aside first: Windows refuses that while the game
+    is running from it, which is the signal to stop before anything is half
+    replaced.
+    """
+    old = dest + ".old"
+    _rmtree_force(old)
+    if os.path.lexists(dest):
+        try:
+            os.rename(dest, old)
+        except OSError as e:
+            log(f"  Could not replace {dest}: {e}")
+            log("  The game is probably still open from it.")
+            return False
+    try:
+        os.rename(src, dest)
+    except OSError as e:
+        log(f"  Could not move the app into {dest}: {e}")
+        if os.path.lexists(old):
+            try:
+                os.rename(old, dest)
+            except OSError:
+                pass
+        return False
+    _rmtree_force(old)
+    return True
+
+
+def install_electron(build_dir, version, plat, log):
+    """Download stock Electron `version` and make it the app. Raises BuildError.
+
+    The zip is checked against the release's SHASUMS256.txt before use.
+    """
+    asset = electron_asset(version, plat)
+    base = f"https://github.com/electron/electron/releases/download/v{version}/"
+    sums = _read_api(base + "SHASUMS256.txt").decode("utf-8", "replace")
+    want = next((ln.split()[0] for ln in sums.splitlines()
+                 if ln.strip().endswith(asset)), None)
+    if not want:
+        raise BuildError(f"Electron {version} has no {asset} download.")
+
+    zpath = os.path.join(build_dir, ".ap_" + asset)
+    staging = os.path.join(build_dir, ".ap_electron_new")
+    _download(base + asset, zpath, log, "Electron")
+    try:
+        h = hashlib.sha256()
+        with open(zpath, "rb") as f:
+            for chunk in iter(lambda: f.read(_MB), b""):
+                h.update(chunk)
+        if h.hexdigest() != want.lower():
+            raise BuildError(f"The Electron download is corrupt ({asset}).\n"
+                             "Build again to retry it.")
+        _rmtree_force(staging)
+        os.makedirs(staging)
+        _extract_zip(zpath, staging)
+    except (zipfile.BadZipFile, OSError) as e:
+        raise BuildError(f"Could not extract {asset}: {e}") from e
+    finally:
+        try:
+            os.remove(zpath)
+        except OSError:
             pass
 
-    try:
-        entries = sorted(os.listdir(unpacked_dir))
-    except OSError:
-        return None
-    for entry in entries:
-        p = os.path.join(unpacked_dir, entry)
-        if not os.path.isfile(p) or not os.access(p, os.X_OK):
-            continue
-        if entry in _ELECTRON_HELPERS:
-            continue
-        if entry.lower().endswith(".exe"):  # win-unpacked holds only the app's
-            return p
-        if entry.endswith((".so", ".bin", ".pak", ".dat", ".json", ".sh", ".txt", ".html")):
-            continue
-        if ".so." in entry:  # libvulkan.so.1 and friends
-            continue
+    root, exe, _res = app_paths(build_dir, plat)
+    if plat == "Darwin":
+        src = os.path.join(staging, "Electron.app")
+    else:
+        src = staging
+        stock = os.path.join(staging, "electron.exe" if plat == "Windows" else "electron")
+        os.rename(stock, os.path.join(staging, os.path.basename(exe)))
+        # Electron's own "drop an app here" placeholder; resources/app wins over
+        # it anyway, but it should not be the thing that runs if that is absent.
         try:
-            with open(p, "rb") as f:
-                if f.read(4) == b"\x7fELF":
-                    return p
+            os.remove(os.path.join(staging, "resources", "default_app.asar"))
         except OSError:
-            continue
-    return None
+            pass
+    ok = _replace_dir(src, root, log)
+    _rmtree_force(staging)
+    if not ok:
+        raise BuildError(f"Could not install the app into\n{root}\n\n"
+                         "See the log above. If the game is open, close it and build again.")
+    log(f"  Electron {version} installed ({asset})")
 
 
-def _write_linux_launcher(build_dir, unpacked_dir, log, package_json_path=None):
-    """Write a launcher for the unpacked Linux build, and preflight it.
+def write_app_files(electron_dir, res_dir):
+    """Copy the wrapper's main.js, package.json and icons into resources/app."""
+    _rmtree_force(res_dir)
+    os.makedirs(res_dir)
+    for name in ("main.js", "package.json"):
+        shutil.copy2(os.path.join(electron_dir, name), os.path.join(res_dir, name))
+    icons = os.path.join(electron_dir, "assets", "icons")
+    if os.path.isdir(icons):
+        shutil.copytree(icons, os.path.join(res_dir, "assets", "icons"))
 
-    The unpacked build is the fallback for machines with no FUSE runtime,
-    where the AppImage cannot self-mount. It is left in place rather than
-    copied: it is roughly a quarter of a gigabyte, and it is rebuilt from
-    scratch on every run anyway.
-    """
-    binary = _find_unpacked_binary(unpacked_dir, package_json_path)
-    if binary is None:
-        log(f"  Warning: no executable found in {unpacked_dir}")
-        return None
 
+def _write_linux_launcher(build_dir, binary, log):
+    """Write a launcher for the Linux app, and preflight it."""
     # Preflight: name any missing shared library now, in the build log, rather
     # than letting the app die at launch with nothing written down anywhere.
     try:
@@ -7021,7 +7042,7 @@ def _write_linux_launcher(build_dir, unpacked_dir, log, package_json_path=None):
             for line in ldd.stdout.splitlines() if "not found" in line
         })
         if missing_libs:
-            log("  Warning: the built app is missing shared libraries:")
+            log("  Warning: the app is missing shared libraries:")
             for lib in missing_libs:
                 log(f"    {lib}")
             log("  It will not start until these are present.")
@@ -7029,15 +7050,14 @@ def _write_linux_launcher(build_dir, unpacked_dir, log, package_json_path=None):
         pass  # ldd is absent or unhappy; not worth failing the build over
 
     # Electron's sandbox needs either a SUID chrome-sandbox helper or
-    # unprivileged user namespaces. An unpacked build extracted by a normal
-    # user has neither guaranteed, so fall back to --no-sandbox when the
-    # kernel says namespaces are off. Kept as a runtime check rather than a
-    # build-time one: the build machine and the play machine can differ.
-    launcher = os.path.join(build_dir, "PvZ Gardendless AP.sh")
+    # unprivileged user namespaces. An app extracted by a normal user has no
+    # SUID helper, so fall back to --no-sandbox when the kernel turns
+    # namespaces off, or AppArmor restricts them (Ubuntu 24.04 and later).
+    # Kept as a runtime check: the build machine and the play machine can differ.
+    launcher = os.path.join(build_dir, APP_NAME + ".sh")
     script = (
         "#!/bin/sh\n"
-        "# Launcher for the unpacked PvZ Gardendless AP build.\n"
-        "# Use this when the AppImage will not run (no FUSE runtime).\n"
+        "# Launcher for PvZ Gardendless AP.\n"
         f'BIN="{binary}"\n'
         'if [ ! -x "$BIN" ]; then\n'
         '  echo "Not found: $BIN" >&2\n'
@@ -7045,7 +7065,8 @@ def _write_linux_launcher(build_dir, unpacked_dir, log, package_json_path=None):
         '  exit 1\n'
         'fi\n'
         'userns=$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || echo 1)\n'
-        'if [ "$userns" = "0" ]; then\n'
+        'aa=$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo 0)\n'
+        'if [ "$userns" = "0" ] || [ "$aa" = "1" ]; then\n'
         '  exec "$BIN" --no-sandbox "$@"\n'
         'fi\n'
         'exec "$BIN" "$@"\n'
@@ -7053,97 +7074,73 @@ def _write_linux_launcher(build_dir, unpacked_dir, log, package_json_path=None):
     with open(launcher, "w", encoding="utf-8") as f:
         f.write(script)
     os.chmod(launcher, 0o755)
-    log(f"  Unpacked build: {unpacked_dir}")
-    log(f"  Launcher:       {launcher}")
+    log(f"  App:      {os.path.dirname(binary)}")
+    log(f"  Launcher: {launcher}")
     return launcher
 
 
-def _install_windows_app(build_dir, unpacked_dir, log, package_json_path=None):
-    """Copy the unpacked Windows build into the build folder; return its exe.
-
-    Copied rather than run from release/, which electron-builder rewrites on
-    every package. The old tree is renamed aside first: Windows refuses that
-    while the game is running from it, which is the signal to stop before
-    anything is half replaced. Returns None (reason logged) on failure.
-    """
-    dest = os.path.join(build_dir, WIN_APP_DIR)
-    old = dest + ".old"
-    shutil.rmtree(old, ignore_errors=True)
-    if os.path.isdir(dest):
-        try:
-            os.rename(dest, old)
-        except OSError as e:
-            log(f"  Could not replace {dest}: {e}")
-            log("  The game is probably still open from it.")
-            return None
-    try:
-        shutil.copytree(unpacked_dir, dest)
-    except OSError as e:
-        log(f"  Could not copy the app into {dest}: {e}")
-        shutil.rmtree(dest, ignore_errors=True)
-        if os.path.isdir(old):
-            try:
-                os.rename(old, dest)
-            except OSError:
-                pass
-        return None
-    shutil.rmtree(old, ignore_errors=True)
-
-    exe = _find_unpacked_binary(dest, package_json_path)
-    if exe is None:
-        log(f"  No executable found in {dest}")
-        return None
-
-    # The slow portable exe this replaces would otherwise sit at the top of the
-    # build folder looking like the thing to run.
-    portable = os.path.join(build_dir, WIN_PORTABLE)
-    if os.path.isfile(portable):
-        try:
-            os.remove(portable)
-            log(f"  Removed the old portable app: {portable}")
-        except OSError:
-            log(f"  Could not remove the old portable app (still open?): {portable}")
-            log("  Delete it by hand; the new app replaces it.")
-
-    # A shortcut at the top level keeps a single thing to double-click.
-    # Non-fatal: the exe inside the folder runs the same app.
-    shortcut = os.path.join(build_dir, WIN_APP_DIR + ".lnk")
+def _write_windows_shortcut(build_dir, exe, icon, log):
+    """A shortcut at the top level keeps a single thing to double-click.
+    Non-fatal: the exe inside the folder runs the same app."""
+    shortcut = os.path.join(build_dir, APP_NAME + ".lnk")
     q = lambda v: v.replace("'", "''")
     ps = ("$s = (New-Object -ComObject WScript.Shell).CreateShortcut('" + q(shortcut) + "'); "
           "$s.TargetPath = '" + q(exe) + "'; "
-          "$s.WorkingDirectory = '" + q(dest) + "'; "
-          "$s.Save()")
+          "$s.WorkingDirectory = '" + q(os.path.dirname(exe)) + "'; "
+          + ("$s.IconLocation = '" + q(icon) + "'; " if os.path.isfile(icon) else "")
+          + "$s.Save()")
     try:
         subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
                        capture_output=True, timeout=60,
                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except (OSError, subprocess.SubprocessError):
         pass
-
-    size = sum(os.path.getsize(os.path.join(r, f))
-               for r, _, fs in os.walk(dest) for f in fs)
     log(f"\n  Output:   {exe}")
     if os.path.isfile(shortcut):
         log(f"  Shortcut: {shortcut}")
-    log(f"  Size:     {size/1024/1024:.0f} MB")
-    return exe
+
+
+def clean_legacy(build_dir, electron_dir, log):
+    """Remove what the git/npm builds left behind: clones' history, npm's
+    packages, electron-builder's output. Several hundred MB, none of it used."""
+    for path in (os.path.join(electron_dir, "node_modules"),
+                 os.path.join(electron_dir, "release"),
+                 os.path.join(electron_dir, ".git"),
+                 os.path.join(electron_dir, "pvzge_web", ".git")):
+        if os.path.lexists(path):
+            if os.path.isdir(path) and not os.path.islink(path):
+                _rmtree_force(path)
+            else:
+                os.remove(path)  # a submodule's .git is a file
+            log(f"  Removed {path}")
+    for name in LEGACY_OUTPUTS:
+        p = os.path.join(build_dir, name)
+        if os.path.isfile(p):
+            try:
+                os.remove(p)
+                log(f"  Removed the old app: {p}")
+            except OSError:
+                log(f"  Could not remove the old app (still open?): {p}")
 
 
 def build(build_dir, log, done_cb, error_cb, fast=False):
     """Full build sequence. Runs in a thread.
 
-    fast=True is the update path: it requires an existing checkout, still pulls
-    both repos (incremental on a shallow clone, so seconds rather than the
-    ~300MB first fetch), and skips `npm install` when node_modules is already
-    there. electron-builder is skipped too when the packaged app is unchanged:
-    the game and client load from the checkout (see externalize_game), so
-    rewriting tmpPatch.js is the whole update.
+    Every run is incremental: only files that differ from upstream are
+    downloaded, and Electron only when its version changes. fast=True is the
+    update path: it requires an existing build and trusts the sync manifests
+    rather than re-hashing every file on disk.
     """
+    try:
+        done_cb(_build(build_dir, log, fast))
+    except BuildError as e:
+        error_cb(str(e))
 
-    electron_dir = os.path.join(build_dir, "PVZGE-Electron")
-    docs_dir     = os.path.join(electron_dir, "pvzge_web", "docs")
-    release_dir  = os.path.join(electron_dir, "release")
 
+def _build(build_dir, log, fast):
+    electron_dir  = os.path.join(build_dir, "PVZGE-Electron")
+    pvzge_web_dir = os.path.join(electron_dir, "pvzge_web")
+    docs_dir      = os.path.join(pvzge_web_dir, "docs")
     plat = _sys_platform.system()
 
     def step(msg):
@@ -7152,152 +7149,34 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
         log(f"{'─'*50}")
 
     if fast and not os.path.isdir(docs_dir):
-        error_cb(
+        raise BuildError(
             "Update needs an existing build, and none was found at:\n"
             f"{docs_dir}\n\nRun a full build first.")
-        return
 
-    # ── 1. Check requirements ─────────────────────────────────────────────────
-    step("Checking requirements")
-    missing = []
-    for tool in ("git", "node", "npm"):
-        if not find_tool(tool):
-            missing.append(tool)
-    if missing:
-        # Every tool listed gets a line, npm included: it ships separately from
-        # node on a number of distros (Arch's `nodejs` package is node alone),
-        # so "missing npm, present node" is a real and otherwise baffling state.
-        if plat == "Windows":
-            git_hint  = "  • Git:     https://git-scm.com/download/win\n"
-            node_hint = "  • Node.js: https://nodejs.org (LTS version)\n"
-            npm_hint  = "  • npm:     bundled with the Node.js installer above\n"
-            tail = (
-                "If this message continues to appear, run powershell as administrator and run\n"
-                "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser\n"
-                "Then run archipelago as an administrator."
-            )
-        else:
-            git_hint  = "  • Git:     https://git-scm.com/downloads\n"
-            node_hint = "  • Node.js: https://nodejs.org (LTS version)\n"
-            npm_hint  = "  • npm:     often a separate package from node\n"
-            # Naming distro packages is a trap here: this has to work on
-            # immutable/atomic systems (Bazzite, SteamOS) where the root is
-            # read-only and there is no usable system package manager. Every
-            # route below installs into the home directory instead.
-            tail = (
-                "These are the only requirements, and none of them need root.\n"
-                "If your system has no package manager you can use (Bazzite,\n"
-                "SteamOS and other atomic distros have a read-only root), any\n"
-                "of these work without touching it:\n"
-                "  • nvm or fnm       installs node + npm into your home dir\n"
-                "  • Homebrew         preinstalled on Bazzite: brew install node git\n"
-                "  • distrobox/toolbx  a mutable container that shares your home\n"
-                "\n"
-                "If you build inside a container, run the finished app on the host."
-            )
-            # Already-installed-but-invisible is the common case on Steam Deck:
-            # Archipelago launched from Steam or a desktop entry gets a bare
-            # PATH, and a ~/.nvm or Homebrew node is not on it. find_tool has
-            # already searched the login shell's PATH and the usual home-dir
-            # prefixes by this point, so say where it looked.
-            if os.path.isfile("/.flatpak-info"):
-                tail = (
-                    "Archipelago is running inside Flatpak, which cannot see\n"
-                    "tools installed on the host. Either install node, npm and\n"
-                    "git inside the sandbox, or run Archipelago outside Flatpak.\n"
-                    "\n" + tail
-                )
-            else:
-                tail = (
-                    "If these ARE installed, this launcher just cannot see them:\n"
-                    "Archipelago started from Steam or a desktop shortcut does\n"
-                    "not inherit the PATH your terminal has. Launching\n"
-                    "Archipelago from a terminal usually fixes it.\n"
-                    "\n" + tail
-                )
-        error_cb(
-            f"Missing required tools: {', '.join(missing)}\n\n"
-            "Please install:\n"
-            + (git_hint  if "git"  in missing else "")
-            + (node_hint if "node" in missing else "")
-            + (npm_hint  if "npm"  in missing else "")
-            + "\n" + tail
-            + ("" if plat == "Windows" else
-               "\n\nSearched:\n  " + "\n  ".join(_candidate_dirs() or ["(nothing)"]))
-        )
-        return
+    # ── 1. Electron wrapper ───────────────────────────────────────────────────
+    step("Downloading the Electron wrapper (PVZGE-Electron)")
+    os.makedirs(electron_dir, exist_ok=True)
+    commit, fetched, _ = sync_repo(
+        WRAPPER_REPO, electron_dir, WRAPPER_PATHS,
+        os.path.join(build_dir, SYNC_MANIFEST.format(WRAPPER_REPO[1])),
+        log, build_dir, rehash=not fast)
+    log(f"  At {commit[:7]}, {fetched} file(s) updated")
 
-    vers = {}
-    for tool in ("node", "npm", "git"):
-        ok, out = tool_version(tool)
-        if not ok:
-            # A host tool that runs from a terminal but not from here is
-            # almost always the bundle's libraries winning over the host's,
-            # so say that and show what the tool actually printed.
-            error_cb(
-                f"`{tool} --version` failed when run from Archipelago, even "
-                f"though {tool} was found at:\n"
-                f"  {find_tool(tool)}\n\n"
-                f"{out}\n\n"
-                "If that mentions a library or a version symbol, Archipelago's\n"
-                "own bundled libraries are being loaded by the host tool. "
-                "Running\nthe installer standalone works around it:\n"
-                "  python pvz2gardendless/build_pvzge_ap.py"
-            )
-            return
-        vers[tool] = out
-    log(f"  node {vers['node']}  |  npm {vers['npm']}  |  {vers['git']}")
-
-    # ── 2. Clone Electron wrapper ─────────────────────────────────────────────
-    step("Cloning Electron wrapper")
-    os.makedirs(build_dir, exist_ok=True)
-
-    if os.path.isdir(electron_dir):
-        log("  Already exists — pulling latest...")
-        rc = run_cmd("git pull", electron_dir, log)
+    # ── 2. Game ───────────────────────────────────────────────────────────────
+    if os.path.isdir(docs_dir):
+        step("Updating the game (pvzge_web master)")
     else:
-        rc = run_cmd(
-            "git clone --depth=1 https://github.com/Twig6943/PVZGE-Electron.git",
-            build_dir, log
-        )
-    if rc != 0:
-        error_cb("Failed to clone Electron wrapper. Check your internet connection.")
-        return
+        step("Downloading the game (pvzge_web master) -- ~1.3 GB, this takes a while")
+    os.makedirs(pvzge_web_dir, exist_ok=True)
+    commit, fetched, removed = sync_repo(
+        GAME_REPO, pvzge_web_dir, GAME_PATHS,
+        os.path.join(build_dir, SYNC_MANIFEST.format(GAME_REPO[1])),
+        log, build_dir, rehash=not fast)
+    log(f"  At {commit[:7]}, {fetched:,} file(s) updated, {removed:,} removed")
+    if not os.path.isfile(os.path.join(docs_dir, "index.html")):
+        raise BuildError(f"The game download is incomplete:\n{docs_dir}\nhas no index.html.")
 
-    # ── 3. Clone game source ──────────────────────────────────────────────────
-    # Always clone pvzge_web directly from master — never use the submodule pin
-    # in the Electron repo, which may point to an older version.
-    step("Cloning game source (pvzge_web master) — this may take a few minutes (~300MB)")
-    pvzge_web_dir = os.path.join(electron_dir, "pvzge_web")
-
-    if os.path.isdir(os.path.join(pvzge_web_dir, "docs")):
-        log("  Already exists — fetching latest from master...")
-        rc = run_cmd("git fetch origin master --depth=1", pvzge_web_dir, log)
-        if rc == 0:
-            rc = run_cmd("git reset --hard origin/master", pvzge_web_dir, log)
-        if rc != 0:
-            log("  Warning: could not update pvzge_web, using existing copy")
-            rc = 0  # non-fatal, proceed with what we have
-    else:
-        # Detach any existing submodule tracking and clone fresh
-        os.makedirs(pvzge_web_dir, exist_ok=True)
-        rc = run_cmd(
-            "git clone --depth=1 --branch master "
-            "https://github.com/Gzh0821/pvzge_web.git .",
-            pvzge_web_dir, log
-        )
-    if rc != 0:
-        error_cb("Failed to clone game source. Check your internet connection.")
-        return
-
-    if not os.path.isdir(docs_dir):
-        error_cb(f"Expected docs/ folder not found at:\n{docs_dir}\n\nClone may be incomplete.")
-        return
-
-    # Log the actual game version we got
-    ver_result = run_cmd("git log --oneline -1", pvzge_web_dir, log)
-
-    # ── 4. Patch tmpPatch.js ──────────────────────────────────────────────────
+    # ── 3. Patch tmpPatch.js ──────────────────────────────────────────────────
     step("Patching tmpPatch.js with Archipelago client")
     tmppatch_path = os.path.join(docs_dir, "tmpPatch.js")
 
@@ -7311,247 +7190,91 @@ def build(build_dir, log, done_cb, error_cb, fast=False):
     log(f"  Written: {tmppatch_path}")
     log(f"  Size: {len(TMPPATCH_CONTENT):,} bytes")
 
-    # Patch main.js to enable devtools (F12) so the AP overlay errors are visible
+    # ── 4. Patch main.js ──────────────────────────────────────────────────────
     main_js_path = os.path.join(electron_dir, "main.js")
-    game_external = False  # stays False if main.js is missing or unrecognised
-    if os.path.isfile(main_js_path):
-        with open(main_js_path, "r", encoding="utf-8") as f:
-            main_js = f.read()
-        main_js = main_js.replace("devTools: false", "devTools: true")
-        # Use before-input-event instead of globalShortcut for F12.
-        # globalShortcut steals keys from the game (breaks F10 GP-Next menu etc).
-        # before-input-event fires in the renderer process so unhandled keys
-        # still reach the game's own keydown listeners.
-        f12_hook = (
-            "  win.webContents.on('before-input-event', (event, input) => {\n"
-            "    if (input.type === 'keyDown' && input.key === 'F12') {\n"
-            "      win.webContents.toggleDevTools();\n"
-            "      event.preventDefault();\n"
-            "    }\n"
-            "  });\n"
+    with open(main_js_path, "r", encoding="utf-8") as f:
+        main_js = f.read()
+    # Enable devtools (F12) so the AP overlay errors are visible.
+    main_js = main_js.replace("devTools: false", "devTools: true")
+    # Use before-input-event instead of globalShortcut for F12.
+    # globalShortcut steals keys from the game (breaks F10 GP-Next menu etc).
+    # before-input-event fires in the renderer process so unhandled keys
+    # still reach the game's own keydown listeners.
+    f12_hook = (
+        "  win.webContents.on('before-input-event', (event, input) => {\n"
+        "    if (input.type === 'keyDown' && input.key === 'F12') {\n"
+        "      win.webContents.toggleDevTools();\n"
+        "      event.preventDefault();\n"
+        "    }\n"
+        "  });\n"
+    )
+    if "before-input-event" not in main_js:
+        # Inject after win.removeMenu() line
+        main_js = main_js.replace(
+            "  win.removeMenu(); // hides the top menu bar",
+            "  win.removeMenu(); // hides the top menu bar\n" + f12_hook
         )
-        if "before-input-event" not in main_js:
-            # Inject after win.removeMenu() line
-            main_js = main_js.replace(
-                "  win.removeMenu(); // hides the top menu bar",
-                "  win.removeMenu(); // hides the top menu bar\n" + f12_hook
-            )
-        if USER_DATA_SUFFIX and "AP_USER_DATA_SUFFIX" not in main_js:
-            # Before app.whenReady(): userData has to move before anything
-            # opens storage under it.
-            main_js = main_js.replace(
-                "app.whenReady()",
-                "// AP_USER_DATA_SUFFIX\n"
-                f"app.setPath('userData', app.getPath('userData') + {json.dumps(USER_DATA_SUFFIX)});\n"
-                "app.whenReady()", 1)
-            log(f"  userData suffixed with {USER_DATA_SUFFIX!r} in main.js")
-        main_js, game_external = externalize_game(main_js, docs_dir)
-        if game_external:
-            log(f"  Game loads from {os.path.abspath(docs_dir)} (not packaged)")
-        else:
-            log("  Warning: main.js loadFile not recognised; packaging the game as before")
-        with open(main_js_path, "w", encoding="utf-8") as f:
-            f.write(main_js)
-        log("  Enabled F12 devtools in main.js")
+    if USER_DATA_SUFFIX and "AP_USER_DATA_SUFFIX" not in main_js:
+        # Before app.whenReady(): userData has to move before anything
+        # opens storage under it.
+        main_js = main_js.replace(
+            "app.whenReady()",
+            "// AP_USER_DATA_SUFFIX\n"
+            f"app.setPath('userData', app.getPath('userData') + {json.dumps(USER_DATA_SUFFIX)});\n"
+            "app.whenReady()", 1)
+        log(f"  userData suffixed with {USER_DATA_SUFFIX!r} in main.js")
+    main_js = add_window_icon(main_js)
+    main_js, game_external = externalize_game(main_js, docs_dir)
+    if not game_external:
+        raise BuildError(
+            "PVZGE-Electron's main.js changed in a way this installer does not\n"
+            "recognise (it no longer loads pvzge_web/docs/index.html directly).\n"
+            "This installer needs an update to handle it.")
+    with open(main_js_path, "w", encoding="utf-8") as f:
+        f.write(main_js)
+    log(f"  main.js: F12 devtools on, game loads from {os.path.abspath(docs_dir)}")
 
-
-    # ── 4b. Pin @noble/hashes below its ESM-only line ──────────────────────────
-    # electron-builder's app-builder-lib (blockmap.js) still does a plain
-    # require() of @noble/hashes. Starting at 1.9.0 that package ships
-    # ESM-only, which crashes the build with ERR_REQUIRE_ESM. Pin it via an
-    # npm "overrides" entry in the Electron wrapper's own package.json so
-    # every transitive dependency resolves to a CJS-compatible version.
-    # https://github.com/electron-userland/electron-builder/issues (blockmap ESM require)
-    package_json_path = os.path.join(electron_dir, "package.json")
-    noble_hashes_pin = "1.8.0"
-    overrides_changed = False   # dependency change: forces an npm reinstall
-    pkg_changed = False         # any change: forces a package.json write
-    if os.path.isfile(package_json_path):
-        with open(package_json_path, "r", encoding="utf-8") as f:
-            pkg = json.load(f)
-        # npm 10.9+ blocks dependency install scripts unless package.json
-        # lists them. Upstream declares this for pnpm (pnpm-workspace.yaml's
-        # allowBuilds) but not for npm, so Electron's postinstall -- the step
-        # that downloads the Electron binary into node_modules -- is skipped
-        # and `npm start` cannot run. electron-builder downloads its own copy,
-        # so the packaged app is unaffected and only devrun.py notices.
-        # Left unpinned so it survives an Electron version bump, and applied
-        # without forcing a reinstall: _ensure_electron_binary() below repairs
-        # a tree that was already installed with the scripts blocked.
-        allow = pkg.setdefault("allowScripts", {})
-        for dep in ("electron", "electron-winstaller"):
-            if dep not in allow:
-                allow[dep] = True
-                pkg_changed = True
-                log(f"  Allowed {dep} install scripts in package.json (npm blocks them by default)")
-
-        overrides = pkg.setdefault("overrides", {})
-        if overrides.get("@noble/hashes") != noble_hashes_pin:
-            overrides["@noble/hashes"] = noble_hashes_pin
-            overrides_changed = True
-            pkg_changed = True
-            log(f"  Pinned @noble/hashes to {noble_hashes_pin} in package.json (avoids ERR_REQUIRE_ESM)")
-
-        # Keep the game out of the package once main.js loads it externally,
-        # and put it back if a future upstream main.js could not be patched.
-        files = pkg.setdefault("build", {}).setdefault("files", [])
-        if game_external and GAME_DOCS_GLOB in files:
-            files.remove(GAME_DOCS_GLOB)
-            pkg_changed = True
-            log("  Removed the game data from the packaged files")
-        elif not game_external and GAME_DOCS_GLOB not in files:
-            files.insert(0, GAME_DOCS_GLOB)
-            pkg_changed = True
-            log("  Restored the game data to the packaged files")
-
-        # Upstream builds Windows as "portable", a self-extractor that unpacks
-        # all of Electron into %TEMP% on every launch (seconds, plus Defender
-        # scanning each file). "dir" is that same tree, run in place.
-        win_cfg = pkg["build"].setdefault("win", {})
-        if win_cfg.get("target") != WIN_TARGET:
-            win_cfg["target"] = WIN_TARGET
-            pkg_changed = True
-            log(f"  Set the Windows build target to {WIN_TARGET!r} (no unpack on launch)")
-
-        if pkg_changed:
-            with open(package_json_path, "w", encoding="utf-8") as f:
-                json.dump(pkg, f, indent=2)
-                f.write("\n")
-
-    # ── 5. npm install ────────────────────────────────────────────────────────
-    # Skipped on the update path when node_modules is already populated. This
-    # saves a download: the clones above are incremental once they exist.
-    # Still forced, even on the fast path, if the override above just changed
-    # package.json or if an already-installed @noble/hashes is on the
-    # ESM-only line (a node_modules left over from before this pin existed).
-    node_modules = os.path.join(electron_dir, "node_modules")
-    installed_noble_version = None
-    noble_pkg_json = os.path.join(node_modules, "@noble", "hashes", "package.json")
-    if os.path.isfile(noble_pkg_json):
-        with open(noble_pkg_json, "r", encoding="utf-8") as f:
-            installed_noble_version = json.load(f).get("version")
-    needs_reinstall = overrides_changed or installed_noble_version != noble_hashes_pin
-
-    if fast and not needs_reinstall and os.path.isdir(node_modules) and os.listdir(node_modules):
-        step("Node.js dependencies already installed — skipping")
+    # ── 5. Electron runtime ───────────────────────────────────────────────────
+    step("Setting up the app")
+    version = electron_version(os.path.join(electron_dir, "package.json"))
+    asset = electron_asset(version, plat)
+    root, exe, res_dir = app_paths(build_dir, plat)
+    stamp = read_package_stamp(build_dir) or {}
+    if (stamp.get("layout") == APP_LAYOUT and stamp.get("asset") == asset
+            and os.path.isfile(exe)):
+        log(f"  Electron {version} already installed")
     else:
-        step("Installing Node.js dependencies (electron, electron-builder)")
-        log("  This downloads ~200MB of packages the first time...")
-        rc = run_cmd("npm install", electron_dir, log)
-        if rc != 0:
-            error_cb("npm install failed. See log above for details.")
-            return
+        log(f"  Downloading Electron {version} (~100 MB)...")
+        install_electron(build_dir, version, plat, log)
 
-    # ── 6. Build ──────────────────────────────────────────────────────────────
+    try:
+        write_app_files(electron_dir, res_dir)
+    except OSError as e:
+        raise BuildError(f"Could not write the app's files into\n{res_dir}\n\n{e}\n\n"
+                         "If the game is open, close it and build again.") from e
+    log(f"  App files written to {res_dir}")
+
     if plat == "Windows":
-        build_cmd = "npm run build:win -- --publish=never"
-        output_exts = [".exe"]
-        output_name = "PvZ Gardendless AP.exe"
+        _write_windows_shortcut(build_dir, exe,
+                                os.path.join(res_dir, "assets", "icons", "icon.ico"), log)
+        final_path = exe
     elif plat == "Darwin":
-        build_cmd = "npm run build:mac -- --publish=never"
-        output_exts = [".dmg", ".app"]
-        output_name = "PvZ Gardendless AP.dmg"
-    else:  # Linux
-        build_cmd = "npm run build:linux -- --publish=never"
-        output_exts = [".AppImage", ".appimage"]
-        output_name = "PvZ Gardendless AP.AppImage"
-
-    # With the game external, the package only needs rebuilding when what it
-    # contains changed. A build with no stamp predates this (game baked in),
-    # so it always repackages once and gets a stamp.
-    fingerprint = _package_fingerprint(electron_dir, plat)
-    stamp = read_package_stamp(build_dir)
-    if (fast and game_external and stamp
-            and stamp.get("fingerprint") == fingerprint
-            and os.path.isfile(stamp.get("output", ""))):
-        step("Packaged app unchanged — skipping electron-builder")
-        log("  The client and game load from the build folder, so the")
-        log("  existing app already runs this update.")
-        done_cb(stamp["output"])
-        return
-
-    step(f"Building {plat} application")
-    rc = run_cmd(build_cmd, electron_dir, log)
-    if rc != 0:
-        error_cb("Build failed. See log above for details.")
-        return
-
-    # ── 6b. Repair node_modules/electron if npm skipped its postinstall ───────
-    # Runs after the build on purpose: electron-builder populates the download
-    # cache this reads from, so by now the zip is present even on a first run.
-    _ensure_electron_binary(electron_dir, log)
-
-    # ── 7. Find and copy output ───────────────────────────────────────────────
-    step("Locating output file")
-    # Windows: install the unpacked tree (see WIN_TARGET). A win-unpacked
-    # missing here means the target change did not take; fall through to the
-    # old single-file search so a portable exe still ships.
-    final_path = None
-    win_unpacked = os.path.join(release_dir, "win-unpacked")
-    if plat == "Windows" and os.path.isdir(win_unpacked):
-        final_path = _install_windows_app(build_dir, win_unpacked, log,
-                                          os.path.join(electron_dir, "package.json"))
-        if final_path is None:
-            error_cb("The Windows app was built but could not be installed into\n"
-                     f"{build_dir}\n\nSee the log above. If the game is open, close it "
-                     "and build again.")
-            return
+        log(f"\n  Output: {root}")
+        final_path = root
     else:
-        built_path = None
-        for root, dirs, files in os.walk(release_dir):
-            for f in files:
-                if any(f.endswith(ext) for ext in output_exts):
-                    built_path = os.path.join(root, f)
-                    break
-            if built_path:
-                break
+        final_path = _write_linux_launcher(build_dir, exe, log)
 
-        # electron-builder always leaves its unpacked staging tree behind, even
-        # when the only requested target is AppImage. That tree is the same
-        # application and needs no FUSE runtime to run, so it is the fallback for
-        # machines that cannot mount an AppImage. Only treat a missing AppImage as
-        # fatal if the unpacked build is missing too.
-        unpacked_dir = None
-        if plat == "Linux":
-            for entry in sorted(os.listdir(release_dir)) if os.path.isdir(release_dir) else []:
-                p = os.path.join(release_dir, entry)
-                if os.path.isdir(p) and entry.endswith("unpacked"):
-                    unpacked_dir = p
-                    break
+    # ── 6. Tidy up after older builds ─────────────────────────────────────────
+    clean_legacy(build_dir, electron_dir, log)
 
-        if not built_path and not unpacked_dir:
-            error_cb(f"Build succeeded but no output found in:\n{release_dir}\n\nExpected: {output_exts}")
-            return
-
-        if built_path:
-            final_path = os.path.join(build_dir, output_name)
-            shutil.copy2(built_path, final_path)
-            # Make executable on Linux/Mac
-            if plat != "Windows":
-                os.chmod(final_path, 0o755)
-            log(f"\n  Output: {final_path}")
-            log(f"  Size:   {os.path.getsize(final_path)/1024/1024:.0f} MB")
-
-        if unpacked_dir:
-            launcher = _write_linux_launcher(build_dir, unpacked_dir, log,
-                                             os.path.join(electron_dir, "package.json"))
-            if launcher and final_path is None:
-                final_path = launcher
-
-    if final_path is None:
-        error_cb(f"Build succeeded but no runnable output was produced in:\n{release_dir}")
-        return
-
-    stamp_path = os.path.join(build_dir, PACKAGE_STAMP)
-    if game_external:
-        with open(stamp_path, "w", encoding="utf-8") as f:
-            json.dump({"fingerprint": fingerprint,
-                       "docs": os.path.abspath(docs_dir),
-                       "output": final_path}, f, indent=2)
-    elif os.path.isfile(stamp_path):
-        os.remove(stamp_path)  # game is baked in again; updates must repackage
-
-    done_cb(final_path)
+    with open(os.path.join(build_dir, PACKAGE_STAMP), "w", encoding="utf-8") as f:
+        json.dump({"layout": APP_LAYOUT,
+                   "electron": version,
+                   "asset": asset,
+                   "docs": os.path.abspath(docs_dir),
+                   "exe": exe,
+                   "output": final_path}, f, indent=2)
+    return final_path
 
 
 # ── GUI ───────────────────────────────────────────────────────────────────────
@@ -7672,15 +7395,15 @@ class BuilderApp:
         info.pack(fill="x", padx=24, pady=(0, 12))
         tk.Label(info,
                  text="START BUILD does everything:\n"
-                      "  1. Clone the Electron wrapper from GitHub (~5 MB)\n"
-                      "  2. Clone the game source from GitHub (~300 MB)\n"
+                      "  1. Download the Electron wrapper's files from GitHub\n"
+                      "  2. Download the game from GitHub (~1.3 GB the first time)\n"
                       "  3. Inject the Archipelago client into the game\n"
-                      "  4. Build the game application for your platform via npm\n\n"
+                      "  4. Download Electron (~100 MB) and set up the app\n\n"
                       "CHECK FOR UPDATES reads what you already have and says\n"
-                      "whether a rebuild would change anything. UPDATE pulls and\n"
-                      "re-injects, and repackages only if the app itself changed:\n"
+                      "whether a rebuild would change anything. UPDATE downloads\n"
+                      "only the files that changed and re-injects the client:\n"
                       "the game loads from this build folder, so keep it in place.\n\n"
-                      "Requirements: Git + Node.js (LTS) must be installed.",
+                      "Nothing to install first: Git and Node.js are not needed.",
                  font=(MONO, 9), bg=BG2, fg=MUTE, justify="left"
                  ).pack(anchor="w")
 
