@@ -33,6 +33,7 @@ PY_SUITES = [
     ("rollvectors","roll_vectors_test.py", "the budget roll's parity vectors are current"),
     ("tracker",    "tracker_test.py", "Universal Tracker rebuilds the same seed"),
     ("plantorder", "plant_order_test.py", "weak useful plants in earlier spheres than strong ones"),
+    ("installer",  "installer_test.py", "the git-free game download and app setup"),
 ]
 # Skipped unless --release or named on the command line.
 SLOW = {"generation", "spheres", "budget", "tracker"}

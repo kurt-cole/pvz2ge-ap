@@ -9,37 +9,41 @@ its World Key level, whichever the goal type picks.
 
 ## Installation
 
-### Full build (packages the game client as a native app)
+### Full build (sets up the game client as a native app)
 
-This produces the actual game — an Electron app with the Archipelago client injected — via a Tk GUI
+This produces the actual game -- an Electron app with the Archipelago client injected -- via a Tk GUI
 installer, not a CLI build. Launch it either:
 
 - **From Archipelago**: install the `.apworld`, open the Archipelago Launcher, and click
   **"PvZ2 Gardendless Installer"**.
 - **Standalone**: `python pvz2gardendless/build_pvzge_ap.py`
 
-Pick a build directory in the GUI, then it will:
+Pick a build directory in the GUI and press START BUILD. It will:
 
-1. Check that `git`, `node`, and `npm` are on your PATH.
-2. Clone `PVZGE-Electron` (the Electron wrapper) and `pvzge_web` (the game source, ~300MB, from `master`).
+1. Download the few files it uses from `PVZGE-Electron` (the Electron wrapper's `main.js`,
+   `package.json` and icons).
+2. Download `pvzge_web/docs` (the game, ~1.3GB, from `master`).
 3. Overwrite `tmpPatch.js` with the Archipelago client code (save-slot redirection, plant-unlock gating,
    location/item sync, etc.).
-4. Patch `main.js` to enable F12 devtools.
-5. Run `npm install`.
-6. Run `npm run build:win` (or `:mac` / `:linux`), producing `PvZ Gardendless AP.exe`,
-   `PvZ Gardendless AP.dmg`, or `PvZ Gardendless AP.AppImage` respectively.
+4. Patch `main.js` to enable F12 devtools and load the game from the build folder.
+5. Download the official Electron release the wrapper names (~100MB, checked against its
+   `SHASUMS256.txt`) and drop the wrapper into its `resources/app`, which Electron runs as-is.
 
-On Linux the installer also writes `PvZ Gardendless AP.sh`, a launcher for the unpacked build that
-electron-builder leaves in `PVZGE-Electron/release/linux-unpacked/`. It is the fallback for systems
-with no FUSE runtime, where an AppImage cannot mount itself, which covers atomic distros such as
-Bazzite and SteamOS. It also passes `--no-sandbox` when the kernel has unprivileged user namespaces
-disabled.
+The result is `PvZ Gardendless AP/` in the build folder, plus `PvZ Gardendless AP.lnk` on Windows or
+`PvZ Gardendless AP.sh` on Linux; on macOS it is `PvZ Gardendless AP.app`. The Linux launcher passes
+`--no-sandbox` when the kernel or AppArmor disables unprivileged user namespaces.
 
-This takes several minutes the first time (clone + `npm install` + packaging).
+**Requirements:** an internet connection. Nothing else: Only Python's standard library is used, which Archipelago already ships.
 
-**Requirements:** Python 3.8+, Node.js 18+, Git, and an internet connection for the initial clone.
-`git`, `node` and `npm` must all be on your PATH; on many Linux distributions `npm` ships as a
-separate package from `node`. Nothing else is required, and nothing needs root.
+**Updates are incremental.** Downloads diff GitHub's file listing against the build folder by git
+blob SHA (`ap_sync_*.json` caches the hashes), so UPDATE fetches only the files that changed upstream,
+and Electron is only downloaded again when the wrapper moves to a new version. The first run fetches
+the game as one archive. A build folder made by an older, git/npm-based installer is converted in
+place: its game files are hashed rather than downloaded again, and its `node_modules`, `release/`,
+`.git` folders and old packaged apps are removed afterwards.
+
+The installer makes about four GitHub API calls per update, well inside GitHub's 60 an hour for
+unauthenticated use. Setting `GITHUB_TOKEN` raises that limit if a shared network ever exhausts it.
 
 ### Packaging the apworld itself
 
@@ -69,16 +73,17 @@ Run `python test/run.py` first; this script does not.
 
 ### Fast iteration on the client JS (Primarily for development)
 
-Once you've run the full build once, use `devrun.py` instead of rebuilding — it skips the clone,
-`npm install`, and packaging steps entirely:
+Once you've run the full build once, use `devrun.py` instead of rebuilding -- it skips the
+update checks and downloads entirely:
 
 ```
-python devrun.py                              # patch + launch via `npm start`
+python devrun.py                              # patch + launch the installed app
 python devrun.py --patch-only                  # just rewrite tmpPatch.js, don't launch
 python devrun.py "D:\custom\PVZGE-Electron"    # override build dir
 ```
 
 It rewrites `tmpPatch.js` from the same client source embedded in `build_pvzge_ap.py` and launches
-unpackaged via `npm start`, so edits show up in seconds instead of a multi-minute rebuild. The default
+the installed app, so edits show up in seconds. A build folder from the older npm-based installer
+falls back to `npm start`. The default
 build directory is `C:\Games (C)\pvz 2\Archipelago PVZ2\PVZGE-Electron`; pass a path as the first
 argument if yours differs.
