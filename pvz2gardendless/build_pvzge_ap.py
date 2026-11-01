@@ -6393,7 +6393,7 @@ GITHUB_API = "https://api.github.com"
 # (owner, repo, ref). PVZGE-Electron is read at its default branch; pvzge_web
 # always at master, never the submodule pin in the wrapper, which may lag.
 WRAPPER_REPO = ("Twig6943", "PVZGE-Electron", "HEAD")
-GAME_REPO    = ("Gzh0821", "pvzge_web", "master")
+GAME_REPO    = ("barretg", "pvzge_web", "master")
 
 # Only these paths of each repo are used, so nothing else is downloaded.
 WRAPPER_PATHS = ("main.js", "package.json", "assets/icons/")
