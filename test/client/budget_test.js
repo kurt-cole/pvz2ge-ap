@@ -286,5 +286,65 @@ const tables = B._apbTables(V.tables);
   else ok(`an old seed still rolls cowboy23 with its dinos (seed ${oldSeed}), as its generation did`);
 }
 
+// ── Aerial Fortress lawns and old seeds ─────────────────────────────────────
+// sky11 is sky past column 3, where a dino falls off, so it never gains dinos.
+// A seed rolled before that rule has no sky_dino_rule in its tables, and its
+// generation may have given the level dinos: the client rolls it the same way.
+{
+  const fx = V.fixtures.find(f => f.level === 'sky11');
+  function LC3() {}
+  LC3.prototype.module_SetLevelDefinition = function () { return 'orig'; };
+  B.installBudgetHook(LC3);
+  const dinosAt = (seed, tables) => {
+    B.st.zombieBudgetRoll = true;
+    B.st.zombieBudget = Object.assign({}, tables, { goal: 2, dinos: true });
+    B.st.zombieSeed = seed;
+    B.syncBudgetConfig();
+    B.setLevelKey('sky11');
+    const lc = new LC3();
+    lc.currentLevelObjects = clone(fx.objects);
+    lc.module_SetLevelDefinition();
+    return B._apbModel(lc.currentLevelObjects).dinos.length;
+  };
+  const oldTables = Object.assign({}, V.tables);
+  delete oldTables.sky_dino_rule;
+  oldTables.dino_permille = [271, 250, 254];   // what those seeds sent
+  let oldSeed = -1, newDinos = 0;
+  for (let seed = 0; seed < 400; seed++) {
+    newDinos += dinosAt(seed, V.tables);
+    if (oldSeed < 0 && dinosAt(seed, oldTables)) oldSeed = seed;
+  }
+  if (newDinos) fail(`sky11 gained dinos ${newDinos} times on a new seed`);
+  else ok('sky11 (Aerial Fortress) never gains dinos on a new seed');
+  if (oldSeed < 0) fail('no old seed gave sky11 dinos, so the parity case is not exercised');
+  else ok(`an old seed still rolls sky11 with its dinos (seed ${oldSeed}), as its generation did`);
+}
+
+// ── levels the roll never touches ───────────────────────────────────────────
+// egypt34 (preset bank, lawn of graves, 1800 sun cap) and plantern3 (plant
+// food on Planterns hides the plants around them) are puzzles. The list
+// must match zombie_roll.py's NEVER_ROLLED, or the client rolls a level the
+// generator treated as vanilla.
+{
+  const py = fs.readFileSync(path.join(__dirname, '..', '..', 'pvz2gardendless',
+                                       'zombie_roll.py'), 'utf8');
+  const m = py.match(/^NEVER_ROLLED = frozenset\(\{([^}]*)\}\)/m);
+  const pyList = m ? m[1].split(',').map(s => s.trim().replace(/"/g, '')).filter(Boolean).sort() : [];
+  const jsList = B.APB.NEVER_ROLLED.slice().sort();
+  if (JSON.stringify(pyList) !== JSON.stringify(jsList))
+    fail(`NEVER_ROLLED differs: python ${pyList} vs client ${jsList}`);
+  else ok(`client NEVER_ROLLED matches python (${jsList.join(', ')})`);
+  const level = { bespoke: false, generated: false, groups: [], dynamic: [], lanes: 5,
+                  waves: 8, own_plants: false, dinos: [], stage: 'EgyptStage',
+                  graves: { initial: {}, random_initial: 0, spawned: [] } };
+  for (const id of ['egypt34', 'plantern3', 'ghostpepper3']) {
+    let rolled = 0;
+    for (let seed = 0; seed < 50; seed++)
+      if (B._apbRoll(tables, seed, id, level, true, 2) !== null) rolled++;
+    if (rolled) fail(`${id} was rolled ${rolled} times`);
+    else ok(`${id} (puzzle) is never rolled`);
+  }
+}
+
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nBUDGET ROLL CLIENT OK');
 process.exit(failed ? 1 : 0);

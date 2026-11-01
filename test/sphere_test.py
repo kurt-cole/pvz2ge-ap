@@ -538,6 +538,27 @@ for _wn, _plant, _wants in (("Big Wave Beach",  "Lily Pad",       True),
         _named.append(f"{_wn} does not open with {_plant}")
     elif not _wants and not _bare:
         _named.append(f"{_wn} wants a plant it should not")
+# [user] Aerial Fortress wants Spinapple AND a floating attacker: either alone
+# leaves it shut. Pinned as literals for the same reason as the loop above.
+# The default seed leaves Aerial Fortress out, so it gets a seed of its own.
+_mwA, _wA = build(enabled_worlds=sorted(C.SELECTABLE_WORLDS), world_count=13, **GATES)
+_preA = [i.name for i in _mwA.precollected]
+if "Aerial Fortress" not in _wA.enabled_worlds:
+    _named.append("the all-worlds seed left Aerial Fortress out, so its gate went untested")
+else:
+    _af = C.progressive_item_name("Aerial Fortress")
+
+    def _af_open(items):
+        return any(r.name == "Aerial Fortress"
+                   for r in state_with(_mwA, _preA + [_af, _SUN1] + items)._reachable)
+    if not _af_open(["Spinapple", "Skyshooter"]):
+        _named.append("Aerial Fortress does not open with Spinapple + Skyshooter")
+    if _af_open(["Spinapple"]):
+        _named.append("Aerial Fortress opens on Spinapple without a floating attacker")
+    if _af_open(["Skyshooter", "Asparajet"]):
+        _named.append("Aerial Fortress opens without Spinapple")
+    if _af_open(["Spinapple", "Caulipower"]):
+        _named.append("Aerial Fortress opens on Caulipower, which deals no damage")
 # Sap-fling was a Jester counter until 2026-08-25 and must not be one again: its
 # projectile really is unreversible, but it deals no damage, so it declines to
 # arm the Jester rather than answering him. Asserted as its own case because the

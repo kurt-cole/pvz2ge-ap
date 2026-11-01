@@ -3,10 +3,10 @@
  "band_count": 5,
  "consumable_copies": 1,
  "draw_rungs": [
-  146.2,
-  177.3,
-  220.4,
-  298.0,
+  150.8,
+  181.5,
+  225.5,
+  333.2,
   400.0
  ],
  "excluded": {
@@ -87,10 +87,10 @@
  },
  "levels": {
   "appease1_5": {
-   "required_dps": 380.9
+   "required_dps": 400.0
   },
   "atombomb3": {
-   "required_dps": 163.7
+   "required_dps": 180.6
   },
   "atombomb4": {
    "required_dps": 400.0
@@ -120,16 +120,16 @@
    "required_dps": 247.3
   },
   "beach20": {
-   "required_dps": 199.2
+   "required_dps": 199.6
   },
   "beach22": {
    "required_dps": 161.8
   },
   "beach23": {
-   "required_dps": 177.3
+   "required_dps": 178.7
   },
   "beach25": {
-   "required_dps": 210.0
+   "required_dps": 210.9
   },
   "beach27": {
    "required_dps": 182.7
@@ -138,13 +138,13 @@
    "required_dps": 176.4
   },
   "beach29": {
-   "required_dps": 125.6
+   "required_dps": 126.2
   },
   "beach30": {
-   "required_dps": 203.3
+   "required_dps": 203.7
   },
   "beach33": {
-   "required_dps": 336.0
+   "required_dps": 338.3
   },
   "beach34": {
    "required_dps": 378.0
@@ -153,10 +153,10 @@
    "required_dps": 400.0
   },
   "beach38": {
-   "required_dps": 377.5
+   "required_dps": 392.2
   },
   "beach39": {
-   "required_dps": 288.0
+   "required_dps": 291.6
   },
   "beach4": {
    "required_dps": 246.9
@@ -174,28 +174,25 @@
    "required_dps": 220.5
   },
   "bloominghearts2": {
-   "required_dps": 311.5
+   "required_dps": 400.0
   },
   "bloominghearts4": {
    "required_dps": 400.0
   },
   "buttercup3": {
-   "required_dps": 239.4
+   "required_dps": 268.9
   },
   "buttercup5": {
    "required_dps": 265.8
   },
-  "conceal10": {
-   "required_dps": 400.0
-  },
   "conceal5": {
-   "required_dps": 217.7
+   "required_dps": 341.1
   },
   "conceal7": {
-   "required_dps": 277.7
+   "required_dps": 281.0
   },
   "conceal9": {
-   "required_dps": 301.0
+   "required_dps": 380.1
   },
   "cowboy1": {
    "required_dps": 115.4
@@ -207,7 +204,7 @@
    "required_dps": 115.4
   },
   "cowboy13": {
-   "required_dps": 97.3
+   "required_dps": 98.8
   },
   "cowboy14": {
    "required_dps": 144.3
@@ -219,13 +216,13 @@
    "required_dps": 105.4
   },
   "cowboy17": {
-   "required_dps": 120.6
+   "required_dps": 124.4
   },
   "cowboy18": {
    "required_dps": 103.5
   },
   "cowboy18_1": {
-   "required_dps": 379.0
+   "required_dps": 397.2
   },
   "cowboy19": {
    "required_dps": 99.4
@@ -240,28 +237,28 @@
    "required_dps": 165.7
   },
   "cowboy24": {
-   "required_dps": 179.8
+   "required_dps": 188.1
   },
   "cowboy24_1": {
-   "required_dps": 331.3
+   "required_dps": 345.8
   },
   "cowboy26": {
-   "required_dps": 208.9
+   "required_dps": 218.4
   },
   "cowboy29": {
-   "required_dps": 167.4
+   "required_dps": 170.8
   },
   "cowboy3": {
    "required_dps": 124.4
   },
   "cowboy30": {
-   "required_dps": 207.3
+   "required_dps": 214.3
   },
   "cowboy32": {
-   "required_dps": 169.5
+   "required_dps": 179.4
   },
   "cowboy33": {
-   "required_dps": 251.4
+   "required_dps": 265.2
   },
   "cowboy5": {
    "required_dps": 137.6
@@ -282,7 +279,7 @@
    "required_dps": 185.4
   },
   "dark14": {
-   "required_dps": 171.7
+   "required_dps": 172.2
   },
   "dark15": {
    "required_dps": 251.9
@@ -291,19 +288,19 @@
    "required_dps": 240.4
   },
   "dark17": {
-   "required_dps": 204.9
+   "required_dps": 205.4
   },
   "dark19": {
-   "required_dps": 204.4
+   "required_dps": 205.3
   },
   "dark2": {
    "required_dps": 200.0
   },
   "dark21": {
-   "required_dps": 377.7
+   "required_dps": 382.2
   },
   "dark22": {
-   "required_dps": 265.4
+   "required_dps": 266.4
   },
   "dark25": {
    "required_dps": 400.0
@@ -339,13 +336,13 @@
    "required_dps": 164.1
   },
   "dino12": {
-   "required_dps": 213.3
+   "required_dps": 214.0
   },
   "dino13": {
    "required_dps": 166.9
   },
   "dino15": {
-   "required_dps": 159.0
+   "required_dps": 159.4
   },
   "dino17": {
    "required_dps": 170.1
@@ -357,13 +354,13 @@
    "required_dps": 175.2
   },
   "dino20": {
-   "required_dps": 169.8
+   "required_dps": 170.2
   },
   "dino21": {
    "required_dps": 238.4
   },
   "dino22": {
-   "required_dps": 299.1
+   "required_dps": 299.5
   },
   "dino23": {
    "required_dps": 238.4
@@ -384,7 +381,7 @@
    "required_dps": 218.3
   },
   "dino30": {
-   "required_dps": 314.6
+   "required_dps": 315.6
   },
   "dino33": {
    "required_dps": 400.0
@@ -393,13 +390,13 @@
    "required_dps": 400.0
   },
   "dino37": {
-   "required_dps": 353.6
+   "required_dps": 354.3
   },
   "dino4": {
    "required_dps": 213.3
   },
   "dino40": {
-   "required_dps": 232.3
+   "required_dps": 232.7
   },
   "dino41": {
    "required_dps": 325.4
@@ -423,25 +420,25 @@
    "required_dps": 400.0
   },
   "egypt10": {
-   "required_dps": 117.7
+   "required_dps": 126.6
   },
   "egypt12": {
-   "required_dps": 153.8
+   "required_dps": 161.9
   },
   "egypt13": {
-   "required_dps": 78.7
+   "required_dps": 85.8
   },
   "egypt14": {
-   "required_dps": 134.9
+   "required_dps": 149.0
   },
   "egypt15": {
-   "required_dps": 165.4
+   "required_dps": 183.7
   },
   "egypt17": {
-   "required_dps": 88.4
+   "required_dps": 92.2
   },
   "egypt18": {
-   "required_dps": 126.9
+   "required_dps": 150.8
   },
   "egypt19": {
    "required_dps": 102.8
@@ -450,52 +447,52 @@
    "required_dps": 35.8
   },
   "egypt20": {
-   "required_dps": 106.0
+   "required_dps": 110.6
   },
   "egypt20_1": {
-   "required_dps": 298.0
+   "required_dps": 307.4
   },
   "egypt22": {
-   "required_dps": 162.1
+   "required_dps": 176.4
   },
   "egypt24": {
-   "required_dps": 155.0
+   "required_dps": 170.1
   },
   "egypt24_1": {
    "required_dps": 189.4
   },
   "egypt26": {
-   "required_dps": 261.0
+   "required_dps": 280.9
   },
   "egypt27": {
-   "required_dps": 185.0
+   "required_dps": 204.0
   },
   "egypt3": {
    "required_dps": 135.7
   },
   "egypt30": {
-   "required_dps": 173.1
+   "required_dps": 185.9
   },
   "egypt31": {
-   "required_dps": 236.0
+   "required_dps": 241.7
   },
   "egypt32": {
-   "required_dps": 281.3
+   "required_dps": 292.6
   },
   "egypt33": {
-   "required_dps": 272.3
+   "required_dps": 282.4
   },
   "egypt6": {
-   "required_dps": 98.7
+   "required_dps": 102.5
   },
   "egypt9": {
-   "required_dps": 98.3
+   "required_dps": 103.4
   },
   "eighties1": {
    "required_dps": 147.9
   },
   "eighties12": {
-   "required_dps": 173.3
+   "required_dps": 174.1
   },
   "eighties13": {
    "required_dps": 400.0
@@ -516,43 +513,43 @@
    "required_dps": 182.0
   },
   "eighties21": {
-   "required_dps": 159.4
+   "required_dps": 161.0
   },
   "eighties23": {
    "required_dps": 150.4
   },
   "eighties24": {
-   "required_dps": 223.2
+   "required_dps": 225.1
   },
   "eighties25": {
    "required_dps": 166.7
   },
   "eighties26": {
-   "required_dps": 202.1
+   "required_dps": 202.9
   },
   "eighties28": {
    "required_dps": 173.2
   },
   "eighties29": {
-   "required_dps": 173.8
+   "required_dps": 174.6
   },
   "eighties30": {
-   "required_dps": 222.0
+   "required_dps": 223.9
   },
   "eighties33": {
-   "required_dps": 327.8
+   "required_dps": 335.3
   },
   "eighties36": {
-   "required_dps": 348.5
+   "required_dps": 350.0
   },
   "eighties38": {
-   "required_dps": 379.8
+   "required_dps": 386.7
   },
   "eighties4": {
    "required_dps": 206.5
   },
   "eighties40": {
-   "required_dps": 328.0
+   "required_dps": 333.2
   },
   "eighties5": {
    "required_dps": 187.2
@@ -567,22 +564,22 @@
    "required_dps": 219.8
   },
   "electriccurrant3": {
-   "required_dps": 279.5
+   "required_dps": 281.0
   },
   "electriccurrant4": {
-   "required_dps": 334.9
+   "required_dps": 337.6
   },
   "future1": {
    "required_dps": 149.7
   },
   "future10": {
-   "required_dps": 228.4
+   "required_dps": 232.2
   },
   "future11": {
    "required_dps": 177.3
   },
   "future12": {
-   "required_dps": 222.6
+   "required_dps": 234.3
   },
   "future13": {
    "required_dps": 236.0
@@ -597,7 +594,7 @@
    "required_dps": 198.6
   },
   "future19": {
-   "required_dps": 253.6
+   "required_dps": 262.8
   },
   "future2": {
    "required_dps": 173.1
@@ -606,22 +603,22 @@
    "required_dps": 203.3
   },
   "future21": {
-   "required_dps": 229.1
+   "required_dps": 238.1
   },
   "future22": {
-   "required_dps": 251.1
+   "required_dps": 252.2
   },
   "future23": {
    "required_dps": 153.2
   },
   "future24": {
-   "required_dps": 205.4
+   "required_dps": 215.3
   },
   "future26": {
-   "required_dps": 236.8
+   "required_dps": 242.2
   },
   "future27": {
-   "required_dps": 190.6
+   "required_dps": 197.0
   },
   "future29": {
    "required_dps": 400.0
@@ -633,13 +630,13 @@
    "required_dps": 105.0
   },
   "future32": {
-   "required_dps": 259.4
+   "required_dps": 263.9
   },
   "future33": {
    "required_dps": 134.7
   },
   "future34": {
-   "required_dps": 286.3
+   "required_dps": 288.7
   },
   "future4": {
    "required_dps": 174.1
@@ -653,9 +650,6 @@
   "future9": {
    "required_dps": 187.6
   },
-  "ghostpepper3": {
-   "required_dps": 400.0
-  },
   "gloomshroom2": {
    "required_dps": 400.0
   },
@@ -663,7 +657,7 @@
    "required_dps": 400.0
   },
   "gloomshroom5": {
-   "required_dps": 342.1
+   "required_dps": 400.0
   },
   "gloomshroom6": {
    "required_dps": 400.0
@@ -672,16 +666,16 @@
    "required_dps": 158.3
   },
   "goldbloom1": {
-   "required_dps": 152.2
+   "required_dps": 159.9
   },
   "goldbloom2": {
-   "required_dps": 210.6
+   "required_dps": 212.1
   },
   "goldbloom3": {
-   "required_dps": 218.8
+   "required_dps": 219.1
   },
   "hotdate2": {
-   "required_dps": 332.9
+   "required_dps": 350.4
   },
   "iceage1": {
    "required_dps": 145.5
@@ -693,40 +687,40 @@
    "required_dps": 127.1
   },
   "iceage13": {
-   "required_dps": 239.7
+   "required_dps": 240.2
   },
   "iceage15": {
    "required_dps": 257.5
   },
   "iceage17": {
-   "required_dps": 175.5
+   "required_dps": 183.1
   },
   "iceage19": {
-   "required_dps": 196.4
+   "required_dps": 202.1
   },
   "iceage2": {
    "required_dps": 167.1
   },
   "iceage20": {
-   "required_dps": 202.5
+   "required_dps": 212.0
   },
   "iceage22": {
    "required_dps": 159.1
   },
   "iceage23": {
-   "required_dps": 176.4
+   "required_dps": 180.2
   },
   "iceage24": {
-   "required_dps": 154.8
+   "required_dps": 159.4
   },
   "iceage26": {
-   "required_dps": 204.5
+   "required_dps": 206.4
   },
   "iceage27": {
-   "required_dps": 285.3
+   "required_dps": 300.1
   },
   "iceage28": {
-   "required_dps": 142.6
+   "required_dps": 147.7
   },
   "iceage31": {
    "required_dps": 400.0
@@ -735,13 +729,13 @@
    "required_dps": 400.0
   },
   "iceage35": {
-   "required_dps": 359.7
+   "required_dps": 361.1
   },
   "iceage36": {
    "required_dps": 400.0
   },
   "iceage38": {
-   "required_dps": 294.8
+   "required_dps": 372.5
   },
   "iceage4": {
    "required_dps": 217.7
@@ -756,16 +750,16 @@
    "required_dps": 168.3
   },
   "icebloom4": {
-   "required_dps": 362.5
+   "required_dps": 364.5
   },
   "icebloom5": {
-   "required_dps": 215.1
+   "required_dps": 218.9
   },
   "iceshroom2": {
    "required_dps": 400.0
   },
   "iceshroom5": {
-   "required_dps": 312.5
+   "required_dps": 400.0
   },
   "kongfu1": {
    "required_dps": 180.7
@@ -774,16 +768,16 @@
    "required_dps": 145.3
   },
   "kongfu11": {
-   "required_dps": 272.3
+   "required_dps": 312.3
   },
   "kongfu14": {
-   "required_dps": 161.8
+   "required_dps": 191.8
   },
   "kongfu15": {
-   "required_dps": 237.6
+   "required_dps": 267.6
   },
   "kongfu17": {
-   "required_dps": 191.9
+   "required_dps": 253.9
   },
   "kongfu18": {
    "required_dps": 252.0
@@ -792,55 +786,55 @@
    "required_dps": 238.4
   },
   "kongfu20": {
-   "required_dps": 279.3
+   "required_dps": 353.5
   },
   "kongfu21": {
    "required_dps": 223.5
   },
   "kongfu23": {
-   "required_dps": 141.1
+   "required_dps": 171.1
   },
   "kongfu25": {
    "required_dps": 169.1
   },
   "kongfu28": {
-   "required_dps": 245.1
+   "required_dps": 297.4
   },
   "kongfu29": {
-   "required_dps": 262.9
+   "required_dps": 283.9
   },
   "kongfu30": {
-   "required_dps": 196.5
+   "required_dps": 209.8
   },
   "kongfu33": {
-   "required_dps": 207.8
+   "required_dps": 216.3
   },
   "kongfu35": {
-   "required_dps": 303.6
+   "required_dps": 333.6
   },
   "kongfu36": {
-   "required_dps": 312.8
+   "required_dps": 366.9
   },
   "kongfu37": {
-   "required_dps": 175.1
+   "required_dps": 217.1
   },
   "kongfu4": {
    "required_dps": 235.7
   },
   "kongfu41": {
-   "required_dps": 243.3
+   "required_dps": 339.9
   },
   "kongfu42": {
-   "required_dps": 102.8
+   "required_dps": 129.4
   },
   "kongfu43": {
-   "required_dps": 276.5
+   "required_dps": 298.5
   },
   "kongfu45": {
-   "required_dps": 349.0
+   "required_dps": 380.8
   },
   "kongfu47": {
-   "required_dps": 368.1
+   "required_dps": 400.0
   },
   "kongfu5": {
    "required_dps": 175.7
@@ -861,7 +855,7 @@
    "required_dps": 133.7
   },
   "lostcity12": {
-   "required_dps": 175.2
+   "required_dps": 177.1
   },
   "lostcity15": {
    "required_dps": 140.5
@@ -879,7 +873,7 @@
    "required_dps": 182.8
   },
   "lostcity23": {
-   "required_dps": 228.5
+   "required_dps": 229.2
   },
   "lostcity24": {
    "required_dps": 131.6
@@ -894,13 +888,13 @@
    "required_dps": 199.8
   },
   "lostcity29": {
-   "required_dps": 200.3
+   "required_dps": 202.2
   },
   "lostcity30": {
    "required_dps": 137.2
   },
   "lostcity33": {
-   "required_dps": 277.4
+   "required_dps": 281.7
   },
   "lostcity34": {
    "required_dps": 220.4
@@ -909,7 +903,7 @@
    "required_dps": 400.0
   },
   "lostcity38": {
-   "required_dps": 312.3
+   "required_dps": 313.8
   },
   "lostcity39": {
    "required_dps": 194.6
@@ -918,7 +912,7 @@
    "required_dps": 144.1
   },
   "lostcity40": {
-   "required_dps": 386.7
+   "required_dps": 391.6
   },
   "lostcity6": {
    "required_dps": 168.2
@@ -939,58 +933,58 @@
    "required_dps": 179.0
   },
   "modern10": {
-   "required_dps": 229.0
+   "required_dps": 236.5
   },
   "modern11": {
    "required_dps": 190.3
   },
   "modern12": {
-   "required_dps": 187.1
+   "required_dps": 187.8
   },
   "modern15": {
-   "required_dps": 178.1
+   "required_dps": 182.7
   },
   "modern17": {
    "required_dps": 143.7
   },
   "modern18": {
-   "required_dps": 175.5
+   "required_dps": 178.5
   },
   "modern2": {
-   "required_dps": 193.5
+   "required_dps": 198.1
   },
   "modern20": {
-   "required_dps": 176.9
+   "required_dps": 177.2
   },
   "modern21": {
    "required_dps": 180.9
   },
   "modern23": {
-   "required_dps": 176.0
+   "required_dps": 177.5
   },
   "modern24": {
    "required_dps": 175.5
   },
   "modern26": {
-   "required_dps": 238.9
+   "required_dps": 244.6
   },
   "modern28": {
    "required_dps": 155.3
   },
   "modern29": {
-   "required_dps": 211.6
+   "required_dps": 213.5
   },
   "modern30": {
-   "required_dps": 227.4
+   "required_dps": 229.9
   },
   "modern31": {
-   "required_dps": 152.9
+   "required_dps": 158.2
   },
   "modern35": {
-   "required_dps": 163.1
+   "required_dps": 164.4
   },
   "modern36": {
-   "required_dps": 219.3
+   "required_dps": 224.4
   },
   "modern37": {
    "required_dps": 400.0
@@ -999,31 +993,28 @@
    "required_dps": 173.6
   },
   "modern39": {
-   "required_dps": 239.5
+   "required_dps": 242.4
   },
   "modern4": {
-   "required_dps": 266.0
+   "required_dps": 266.6
   },
   "modern40": {
-   "required_dps": 223.8
+   "required_dps": 225.8
   },
   "modern41": {
-   "required_dps": 160.3
+   "required_dps": 163.0
   },
   "modern43": {
    "required_dps": 149.0
   },
   "modern5": {
-   "required_dps": 169.7
+   "required_dps": 172.8
   },
   "modern6": {
    "required_dps": 174.8
   },
   "modern7": {
-   "required_dps": 211.0
-  },
-  "parsnip2": {
-   "required_dps": 400.0
+   "required_dps": 211.7
   },
   "pepper6": {
    "required_dps": 90.6
@@ -1032,25 +1023,25 @@
    "required_dps": 92.2
   },
   "pirate10": {
-   "required_dps": 123.0
+   "required_dps": 164.4
   },
   "pirate12": {
-   "required_dps": 103.2
+   "required_dps": 150.9
   },
   "pirate13": {
    "required_dps": 152.1
   },
   "pirate14": {
-   "required_dps": 61.6
+   "required_dps": 114.9
   },
   "pirate15": {
-   "required_dps": 136.9
+   "required_dps": 142.6
   },
   "pirate16": {
-   "required_dps": 68.3
+   "required_dps": 156.1
   },
   "pirate17": {
-   "required_dps": 100.0
+   "required_dps": 135.3
   },
   "pirate19": {
    "required_dps": 92.2
@@ -1059,40 +1050,40 @@
    "required_dps": 122.0
   },
   "pirate21": {
-   "required_dps": 135.4
+   "required_dps": 141.2
   },
   "pirate22": {
-   "required_dps": 110.6
+   "required_dps": 141.7
   },
   "pirate22_1": {
-   "required_dps": 226.3
+   "required_dps": 313.7
   },
   "pirate23": {
    "required_dps": 100.2
   },
   "pirate24": {
-   "required_dps": 125.0
+   "required_dps": 130.2
   },
   "pirate24_1": {
-   "required_dps": 296.7
+   "required_dps": 347.4
   },
   "pirate26": {
-   "required_dps": 174.0
+   "required_dps": 234.7
   },
   "pirate28": {
-   "required_dps": 125.2
+   "required_dps": 175.6
   },
   "pirate30": {
-   "required_dps": 161.1
+   "required_dps": 213.0
   },
   "pirate31": {
-   "required_dps": 106.9
+   "required_dps": 132.8
   },
   "pirate33": {
-   "required_dps": 148.5
+   "required_dps": 177.7
   },
   "pirate34": {
-   "required_dps": 146.2
+   "required_dps": 190.0
   },
   "pirate4": {
    "required_dps": 145.9
@@ -1101,7 +1092,7 @@
    "required_dps": 150.4
   },
   "pirate7": {
-   "required_dps": 124.8
+   "required_dps": 147.0
   },
   "pirate9": {
    "required_dps": 129.6
@@ -1112,17 +1103,23 @@
   "plantern3": {
    "required_dps": 400.0
   },
+  "plantern4": {
+   "required_dps": 225.5
+  },
   "poisonpeashooter5": {
    "required_dps": 400.0
   },
   "reinforce4": {
-   "required_dps": 378.7
+   "required_dps": 392.2
   },
   "reinforce6": {
    "required_dps": 400.0
   },
+  "reinforce7": {
+   "required_dps": 294.5
+  },
   "reinforcemint_try1": {
-   "required_dps": 72.1
+   "required_dps": 80.5
   },
   "reinforcemint_try3": {
    "required_dps": 48.7
@@ -1134,37 +1131,37 @@
    "required_dps": 93.5
   },
   "sky11": {
-   "required_dps": 219.1
+   "required_dps": 260.0
   },
   "sky12": {
-   "required_dps": 227.5
+   "required_dps": 307.0
   },
   "sky13": {
-   "required_dps": 238.1
+   "required_dps": 287.0
   },
   "sky15": {
-   "required_dps": 293.2
+   "required_dps": 353.3
   },
   "sky17": {
-   "required_dps": 257.9
+   "required_dps": 301.1
   },
   "sky2": {
    "required_dps": 114.4
   },
   "sky22": {
-   "required_dps": 293.8
+   "required_dps": 334.2
   },
   "sky24": {
-   "required_dps": 322.8
+   "required_dps": 351.2
   },
   "sky27": {
-   "required_dps": 317.5
+   "required_dps": 363.6
   },
   "sky29": {
    "required_dps": 400.0
   },
   "sky30": {
-   "required_dps": 379.9
+   "required_dps": 400.0
   },
   "sky4": {
    "required_dps": 172.8
@@ -1173,19 +1170,19 @@
    "required_dps": 237.1
   },
   "sky9": {
-   "required_dps": 224.8
+   "required_dps": 275.7
   },
   "solartomato1": {
    "required_dps": 200.0
   },
   "solartomato3": {
-   "required_dps": 275.9
+   "required_dps": 400.0
   },
   "solartomato4": {
-   "required_dps": 331.6
+   "required_dps": 334.7
   },
   "squash2": {
-   "required_dps": 238.9
+   "required_dps": 354.2
   },
   "strawburst3": {
    "required_dps": 400.0
@@ -1194,31 +1191,31 @@
    "required_dps": 341.5
   },
   "strawburst6": {
-   "required_dps": 362.8
+   "required_dps": 371.3
   },
   "sweetpotato3": {
    "required_dps": 400.0
   },
   "sweetpotato4": {
-   "required_dps": 216.4
+   "required_dps": 301.4
   },
   "umbrellaleaf10": {
-   "required_dps": 390.9
+   "required_dps": 395.9
   },
   "umbrellaleaf3": {
-   "required_dps": 330.5
+   "required_dps": 398.7
   },
   "umbrellaleaf5": {
    "required_dps": 400.0
   },
   "umbrellaleaf6": {
-   "required_dps": 219.5
+   "required_dps": 247.0
   },
   "umbrellaleaf8": {
    "required_dps": 400.0
   },
   "vamporcini2": {
-   "required_dps": 180.7
+   "required_dps": 331.1
   }
  },
  "max_copies": 12,
@@ -1871,7 +1868,7 @@
   "Split Pea": {
    "codename": "splitpea",
    "dps": 28.07,
-   "from": "sheet:projectile",
+   "from": "props:PeaType",
    "lawn": 224.6,
    "sun": 125.0
   },

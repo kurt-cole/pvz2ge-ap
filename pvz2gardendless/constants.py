@@ -708,6 +708,60 @@ PARASOL_BOUNCED_PLANTS = [
     "Winter Melon",
 ]
 
+# [user] Plants that do nothing on an Aerial Fortress lawn (any Sky*Stage).
+# DERIVED FROM THE GAME CODE (index.js, 0.16.1): lawnSky.skyTiles() makes
+# columns 4-9 sky, plantable only on a Flower Pot, and sky zombies stop at the
+# ship's edge (EdgeX 2.5, the right side of column 3) to burn the ship instead
+# of walking onto the deck.
+#   fire     LnC.addLaneFire never lays a fire tile on sky, and jalapenoFire
+#            only hurts what stands on its tiles: Jalapeno, Pyre Vine, Hot
+#            Date's death burst, Perfume-shroom and Jack O' Lantern burn the
+#            deck alone. Chilly Pepper's _freezeLane skips sky tiles outright.
+#   contact  a zombie never steps on them on the deck, and out over the sky every
+#            zombie is flying, which PotatoMine.detectEnemy and Spikeweed skip
+#            (spikeweedable() also keeps the spikes out of a Flower Pot):
+#            Potato Mine, Primal Potato Mine, Spikeweed, Spikerock.
+#   spawner  Turkey-pult's turkey lands as a walker (ZombieTypeToSpawn), and a
+#            walker on a sky tile falls (Zombie.playFall).
+#   terrain  no sky level has water or graves.
+# The client's conveyor hook keeps the same plants (by codename) off sky belts:
+# CONVEYOR_SKY_DEAD in build_pvzge_ap.py.
+SKY_DEAD_PLANTS = [
+    "Chilly Pepper",
+    "Grave Buster",
+    "Hot Date",
+    "Jack O' Lantern",
+    "Jalapeno",
+    "Lily Pad",
+    "Perfume-shroom",
+    "Potato Mine",
+    "Primal Potato Mine",
+    "Pyre Vine",
+    "Spikerock",
+    "Spikeweed",
+    "Tangle Kelp",
+    "Turkey-pult",
+]
+
+
+# Attackers that can be planted on an open sky tile with no Flower Pot: the
+# game's "fly" TAGS (PlantFeatures), less Spinapple (gated on its own), the
+# instants (Ghost Pepper, Loquanado), the sun producers and mints, Caulipower
+# (hypnotizes, no damage), Glowkengi (no damage) and the Mega Gatling variants
+# (no item).
+SKY_FLOATING_ATTACKERS = [
+    "Asparajet",
+    "Pea Commando",
+    "Rotobaga",
+    "Shooting Starfruit",
+    "Skyshooter",
+]
+
+
+def is_sky_stage(stage: str) -> bool:
+    """An Aerial Fortress lawn: SkyStage, SkyUnarmedStage, SkyShipless*Stage."""
+    return stage.startswith("Sky")
+
 # Plants a world needs on top of its unlock, as a list of requirements: the
 # player needs at least one plant from EACH list, so a world can ask for more
 # than one thing at once. rules.py ANDs them onto that world's entrance, and
@@ -752,6 +806,10 @@ WORLD_ENTRY_PLANTS = {
     # Potato and Pepper-pult are deliberately absent: neither has a warming
     # radius, and an older version of this rule accepted both.
     "Frostbite Caves": [FIRE_AURA_PLANTS],
+    # [user] Spinapple AND a floating attacker. Past column 3 an Aerial Fortress
+    # lawn is sky, and without a Flower Pot only plants the game tags "fly" go
+    # there (LnC.flyable, no sky check; see SKY_DEAD_PLANTS).
+    "Aerial Fortress": [["Spinapple"], SKY_FLOATING_ATTACKERS],
 }
 
 # Every plant named by an access rule anywhere in rules.py. items.py forces

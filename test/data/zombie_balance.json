@@ -202,8 +202,7 @@
   "appease2_3": {
    "bespoke": false,
    "zombies": {
-    "monk": 13,
-    "monk_nunchaku": 8
+    "monk": 13
    }
   },
   "appease2_4": {
@@ -221,15 +220,8 @@
   "appease2_5": {
    "bespoke": false,
    "zombies": {
-    "cowboy_armor4": 41,
-    "cowboy_gargantuar": 24,
-    "egypt_gargantuar": 13,
-    "future_armor4": 0,
-    "future_gargantuar": 42,
-    "mummy_armor4": 2,
-    "pirate_armor4": 2,
-    "pirate_gargantuar": 38,
-    "tutorial_armor4": 1
+    "lawn_armor4": 43,
+    "lawn_gargantuar": 103
    }
   },
   "appease2_6": {
@@ -244,6 +236,158 @@
     "iceage_gargantuar": 11,
     "iceage_hunter": 32,
     "iceage_imp": 0
+   }
+  },
+  "arma0": {
+   "bespoke": false,
+   "zombies": {
+    "beach_fisherman": 12,
+    "beach_octopus": 16,
+    "lawn": 1,
+    "lawn_armor1": 6,
+    "lawn_armor2": 15,
+    "lawn_gargantuar": 7,
+    "lawn_imp": 4
+   }
+  },
+  "arma1": {
+   "bespoke": false,
+   "zombies": {
+    "abbot_fan": 7,
+    "beach_surfer_veteran": 9,
+    "camel_onehump": 14,
+    "dark_wizard_veteran": 14,
+    "lawn": 3,
+    "lawn_armor1": 6,
+    "lawn_armor2": 10,
+    "lawn_armor4": 1,
+    "lawn_gargantuar": 5,
+    "lawn_imp": 3
+   }
+  },
+  "arma10": {
+   "bespoke": false,
+   "zombies": {
+    "cannon": 25,
+    "dark_king_veteran": 7,
+    "lawn": 1,
+    "lawn_armor1": 4,
+    "lawn_armor2": 1,
+    "lawn_imp": 2,
+    "pharaoh": 30,
+    "sky_battleplane": 27,
+    "sky_twin_lower": 21,
+    "west_bull": 16
+   }
+  },
+  "arma11": {
+   "bespoke": true,
+   "zombies": {
+    "barrelroller": 2,
+    "beach_surfer": 2,
+    "lawn_armor1": 1,
+    "lawn_armor2": 3,
+    "lawn_gargantuar": 1,
+    "lawn_imp": 3,
+    "pharaoh": 2
+   }
+  },
+  "arma2": {
+   "bespoke": false,
+   "zombies": {
+    "barrelroller": 12,
+    "eighties_arcade": 20,
+    "lawn_armor1": 10,
+    "lawn_armor2": 6,
+    "lawn_armor4": 1,
+    "lawn_gargantuar": 5,
+    "lawn_imp": 2,
+    "pharaoh": 10
+   }
+  },
+  "arma3": {
+   "bespoke": false,
+   "zombies": {
+    "beach_snorkel": 38,
+    "lawn_armor1": 4,
+    "lawn_armor2": 17,
+    "lawn_gargantuar": 4,
+    "lawn_imp": 1,
+    "pharaoh": 1,
+    "sky_twin": 14
+   }
+  },
+  "arma4": {
+   "bespoke": false,
+   "zombies": {
+    "disco_mech": 9,
+    "future_jetpack": 9,
+    "future_jetpack_veteran": 11,
+    "future_protector": 16,
+    "lawn_armor1": 3,
+    "lawn_armor2": 3,
+    "lawn_armor4": 1,
+    "lawn_gargantuar": 1,
+    "lawn_imp": 1,
+    "mech_cone": 11
+   }
+  },
+  "arma5": {
+   "bespoke": false,
+   "zombies": {
+    "beach_fisherman": 6,
+    "beach_octopus": 27,
+    "dark_king_veteran": 6,
+    "future_protector_veteran": 9,
+    "lawn": 2,
+    "lawn_armor1": 8,
+    "lawn_armor2": 2,
+    "lawn_armor4": 1,
+    "lawn_gargantuar": 4,
+    "lawn_imp": 1,
+    "mech_cone": 18
+   }
+  },
+  "arma6": {
+   "bespoke": false,
+   "zombies": {
+    "dark_juggler": 27,
+    "dark_king": 11,
+    "lawn": 3,
+    "lawn_armor1": 6,
+    "lawn_armor2": 5,
+    "lawn_gargantuar": 7,
+    "lawn_imp": 3,
+    "modern_newspaper": 17,
+    "pharaoh": 1
+   }
+  },
+  "arma7": {
+   "bespoke": true,
+   "zombies": {
+    "chicken_farmer": 1,
+    "eighties_punk_veteran": 11,
+    "lawn": 1,
+    "lawn_armor1": 8,
+    "lawn_armor2": 7,
+    "lawn_gargantuar": 1,
+    "lawn_imp": 1,
+    "lostcity_jane": 17,
+    "pharaoh": 1,
+    "sky_battleplane": 13
+   }
+  },
+  "arma9": {
+   "bespoke": false,
+   "zombies": {
+    "abbot_chi": 9,
+    "cannon": 14,
+    "explorer": 14,
+    "football_mech": 1,
+    "lawn": 4,
+    "lawn_armor1": 3,
+    "lawn_armor2": 8,
+    "modern_balloon": 16
    }
   },
   "atombomb0": {
@@ -1130,15 +1274,19 @@
   "conceal10": {
    "bespoke": false,
    "zombies": {
-    "abbot_chi": 19,
-    "abbot_torch": 19,
-    "dino_gargantuar": 12,
-    "dino_imp": 6,
-    "kongfu_gong": 3,
-    "monk_drink_veteran": 5,
-    "newspaper_veteran": 10,
-    "tutorial_armor2": 1,
-    "tutorial_armor4": 0
+    "eighties_glitter": 18,
+    "feastivus_piano": 5,
+    "feastivus_swashbuckler": 17,
+    "iceage_hunter": 8,
+    "lawn": 29,
+    "lawn_armor1": 29,
+    "lawn_armor2": 16,
+    "lawn_armor3": 12,
+    "lawn_armor4": 0,
+    "lawn_gargantuar": 8,
+    "lawn_imp": 22,
+    "monk_drink_veteran": 6,
+    "newspaper_veteran": 8
    }
   },
   "conceal11": {
@@ -4211,19 +4359,15 @@
   "ghostpepper3": {
    "bespoke": false,
    "zombies": {
-    "barrelroller": 10,
-    "beach": 0,
-    "beach_armor1": 4,
-    "beach_armor2": 28,
-    "beach_fem": 0,
-    "beach_fem_armor1": 4,
-    "beach_fem_armor2": 31,
-    "beach_fisherman": 14,
-    "beach_gargantuar": 13,
-    "beach_imp": 3,
-    "beach_surfer": 27,
-    "foodfight_chefster": 3,
-    "lostcity_crystalskull": 3
+    "beach_octopus": 0,
+    "cannon": 5,
+    "catapult": 7,
+    "dino_bully": 0,
+    "iceage_armor2": 10,
+    "iceage_armor3": 15,
+    "iceage_hunter": 2,
+    "iceage_hunter_veteran": 6,
+    "mech_cone": 0
    }
   },
   "gloomshroom0": {
@@ -8035,15 +8179,15 @@
     "future_protector": 0
    }
   },
-  "lod_270": {
+  "lod_271": {
    "bespoke": false,
    "zombies": {
     "sky": 11,
-    "sky_armor1": 18,
-    "sky_armor2": 39,
+    "sky_armor1": 24,
+    "sky_armor2": 31,
     "sky_electric": 44,
-    "sky_gargantuar_armor2_thrower": 23,
-    "sky_twin": 15
+    "sky_gargantuar_armor2_thrower": 18,
+    "sky_twin": 14
    }
   },
   "lod_278": {
@@ -10392,10 +10536,10 @@
    "zombies": {
     "chicken_farmer": 12,
     "cowboy_gargantuar": 5,
+    "lawn_armor1": 2,
+    "lawn_armor2": 0,
     "pirate_captain": 11,
-    "seagull": 6,
-    "tutorial_armor1": 2,
-    "tutorial_armor2": 0
+    "seagull": 6
    }
   },
   "lod_harvest_8": {
@@ -11677,6 +11821,186 @@
     "lostcity_relichunter": 0
    }
   },
+  "megagatling0": {
+   "bespoke": false,
+   "zombies": {
+    "lawn_armor2": 14,
+    "lawn_armor4": 17,
+    "lawn_gargantuar": 2,
+    "sky_arbiterx": 0,
+    "sky_twin": 0
+   }
+  },
+  "megagatling1": {
+   "bespoke": false,
+   "zombies": {
+    "egypt_gargantuar": 13,
+    "explorer": 8,
+    "explorer_veteran": 8,
+    "mummy_armor2": 11,
+    "mummy_armor4": 20,
+    "pharaoh": 2,
+    "ra": 0,
+    "tomb_raiser": 0
+   }
+  },
+  "megagatling10": {
+   "bespoke": true,
+   "zombies": {
+    "abbot_armor1": 10,
+    "abbot_armor2": 48,
+    "kongfu_bronze_strong": 56
+   }
+  },
+  "megagatling11": {
+   "bespoke": false,
+   "zombies": {
+    "abbot_fan": 10,
+    "abbot_torch": 20,
+    "barrelroller": 2,
+    "beach_octopus": 5,
+    "beach_surfer": 14,
+    "chicken_farmer": 10,
+    "eighties_breakdancer": 17,
+    "eighties_gargantuar": 3,
+    "eighties_glitter": 20,
+    "eighties_mc": 10,
+    "lawn": 57,
+    "lawn_armor1": 107,
+    "lawn_armor2": 62,
+    "lawn_armor3": 34,
+    "lawn_armor4": 13,
+    "lawn_gargantuar": 25,
+    "lawn_imp": 20,
+    "modern_allstar": 5
+   }
+  },
+  "megagatling2": {
+   "bespoke": false,
+   "zombies": {
+    "cowboy_armor1": 9,
+    "cowboy_armor2": 11,
+    "cowboy_armor4": 13,
+    "cowboy_gargantuar": 0,
+    "piano": 0,
+    "poncho_plate": 14,
+    "prospector": 26
+   }
+  },
+  "megagatling3": {
+   "bespoke": false,
+   "zombies": {
+    "cannon": 0,
+    "dark_king_veteran": 10,
+    "dino_bully": 0,
+    "future_protector": 0,
+    "lawn": 0,
+    "lawn_armor1": 1,
+    "lawn_armor2": 4,
+    "lawn_armor4": 8,
+    "lostcity_bug_armor2": 0,
+    "lostcity_bug_armor4": 0,
+    "mech_cone": 0,
+    "monk_blade": 0,
+    "monk_drink": 0,
+    "poncho_plate": 0,
+    "west_bull": 0
+   }
+  },
+  "megagatling4": {
+   "bespoke": false,
+   "zombies": {
+    "eighties_arcade": 12,
+    "eighties_armor1": 7,
+    "eighties_armor2": 11,
+    "eighties_armor4": 7,
+    "eighties_breakdancer": 7,
+    "eighties_gargantuar": 20,
+    "eighties_mc": 2,
+    "lawn_armor1": 2,
+    "ra": 27
+   }
+  },
+  "megagatling5": {
+   "bespoke": false,
+   "zombies": {
+    "beach_fisherman": 0,
+    "beach_octopus": 0,
+    "dino_bully_veteran": 0,
+    "football_mech": 0,
+    "future_protector": 0,
+    "kongfu_drink": 0,
+    "lawn": 3,
+    "lawn_armor1": 3,
+    "lawn_armor2": 6,
+    "lawn_armor4": 3,
+    "lostcity_excavator": 0,
+    "lostcity_jane": 0,
+    "mech_cone": 0,
+    "pharaoh": 0
+   }
+  },
+  "megagatling6": {
+   "bespoke": false,
+   "zombies": {
+    "dark": 2,
+    "dark_armor1": 5,
+    "dark_armor2": 2,
+    "dark_armor3": 1,
+    "dark_juggler": 12,
+    "dark_king_veteran": 2
+   }
+  },
+  "megagatling7": {
+   "bespoke": true,
+   "zombies": {
+    "future_protector": 0,
+    "lawn": 27,
+    "lawn_armor1": 16,
+    "lawn_armor2": 15,
+    "lawn_gargantuar": 4,
+    "mech_cone": 0,
+    "sky_arbiterx": 1,
+    "sky_dronemaker": 5,
+    "sky_twin": 2
+   }
+  },
+  "megagatling8": {
+   "bespoke": false,
+   "zombies": {
+    "beach_octopus": 12,
+    "birthday_barrelroller": 6,
+    "birthday_jetpack": 9,
+    "birthday_juggler": 9,
+    "birthday_pharaoh": 8,
+    "disco_mech": 3,
+    "duckytube": 3,
+    "duckytube_armor1": 6,
+    "duckytube_armor2": 2,
+    "future_protector": 7,
+    "lawn": 2,
+    "lawn_armor1": 7,
+    "lawn_armor2": 2,
+    "lawn_gargantuar": 3,
+    "mech_cone": 4,
+    "modern_balloon": 4
+   }
+  },
+  "megagatling9": {
+   "bespoke": false,
+   "zombies": {
+    "explorer": 13,
+    "iceage_dodo": 2,
+    "lawn_armor2": 10,
+    "lawn_armor4": 2,
+    "lawn_gargantuar": 6,
+    "lawn_imp": 2,
+    "lostcity_bug": 3,
+    "lostcity_crystalskull": 7,
+    "lostcity_excavator": 7,
+    "lostcity_jane": 8
+   }
+  },
   "meteorflower0": {
    "bespoke": false,
    "zombies": {
@@ -12380,21 +12704,6 @@
     "swashbuckler": 12
    }
   },
-  "parsnip2": {
-   "bespoke": false,
-   "zombies": {
-    "barrelroller": 26,
-    "dark_king_veteran": 16,
-    "dark_wizard_veteran": 16,
-    "egypt_gargantuar": 16,
-    "explorer": 3,
-    "modern_balloon": 13,
-    "mummy": 3,
-    "mummy_armor1": 20,
-    "mummy_armor2": 45,
-    "ra": 1
-   }
-  },
   "parsnip3": {
    "bespoke": false,
    "zombies": {
@@ -12511,9 +12820,9 @@
    }
   },
   "pepper4": {
-   "bespoke": false,
+   "bespoke": true,
    "zombies": {
-    "chicken_ge": 6
+    "chicken_ge": 1
    }
   },
   "pepper5": {
@@ -13041,19 +13350,30 @@
   "plantern4": {
    "bespoke": false,
    "zombies": {
-    "beach": 2,
-    "beach_armor2": 0,
-    "beach_imp": 10,
-    "eighties_boombox": 7,
-    "eighties_breakdancer": 5,
-    "eighties_glitter": 10,
-    "eighties_imp": 0,
-    "kongfu_chi": 10,
-    "lawn_armor1": 13,
-    "lostcity_jane": 6,
-    "modern_balloon": 2,
+    "beach_fisherman": 4,
+    "beach_snorkel": 16,
+    "birthday": 1,
+    "birthday_armor1": 1,
+    "birthday_armor2": 1,
+    "catapult": 5,
+    "disco_mech": 3,
+    "duckytube": 31,
+    "duckytube_armor1": 20,
+    "duckytube_armor2": 4,
+    "eighties_arcade": 5,
+    "lawn": 11,
+    "lawn_armor1": 26,
+    "lawn_armor2": 6,
+    "lawn_gargantuar": 1,
+    "lawn_imp": 10,
+    "modern_allstar": 2,
+    "modern_balloon": 6,
+    "modern_newspaper": 3,
     "summer_bug": 0,
-    "tutorial_gargantuar": 1
+    "tutorial": 7,
+    "tutorial_armor1": 4,
+    "tutorial_armor2": 1,
+    "zomboni": 3
    }
   },
   "plantern5": {
@@ -13253,11 +13573,18 @@
   "reinforce7": {
    "bespoke": false,
    "zombies": {
-    "future_armor1": 7,
-    "future_armor2": 2,
-    "future_imp": 3,
-    "future_jetpack_disco": 11,
-    "mech_cone": 4
+    "birthday_juggler": 20,
+    "eighties_breakdancer": 8,
+    "football_mech": 3,
+    "lawn": 16,
+    "lawn_armor1": 21,
+    "lawn_armor2": 12,
+    "lawn_gargantuar": 2,
+    "mech_cone": 7,
+    "modern_allstar": 4,
+    "modern_superfanimp": 7,
+    "sportzball_balloon": 9,
+    "zomboni": 5
    }
   },
   "reinforce8": {
@@ -14196,7 +14523,8 @@
   "umbrellaleaf11": {
    "bespoke": false,
    "zombies": {
-    "cannon": 32
+    "cannon": 32,
+    "future_imp": 15
    }
   },
   "umbrellaleaf2": {
@@ -14421,7 +14749,7 @@
    "hp": 1290
   },
   "beach_fem_armor4": {
-   "cost": 400,
+   "cost": 700,
    "hp": 2390
   },
   "beach_fisherman": {
@@ -15463,6 +15791,10 @@
   "sky_twin": {
    "cost": 1200,
    "hp": 3000
+  },
+  "sky_twin_lower": {
+   "cost": 900,
+   "hp": 1500
   },
   "sky_twin_upper": {
    "cost": 900,

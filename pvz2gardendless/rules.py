@@ -361,7 +361,7 @@ def set_rules(world: "PvZ2GardendlessWorld") -> None:
             if dps not in answers:
                 answers[dps] = budget_logic.plants_clearing_at(*dps)
             if answers[dps]:
-                need(loc_data.name, "group", answers[dps])
+                need(loc_data.name, "group", budget_logic.sky_live(loc_data.name, answers[dps]))
 
     # HAZARD COUNTERS, under the budget zombie roll. The level's own roll says
     # which hazards it fields, so the counter goes on that level's location,

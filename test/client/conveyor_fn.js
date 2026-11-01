@@ -268,6 +268,142 @@ function installSeedBankHook(LC) {
   LC._ap_hooked_seedbank = true;
 }
 
+// The real client reads the level's object list off the game; the suite
+// stands in a value per level so the belt map can tell levels apart.
+function _apLevelObjects() { return window._testLevelObjects || null; }
+
+// The real client reads the level id off LevelPlay; the suite sets it.
+function _apLevelKey() { return window._testLevelKey || ''; }
+
+// [user] Puzzle belts: conveyor rando leaves these levels' belts, the
+// opening and every wave's adds, exactly as shipped. ghostpepper3's only
+// thaw against its frost winds is the Hot Potato wave 5 deals, and nothing
+// in Hot Potato's swap group thaws.
+const AP_PUZZLE_BELTS = ['ghostpepper3'];
+function _apPuzzleBelt() {
+  return AP_PUZZLE_BELTS.indexOf(_apLevelKey()) >= 0;
+}
+
+// Mid-level belt changes. A wave's ModifyConveyorWaveActionProps adds cards
+// to the belt or takes them off by plant type, and most belts are dealt that
+// way: 326 shipped levels add plants mid-level and 36 open on an empty belt,
+// so a swap of InitialPlantList alone left those plants as the level had
+// them (sky5: one Pineapple swapped, then vanilla Bonk Choy, Repeater and
+// Sky Shooter). One map per level. A plant the opening belt already traded
+// trades for the same plant again, because an Add re-caps the card that is
+// there and a Remove takes it off. A plant new to the belt rolls once, on a
+// stream keyed by the level and its codename, so the opening belt's roll is
+// untouched and neither wave order nor a retry changes the pick.
+let _apBeltState = null;
+
+// The level's map, started fresh for a level module_SetConveyor did not
+// record (one whose belt is dealt wholly by waves).
+function _apBeltFor() {
+  const objs = _apLevelObjects();
+  if (!_apBeltState || _apBeltState.objs !== objs) {
+    _apBeltState = { objs: objs, key: '', map: Object.create(null), taken: new Set() };
+  }
+  return _apBeltState;
+}
+
+// What the opening belt became, entry by entry, plus everything it now
+// deals (threat fallbacks included), which a new plant may not land on.
+function _apRememberBelt(props, patched) {
+  try {
+    const orig = props && Array.isArray(props.InitialPlantList) ? props.InitialPlantList : [];
+    const cur = patched && Array.isArray(patched.InitialPlantList) ? patched.InitialPlantList : [];
+    const map = Object.create(null), taken = new Set();
+    for (let i = 0; i < cur.length; i++) {
+      const to = cur[i] && cur[i].PlantType;
+      if (!to) continue;
+      taken.add(to);
+      const from = i < orig.length && orig[i] && orig[i].PlantType;
+      if (from && !(from in map)) map[from] = to;
+    }
+    _apBeltState = { objs: _apLevelObjects(), map: map, taken: taken,
+                     key: orig.map(e => (e && e.PlantType) || '').join('|') };
+  } catch (e) { /* never stop a level from loading over this */ }
+}
+
+// The plant a wave's `cn` becomes. Same rules as the opening swap: its own
+// group, a plantable lawn, an answer only for an answer, a killing instant
+// only for one, then the Family and output preferences.
+function _apBeltModSwap(lc, cn) {
+  const st = _apBeltFor();
+  if (cn in st.map) return st.map[cn];
+  let pick = cn;
+  const known = window._AP_conveyorKnown;
+  const cands = (window._AP_conveyorSwaps || {})[cn];
+  if (known && known.has(cn) && cands &&
+      !window._AP_conveyorBeltLocked.has(cn) &&
+      !window._AP_conveyorTerrainLocked.has(cn)) {
+    // The grid is built by the time a wave runs, so the game's flag is the
+    // answer; the belt signal is the fallback, as in the opening swap.
+    let hasWater = false;
+    try {
+      const lp = window._AP_LevelPlay || window._AP_levelController;
+      hasWater = !!(lp && lp.component && lp.component.haveWater);
+    } catch (e) { /* fall through to the belt signal */ }
+    if (!hasWater) {
+      hasWater = Array.from(st.taken).some(c => window._AP_conveyorTerrainLocked.has(c) &&
+                                                c !== 'goldleaf');
+    }
+    const onSky = !!(window._AP_onSkyLawn && window._AP_onSkyLawn(lc));
+    let usable = cands.filter(c => window._AP_conveyorPlantable(c, hasWater, onSky));
+    const threatAnswers = window._AP_conveyorThreatAnswers || {};
+    const threats = ((window._AP_levelThreats && window._AP_levelThreats(lc)) || [])
+      .filter(k => threatAnswers[k]).map(k => threatAnswers[k]);
+    for (const answers of threats) {
+      if (answers.has(cn)) usable = usable.filter(c => answers.has(c));
+    }
+    const killSet = window._AP_conveyorKillingInstants;
+    if (killSet && killSet.has(cn)) usable = usable.filter(c => killSet.has(c));
+    if (usable.length >= 2) {
+      const rnd = _apRng(_apHash(String(window._AP_conveyorSeed || 0) + '|wave|' +
+                                 st.key + '|' + cn));
+      const familyOf = window._AP_conveyorFamily || {};
+      const kin = usable.filter(c => familyOf[c] === familyOf[cn]);
+      let from = rnd() < 0.75 && kin.length >= 2 ? kin : usable;
+      const dpsOf = window._AP_conveyorDps || {};
+      const mine = dpsOf[cn];
+      if (mine) {
+        const near = from.filter(c => dpsOf[c] && dpsOf[c] >= mine / 2 && dpsOf[c] <= mine * 2);
+        if (near.length >= 2) from = near;
+      }
+      // Not onto a card the belt already deals: the Add would re-cap that
+      // card instead of dealing a new one.
+      const free = from.filter(c => !st.taken.has(c));
+      if (free.length) pick = free[Math.floor(rnd() * free.length)];
+    }
+  }
+  st.map[cn] = pick;
+  st.taken.add(pick);
+  return pick;
+}
+
+// A copy of the wave's props with each Add and Remove plant mapped. Tool
+// entries (ToolType) are left alone, and a Remove never rolls: it names a
+// plant an earlier Add or the opening belt already mapped.
+function _apBeltModProps(lc, props) {
+  const st = _apBeltFor();
+  const rtid = /^RTID\(([^@()]+)@([^()]*)\)$/;
+  const mapType = function (type, fn) {
+    const m = rtid.exec(type);
+    return m ? 'RTID(' + fn(m[1]) + '@' + m[2] + ')' : fn(type);
+  };
+  const patched = Object.assign(Object.create(Object.getPrototypeOf(props) || Object.prototype), props);
+  if (Array.isArray(props.Remove)) {
+    patched.Remove = props.Remove.map(e => e && typeof e.Type === 'string'
+      ? Object.assign({}, e, { Type: mapType(e.Type, cn => cn in st.map ? st.map[cn] : cn) })
+      : e);
+  }
+  if (Array.isArray(props.Add)) {
+    patched.Add = props.Add.map(e => e && typeof e.Type === 'string'
+      ? Object.assign({}, e, { Type: mapType(e.Type, cn => _apBeltModSwap(lc, cn)) })
+      : e);
+  }
+  return patched;
+}
 function installConveyorHook(LC) {
   if (!LC || LC._ap_hooked_conveyor || !LC.prototype || !LC.prototype.module_SetConveyor) return;
   const _origSetConveyor = LC.prototype.module_SetConveyor;
@@ -276,7 +412,7 @@ function installConveyorHook(LC) {
     try {
       const pool  = window._AP_conveyorPool;
       const swaps = window._AP_conveyorSwaps || {};
-      if (window._AP_randomizeConveyor && props &&
+      if (window._AP_randomizeConveyor && !_apPuzzleBelt() && props &&
           Array.isArray(props.InitialPlantList) && pool && pool.length) {
         const list  = props.InitialPlantList;
         const known = window._AP_conveyorKnown;
@@ -300,6 +436,7 @@ function installConveyorHook(LC) {
           hasWater = list.some(e => e && window._AP_conveyorTerrainLocked.has(e.PlantType) &&
                                     e.PlantType !== 'goldleaf');
         }
+        const onSky = !!(window._AP_onSkyLawn && window._AP_onSkyLawn(this));
         // Which entries are real plants this hook may touch? Tools
         // (tool_projectile_*, zombiepotion_*) and belt-locked plants are not,
         // and the shadow roll has to count slots the same way the swap does.
@@ -365,7 +502,7 @@ function installConveyorHook(LC) {
         if (shadowSet.length && slotCount >= (window._AP_conveyorShadowMinSlots || 2) &&
             shadowRoll < (window._AP_conveyorShadowChance || 0)) {
           const usableShadow = shadowSet.filter(
-            cn => window._AP_conveyorPlantable(cn, hasWater));
+            cn => window._AP_conveyorPlantable(cn, hasWater, onSky));
           // Moonflower is the whole point: without it the other seven never
           // reach ShadowPowered, so a set that lost it to terrain is no set.
           // Moonflower lands on a slot that did not ship an instant, so a belt
@@ -415,6 +552,7 @@ function installConveyorHook(LC) {
             patched.InitialPlantList = list.map(
               (e, i) => picks[i] ? Object.assign({}, e, { PlantType: picks[i] }) : e);
             window._AP_conveyorLastShadow = true;
+            _apRememberBelt(props, patched);
             const args0 = Array.prototype.slice.call(arguments);
             args0[0] = patched;
             return _origSetConveyor.apply(this, args0);
@@ -446,7 +584,7 @@ function installConveyorHook(LC) {
           // that a plant with nothing left to trade for stays put -- the
           // original is always in its own group, so fewer than two survivors
           // means there is no alternative.
-          let usable = candidates.filter(cn => window._AP_conveyorPlantable(cn, hasWater));
+          let usable = candidates.filter(cn => window._AP_conveyorPlantable(cn, hasWater, onSky));
           if (usable.length < 2) return entry;
           // An answer to a threat the level fields only trades for another
           // answer to it, and stays put when its group has no other.
@@ -498,7 +636,7 @@ function installConveyorHook(LC) {
         const held = newList.map(e => e && e.PlantType);
         keepAnswer(held, (i, wide) =>
           (wide ? Object.keys(swaps).sort() : swaps[list[i].PlantType] || [])
-            .filter(cn => window._AP_conveyorPlantable(cn, hasWater)));
+            .filter(cn => window._AP_conveyorPlantable(cn, hasWater, onSky)));
         for (let i = 0; i < list.length; i++) {
           if (newList[i] && held[i] !== newList[i].PlantType) {
             newList[i] = Object.assign({}, newList[i], { PlantType: held[i] });
@@ -533,10 +671,26 @@ function installConveyorHook(LC) {
         patched = warm;
       }
     } catch (e) { /* never stop a level from loading over this */ }
+    _apRememberBelt(props, patched);
     const args = Array.prototype.slice.call(arguments);
     args[0] = patched;
     return _origSetConveyor.apply(this, args);
   };
+  // The waves' belt changes, mapped the same way. See _apBeltModSwap.
+  const _origModifyConveyor = LC.prototype.readWave_ModifyConveyorWaveAction;
+  if (_origModifyConveyor) {
+    LC.prototype.readWave_ModifyConveyorWaveAction = function (props) {
+      let patched = props;
+      try {
+        if (window._AP_randomizeConveyor && !_apPuzzleBelt() && props && typeof props === 'object') {
+          patched = _apBeltModProps(this, props);
+        }
+      } catch (e) { /* never stop a wave over this */ }
+      const args = Array.prototype.slice.call(arguments);
+      args[0] = patched;
+      return _origModifyConveyor.apply(this, args);
+    };
+  }
   LC._ap_hooked_conveyor = true;
 }
 const EX=new Set(['powerplant','holonut']);
@@ -641,13 +795,31 @@ window._AP_conveyorThreatAnswers = {
 // The real check reads the level's objects; the suite sets the answer.
 window._AP_levelThreats=function(){ return window._testThreats || []; };
 
+// The real sky check, off the level's StageModule (lc.currentLevelObjects,
+// else the harness's _apLevelObjects).
+const AP_SKY_STAGE_RE = /"StageModule":"RTID\(Sky\w*@/;
+function _apOnSkyLawn(lc) {
+  try {
+    const objs = (lc && Array.isArray(lc.currentLevelObjects) && lc.currentLevelObjects.length)
+      ? lc.currentLevelObjects : _apLevelObjects();
+    return !!objs && AP_SKY_STAGE_RE.test(JSON.stringify(objs));
+  } catch (e) { return false; }
+}
+window._AP_onSkyLawn = _apOnSkyLawn;
+
 // Terrain gate, mirroring the client's declarations. These are const/window
 // assignments rather than named functions, so drift_test cannot check them --
 // keep them identical to build_pvzge_ap.py by hand.
 const CONVEYOR_WATER_ONLY = new Set(['lilypad', 'tanglekelp', 'seashroom']);
 const CONVEYOR_TILE_LOCKED = new Set(['goldleaf']);
-window._AP_conveyorPlantable = function (cn, hasWater) {
+const CONVEYOR_SKY_DEAD = new Set([
+  'chillypepper', 'gravebuster', 'hotdate', 'jackolantern', 'jalapeno',
+  'lilypad', 'perfumeshroom', 'potatomine', 'primalpotatomine', 'pyrevine',
+  'spikerock', 'spikeweed', 'tanglekelp', 'turkeypult',
+]);
+window._AP_conveyorPlantable = function (cn, hasWater, onSky) {
   if (CONVEYOR_TILE_LOCKED.has(cn)) return false;
+  if (onSky && CONVEYOR_SKY_DEAD.has(cn)) return false;
   if (CONVEYOR_WATER_ONLY.has(cn)) return !!hasWater;
   return true;
 };
@@ -664,6 +836,6 @@ function setLevelWater(haveWater) {
   window._AP_LevelPlay = { component: { haveWater: haveWater } };
 }
 
-module.exports={installConveyorHook, installSeedBankHook, AP_WARM_PLANT, window, CONVEYOR_GROUPS, CONVEYOR_FAMILIES, CONVEYOR_DPS,
+module.exports={installConveyorHook, _apBeltModProps, installSeedBankHook, AP_WARM_PLANT, window, CONVEYOR_GROUPS, CONVEYOR_FAMILIES, CONVEYOR_DPS,
   CONVEYOR_SHADOW, CONVEYOR_SHADOW_CHANCE, setLevelWater,
-  CONVEYOR_WATER_ONLY, CONVEYOR_TILE_LOCKED, CONVEYOR_BELT_LOCKED};
+  CONVEYOR_WATER_ONLY, CONVEYOR_TILE_LOCKED, CONVEYOR_BELT_LOCKED, CONVEYOR_SKY_DEAD};

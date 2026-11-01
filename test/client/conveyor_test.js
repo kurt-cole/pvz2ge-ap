@@ -726,5 +726,242 @@ setLevelWater(false);
   else ok('every belt facing a Parasol Zombie holds a plant she cannot bounce, randomized (20 seeds) or not');
 }
 
+// ── mid-level belt changes (ModifyConveyorWaveActionProps) ──────────────────
+// A level class with the wave hook too, driven through the opening belt and
+// then each wave's change in order, as the game would.
+{
+  const MODS = JSON.parse(fs.readFileSync(path.join(__dirname, 'conveyor_mod_levels.json'), 'utf8'));
+  let modSeen = [];
+  function LC2() {}
+  LC2.prototype.module_SetConveyor = function (props) { modSeen.push(props); };
+  LC2.prototype.readWave_ModifyConveyorWaveAction = function (props) { modSeen.push(props); };
+  installConveyorHook(LC2);
+  const lc2 = new LC2();
+  const bare = t => { const m = /^RTID\(([^@()]+)@/.exec(t || ''); return m ? m[1] : t; };
+  // The belt a level deals, opening list then each wave in order: returns
+  // [opening props, [wave props...]], every object the game was handed.
+  function play(l, order) {
+    window._testLevelObjects = { level: l._file };
+    modSeen = [];
+    const hasBelt = l.InitialPlantList.length > 0;
+    if (hasBelt) lc2.module_SetConveyor(clone({ InitialPlantList: l.InitialPlantList }));
+    for (const i of order || l.mods.map((_, i) => i)) lc2.readWave_ModifyConveyorWaveAction(clone(l.mods[i]));
+    return hasBelt ? [modSeen[0], modSeen.slice(1)] : [null, modSeen];
+  }
+  const SWAPS = window._AP_conveyorSwaps;
+  const bad = [];
+
+  // Off: every wave handed over exactly as shipped.
+  window._AP_randomizeConveyor = false;
+  for (const l of MODS) {
+    const [, waves] = play(l);
+    if (JSON.stringify(waves) !== JSON.stringify(l.mods)) { bad.push(`off changed ${l._file}`); break; }
+  }
+
+  window._AP_randomizeConveyor = true;
+  let newSwapped = 0, newTotal = 0;
+  for (const seed of [1, 2, 3]) {
+    window._AP_conveyorSeed = seed;
+    for (const l of MODS) {
+      const input = clone(l.mods);
+      const [open, waves] = play(l);
+      const opened = {};
+      if (open) l.InitialPlantList.forEach((e, i) => {
+        if (!(e.PlantType in opened)) opened[e.PlantType] = open.InitialPlantList[i].PlantType;
+      });
+      const map = Object.assign({}, opened);
+      waves.forEach((w, wi) => {
+        const o = l.mods[wi];
+        for (const kind of ['Add', 'Remove']) {
+          (o[kind] || []).forEach((e, ei) => {
+            const g = w[kind][ei];
+            // pacing and everything but Type survive; tools are never touched
+            for (const k of Object.keys(e)) {
+              if (k !== 'Type' && JSON.stringify(e[k]) !== JSON.stringify(g[k])) bad.push(`${l._file}: ${kind}.${k} changed`);
+            }
+            if (!e.Type) { if (JSON.stringify(e) !== JSON.stringify(g)) bad.push(`${l._file}: tool entry changed`); return; }
+            if (/^RTID\(/.test(e.Type) !== /^RTID\(/.test(g.Type)) bad.push(`${l._file}: RTID wrapper lost`);
+            const from = bare(e.Type), to = bare(g.Type);
+            // one map per level: the same plant always becomes the same plant
+            if (from in map && map[from] !== to) bad.push(`${l._file}@${seed}: ${from} -> ${map[from]} then ${to}`);
+            if (kind === 'Remove' && !(from in map) && from !== to) bad.push(`${l._file}: Remove rolled ${from}`);
+            if (kind === 'Add' && !(from in opened) && !(from in map)) {
+              newTotal++;
+              if (from !== to) newSwapped++;
+              if (from !== to && !(SWAPS[from] || []).includes(to)) bad.push(`${l._file}: ${from} -> ${to} outside its group`);
+            }
+            map[from] = to;
+          });
+        }
+      });
+      if (JSON.stringify(input) !== JSON.stringify(l.mods)) bad.push(`${l._file}: wave props written to`);
+      // a retry, and the waves in reverse, deal the same plants
+      const again = JSON.stringify(play(l)[1]);
+      if (again !== JSON.stringify(waves)) bad.push(`${l._file}@${seed}: retry rerolled`);
+    }
+  }
+  window._AP_conveyorSeed = 123456789;
+  if (newSwapped < newTotal / 2) bad.push(`only ${newSwapped}/${newTotal} new plants swapped`);
+
+  // sky5: the opening Pineapple and every later Pineapple re-cap are one card,
+  // and a new plant never lands on a card the belt already deals.
+  const sky5 = MODS.find(l => l.mods.some(m => (m.Add || []).some(e => bare(e.Type) === 'skyshooter')) &&
+                              l.InitialPlantList.length === 1 && l.InitialPlantList[0].PlantType === 'pineapple');
+  if (!sky5) bad.push('sky5 fixture not found');
+  else for (let seed = 1; seed <= 50; seed++) {
+    window._AP_conveyorSeed = seed;
+    const [open, waves] = play(sky5);
+    const pine = open.InitialPlantList[0].PlantType;
+    const adds = waves.flatMap(w => (w.Add || []).map(e => bare(e.Type)));
+    const pineAdds = sky5.mods.flatMap(m => (m.Add || []).map(e => bare(e.Type)))
+      .map((cn, i) => [cn, adds[i]]).filter(([cn]) => cn === 'pineapple').map(([, to]) => to);
+    if (pineAdds.some(cn => cn !== pine)) bad.push(`sky5@${seed}: Pineapple ${pine} re-capped as ${pineAdds}`);
+    const others = new Set(adds.filter((cn, i) => sky5.mods.flatMap(m => (m.Add || []).map(e => bare(e.Type)))[i] !== 'pineapple'));
+    if (others.has(pine)) bad.push(`sky5@${seed}: a new plant landed on the opening card ${pine}`);
+  }
+  window._AP_conveyorSeed = 123456789;
+
+  // A threat answer added mid-level only trades for another answer.
+  window._testThreats = ['jester'];
+  const J = window._AP_conveyorThreatAnswers.jester;
+  for (const l of MODS) {
+    const [, waves] = play(l);
+    waves.forEach((w, wi) => (l.mods[wi].Add || []).forEach((e, ei) => {
+      if (e.Type && J.has(bare(e.Type)) && !J.has(bare(w.Add[ei].Type))) bad.push(`${l._file}: Jester answer ${bare(e.Type)} -> ${bare(w.Add[ei].Type)}`);
+    }));
+  }
+  window._testThreats = [];
+
+  // A level whose belt is dealt wholly by waves starts its own map: the last
+  // level's swaps do not carry over.
+  const peaWave = () => {
+    modSeen = [];
+    lc2.readWave_ModifyConveyorWaveAction({ Add: [{ Type: 'RTID(peashooter@PlantTypes)', Weight: 10 }], Remove: [] });
+    return bare(modSeen[0].Add[0].Type);
+  };
+  const fresh = s => { window._AP_conveyorSeed = s; window._testLevelObjects = { level: 'c' }; return peaWave(); };
+  let carriedOver = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    window._AP_conveyorSeed = seed;
+    window._testLevelObjects = { level: 'a' };
+    modSeen = [];
+    lc2.module_SetConveyor({ InitialPlantList: [{ PlantType: 'peashooter', Weight: 10 }] });
+    const opened = modSeen[0].InitialPlantList[0].PlantType;
+    if (peaWave() !== opened) bad.push(`seed ${seed}: re-cap of the opening Peashooter became another card`);
+    window._testLevelObjects = { level: 'b' };
+    const b = peaWave();
+    if (b !== fresh(seed)) carriedOver++;
+  }
+  if (carriedOver) bad.push(`${carriedOver} wave-only level(s) inherited the last level's map`);
+  window._AP_conveyorSeed = 123456789;
+
+  if (bad.length) fail(`${bad.length} mid-level belt problem(s): ${bad.slice(0, 5).join(', ')}`);
+  else ok(`mid-level belt changes: off untouched; on, one map per level across ${MODS.length} levels x 3 seeds ` +
+          `(${newSwapped}/${newTotal} new plants swapped, all in group), stable on retry, sky5 Pineapple one card, Jester answers kept`);
+}
+
+// ── [user] an Aerial Fortress lawn never deals a plant that does nothing there ──
+// Past column 3 a sky lawn is sky: deck-only fire, traps nothing walks onto,
+// Turkey-pult's falling turkey (sky5 dealt one). Every belt, opening and waves,
+// dealt on a SkyStage and on an ordinary lawn: the sky one gains none of
+// CONVEYOR_SKY_DEAD it did not ship, and the ordinary one does, so the rule is
+// what keeps them off.
+{
+  const { CONVEYOR_SKY_DEAD } = require('./conveyor_fn.js');
+  const MODS = JSON.parse(fs.readFileSync(path.join(__dirname, 'conveyor_mod_levels.json'), 'utf8'));
+  let dealt = [];
+  function LC3() {}
+  LC3.prototype.module_SetConveyor = function (props) { dealt.push(props); };
+  LC3.prototype.readWave_ModifyConveyorWaveAction = function (props) { dealt.push(props); };
+  installConveyorHook(LC3);
+  const lc3 = new LC3();
+  const bare = t => { const m = /^RTID\(([^@()]+)@/.exec(t || ''); return m ? m[1] : t; };
+  const stage = (st, name) => [{ objclass: 'LevelDefinition',
+                                 objdata: { StageModule: 'RTID(' + st + '@LevelModules)' } },
+                               { level: name }];
+  const bad = [];
+  if (!window._AP_onSkyLawn({ currentLevelObjects: stage('SkyStage', 'x') }) ||
+      !window._AP_onSkyLawn({ currentLevelObjects: stage('SkyUnarmedStage', 'x') }) ||
+      window._AP_onSkyLawn({ currentLevelObjects: stage('IceageStage', 'x') }) ||
+      window._AP_onSkyLawn({})) bad.push('_apOnSkyLawn misreads a stage');
+  const belts = LEVELS.map(l => ({ _file: l._file, InitialPlantList: l.InitialPlantList, mods: [] }))
+    .concat(MODS);
+  const deadGained = (st) => {
+    let n = 0;
+    for (const seed of [1, 2, 3, 4, 5]) {
+      window._AP_conveyorSeed = seed;
+      for (const l of belts) {
+        window._testLevelObjects = stage(st, l._file + '|' + seed);
+        dealt = [];
+        if (l.InitialPlantList.length) lc3.module_SetConveyor(clone({ InitialPlantList: l.InitialPlantList }));
+        for (const m of l.mods) lc3.readWave_ModifyConveyorWaveAction(clone(m));
+        const shipped = new Set(l.InitialPlantList.map(e => e.PlantType)
+          .concat(...l.mods.map(m => (m.Add || []).map(e => bare(e.Type)))));
+        const got = dealt.flatMap(p => (p.InitialPlantList || []).map(e => e.PlantType)
+          .concat((p.Add || []).map(e => bare(e.Type))));
+        for (const cn of got) {
+          if (CONVEYOR_SKY_DEAD.has(cn) && !shipped.has(cn)) {
+            n++;
+            if (st.startsWith('Sky') && bad.length < 5) bad.push(`${l._file}@${seed}: dealt ${cn}`);
+          }
+        }
+      }
+    }
+    return n;
+  };
+  window._AP_randomizeConveyor = true;
+  window._testThreats = [];
+  const onSky = deadGained('SkyStage');
+  const onGrass = deadGained('ModernStage');
+  window._testLevelObjects = null;
+  window._AP_conveyorSeed = 123456789;
+  if (!onGrass) bad.push('no ordinary lawn dealt a sky-dead plant, so the test proves nothing');
+  if (bad.length || onSky) fail(`${onSky} sky-dead plant(s) dealt on a sky lawn: ${bad.join(', ')}`);
+  else ok(`a sky lawn deals none of the ${CONVEYOR_SKY_DEAD.size} sky-dead plants over ${belts.length} belts x 5 seeds ` +
+          `(an ordinary lawn deals ${onGrass})`);
+}
+
+// ── puzzle belts (AP_PUZZLE_BELTS) ──────────────────────────────────────────
+// ghostpepper3 (0.16.1): a Ghost Pepper belt under frost winds, Hot Potato
+// from wave 5 its only thaw. Its belt stays as shipped, opening and wave adds;
+// the same belt on any other level still swaps.
+{
+  const GP3 = {
+    InitialPlantList: [{ PlantType: 'ghostpepper', Weight: 1 }],
+    mods: [
+      { Add: [{ MaxCount: 1, MaxWeightFactor: 0, Type: 'RTID(hotpotato@PlantTypes)', Weight: 1 }], Remove: [] },
+      { Add: [{ MaxCount: 1, MaxWeightFactor: 0, Type: 'RTID(intensivecarrot@PlantTypes)', Weight: 5 }], Remove: [] },
+    ],
+  };
+  let seen = [];
+  function LC4() {}
+  LC4.prototype.module_SetConveyor = function (props) { seen.push(props); };
+  LC4.prototype.readWave_ModifyConveyorWaveAction = function (props) { seen.push(props); };
+  installConveyorHook(LC4);
+  const lc4 = new LC4();
+  const deal = (key, seed) => {
+    window._testLevelKey = key;
+    window._testLevelObjects = { level: key + '|' + seed };
+    window._AP_conveyorSeed = seed;
+    seen = [];
+    lc4.module_SetConveyor(clone({ InitialPlantList: GP3.InitialPlantList }));
+    for (const m of GP3.mods) lc4.readWave_ModifyConveyorWaveAction(clone(m));
+    return JSON.stringify([seen[0].InitialPlantList, seen.slice(1)]);
+  };
+  const vanilla = JSON.stringify([GP3.InitialPlantList, GP3.mods]);
+  window._AP_randomizeConveyor = true;
+  let changed = 0, elsewhere = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    if (deal('ghostpepper3', seed) !== vanilla) changed++;
+    if (deal('ghostpepper2', seed) !== vanilla) elsewhere++;
+  }
+  window._testLevelKey = '';
+  window._AP_conveyorSeed = 123456789;
+  if (changed) fail(`ghostpepper3's belt was swapped in ${changed}/40 seeds`);
+  else ok('ghostpepper3 (puzzle) keeps its belt and wave adds as shipped');
+  if (!elsewhere) fail('the same belt on another level never swapped, so the check proves nothing');
+  else ok(`the same belt elsewhere still swaps (${elsewhere}/40 seeds)`);
+}
+
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nCONVEYOR HOOK OK');
 process.exit(failed ? 1 : 0);

@@ -51,6 +51,7 @@ FIXTURES = [
     "cowboy11",     # MaximumSun level, preset plants or not
     "tutorial3",    # three lanes: no multi-lane spawner may be rolled into it
     "cowboy23",     # lost-plants star challenge: never gains dinos
+    "sky5",         # VANILLA_WAVE_ONE: wave 1 stays as shipped
 ]
 FIXTURE_CASES = [(1, False, 2), (2 ** 31 + 5, True, 0), (424242, True, 2)]
 ROLL_STEP = 9               # every ninth eligible level, sorted
@@ -105,6 +106,7 @@ def main() -> int:
         # budget_logic.client_tables sends it on every seed rolled since the
         # lost-plants rule; without it the client rolls the old way.
         "plants_lost_rule": 1,
+        "sky_dino_rule": 1,
         "dino_permille": list(R.DINO_LEVEL_PERMILLE_BY_GOAL),
     }
 

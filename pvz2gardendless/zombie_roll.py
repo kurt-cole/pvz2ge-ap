@@ -85,8 +85,9 @@ DINO_TYPES = ("ankylo", "ptero", "raptor", "stego", "tyranno")
 # Sent in slot_data (budget_logic.client_tables, dino_permille), so changing
 # them does not move an older seed's roll: the client falls back to the
 # (262, 232, 236) every seed before 2026-10-15 was rolled with. Those were
-# 16/61, 33/142, 44/186, before lost-plants levels left the denominator.
-DINO_LEVEL_PERMILLE_BY_GOAL = (271, 250, 254)   # 16/59, 33/132, 44/173
+# 16/61, 33/142, 44/186, before lost-plants levels left the denominator, then
+# (271, 250, 254) until 2026-10-26, before Aerial Fortress lawns left it.
+DINO_LEVEL_PERMILLE_BY_GOAL = (307, 272, 271)   # 16/52, 33/121, 44/162
 
 # The Jurassic Marsh difficulty curve. Every Jurassic level that fields dinos,
 # sorted by vanilla HP per wave and cut into DINO_BAND_COUNT bands. Per band:
@@ -147,8 +148,20 @@ OPENING_LEVELS = frozenset({
 # [user] Game level ids the roll never touches although they are neither
 # bespoke nor generated. Keyed by id, so excluding one leaves every other
 # level's stream exactly as it was. eighties9 is Neon Mixtape Tour 9.
+# egypt34 is a puzzle (preset bank, lawn of graves, 1800 sun cap) whose
+# waves are part of the puzzle; so are plantern3 (plant food on Planterns
+# hides the plants around them) and ghostpepper3 (a Ghost Pepper belt under
+# frost winds).
 # Mirrors APB.NEVER_ROLLED and the tier shuffle's check in the client.
-NEVER_ROLLED = frozenset({"eighties9"})
+NEVER_ROLLED = frozenset({"eighties9", "egypt34", "plantern3", "ghostpepper3"})
+
+# [user] Levels whose wave 1 keeps the zombies it shipped with. sky5's belt
+# deals one Pineapple, capped at one, until wave 2, and its 1000 HP Battleplane
+# rolled into as many as five cheaper zombies (two Coneheads, found in play).
+# Put back after the attempt is chosen and with no draws, so the rest of the
+# level rolls exactly as before and an older seed only gains the easier
+# opening. Mirrors APB.VANILLA_WAVE_ONE.
+VANILLA_WAVE_ONE = frozenset({"sky5"})
 
 
 # ── the PRNG ─────────────────────────────────────────────────────────────────
@@ -326,6 +339,11 @@ def dinos_allowed(level) -> bool:
     if level.get("plants_lost"):
         # [user] A dino eats or throws plants, and a lost-plants star challenge
         # (cowboy23: lose at most 1) counts every one against the player.
+        return False
+    if level["stage"].startswith("Sky"):
+        # [user] An Aerial Fortress lawn is sky past column 3, and a dino that
+        # walks onto a sky tile falls off it (Dinosaur.judgeTileType). The
+        # client takes this from sky_dino_rule, so older seeds keep theirs.
         return False
     if "Beach" in level["stage"]:
         return DINO_TEST_BEACH
@@ -555,6 +573,22 @@ def _cut(t: _Tables, drop: set):
     return out
 
 
+def _keep_wave_one(level_id: str, level, plan: Dict[str, Any]) -> Dict[str, Any]:
+    """A VANILLA_WAVE_ONE level's wave-1 groups as shipped; see there."""
+    if level_id not in VANILLA_WAVE_ONE:
+        return plan
+    shipped = {g["id"]: g for g in level["groups"] if g["w"] == 1}
+    groups = []
+    for g in plan["groups"]:
+        if g["id"] in shipped:
+            g = dict(g, z=[list(e) for e in shipped[g["id"]]["z"]])
+            if "p" in g and g["z"]:
+                g["p"] = g["z"][0][0]
+        groups.append(g)
+    plan["groups"] = groups
+    return plan
+
+
 def roll_level(seed: int, level_id: str, dinos: bool = False,
                goal_type: int = 2) -> Optional[Dict[str, Any]]:
     """The plan for one level, or None when the level is never rolled."""
@@ -630,14 +664,14 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
                 "budget": budget, "ratio": ratio, "groups": groups,
                 "dynamic": mapping, "dinos": sorted(added)}
         if LEVEL_OK[0] <= ratio <= LEVEL_OK[1]:
-            return plan
+            return _keep_wave_one(level_id, level, plan)
         if best is None or abs(ratio - 1000) < abs(best["ratio"] - 1000):
             best = plan
     if best is not None:
         if not level["own_plants"] and LEVEL_OK[0] <= best["ratio"] <= LEVEL_OK[1]:
-            return best
+            return _keep_wave_one(level_id, level, best)
         elif level["own_plants"] and LEVEL_HARD[0] <= best["ratio"] <= LEVEL_HARD[1]:
-            return best
+            return _keep_wave_one(level_id, level, best)
     return {"level": level_id, "attempt": -1, "vanilla": True, "budget": budget,
             "ratio": 1000, "groups": [dict(g) for g in level["groups"]],
             "dynamic": {}, "dinos": []}

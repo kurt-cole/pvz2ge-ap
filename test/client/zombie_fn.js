@@ -77,8 +77,9 @@ const AP_BESPOKE_MODULES = /Minigame|Beghouled|Rhythm/;
 
 // [user] Level ids never rolled or shuffled although no module above marks
 // them. By id, so every other level rolls exactly as before. eighties9 is
-// Neon Mixtape Tour 9. Mirrors NEVER_ROLLED in zombie_roll.py.
-const AP_NEVER_ROLLED = ['eighties9'];
+// Neon Mixtape Tour 9; egypt34, plantern3 and ghostpepper3 are puzzles whose
+// waves are part of them. Mirrors NEVER_ROLLED in zombie_roll.py.
+const AP_NEVER_ROLLED = ['eighties9', 'egypt34', 'plantern3', 'ghostpepper3'];
 
 // Where a level names a zombie. Only a Zombies[].Type entry is a spawn -- one
 // zombie, once. The pool keys are candidates a wave generator may or may not

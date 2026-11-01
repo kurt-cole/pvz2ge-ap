@@ -31,8 +31,9 @@ from . import zombie_roll
 from .constants import (EGYPT_SUN_CUT, FIRE_AURA_PLANTS, FIRE_DAMAGE_PLANTS,
                         JESTER_COUNTER_PLANTS, PARASOL_BOUNCED_PLANTS,
                         POWER_DRAW_COUNT, SIDE_PATH_CHAIN, SIDE_PATH_REGIONS,
-                        SIDE_PATH_UNLOCK, SPHERE_ONE_LEVELS, STARTER_PLANTS,
-                        UNREACHABLE_LOCATIONS, WORLD_REGIONS, plants_clearing)
+                        SIDE_PATH_UNLOCK, SKY_DEAD_PLANTS, SPHERE_ONE_LEVELS,
+                        STARTER_PLANTS, UNREACHABLE_LOCATIONS, WORLD_REGIONS,
+                        is_sky_stage, plants_clearing)
 from .locations import ALL_LOCATIONS, world_stretches
 from .plant_data import (ANSWER_FLOOR, CONSUMABLE_COPIES, DRAW_RUNGS, LEVEL_REQUIRED_DPS,
                          MAX_COPIES, PLANT_CONSUMABLE, PLANT_DPS, PLANT_LAWN_DPS,
@@ -137,6 +138,15 @@ def affordable(group, budget: int) -> List[str]:
 def non_fire_attackers(group) -> List[str]:
     """The members that deal damage other than fire."""
     return sorted(p for p in group if p in PLANT_LAWN_DPS and p not in FIRE_DAMAGE_PLANTS)
+
+
+def sky_live(name: str, group) -> List[str]:
+    """[user] `group` without SKY_DEAD_PLANTS when the level is an Aerial
+    Fortress lawn, where they do nothing; whole if that leaves none."""
+    level = zombie_roll.tables().model["levels"].get(name)
+    if not level or not is_sky_stage(level["stage"]):
+        return list(group)
+    return [p for p in group if p not in SKY_DEAD_PLANTS] or list(group)
 
 
 def non_lobbed_attackers(group) -> List[str]:
@@ -398,6 +408,9 @@ def client_tables(world) -> Dict[str, Any]:
         # Their tables lack this key, and the client then ignores the
         # challenge, so it still rolls what their generation rolled.
         "plants_lost_rule": 1,
+        # Seeds rolled before 2026-10-26 put dinos on Aerial Fortress lawns,
+        # where they fall off. The same fallback as plants_lost_rule.
+        "sky_dino_rule": 1,
         # The dino chance per goal. Sent, not shared as a client constant, so a
         # re-derived chance cannot change the roll of a seed already played.
         "dino_permille": list(zombie_roll.DINO_LEVEL_PERMILLE_BY_GOAL),

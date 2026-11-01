@@ -60,7 +60,10 @@ def members(level, kind, wave):
 
 check("the model names the game build it was read from",
       bool(level_model.GAME_DATA_VERSION), True)
-check("every tracked level is present", len(levels), 813)
+# 813 tracked; game 0.16.1 deleted 34 of them (the bank_theft, epic_beghouled,
+# floawerpot, random_*, sandbox and shootingstarfruit sets, rhythm1 and
+# mixed_dangerroom2), every one an UNREACHABLE_LOCATIONS entry.
+check("every tracked level the game still has is present", len(levels), 779)
 
 bad = [(lid, g["id"]) for lid, lv in levels.items() for g in lv["groups"]
        if not 1 <= g["w"] <= max(lv["waves"], 1) or any(n <= 0 for _, n in g["z"])]
@@ -125,7 +128,9 @@ check("egypt20_1 builds its waves at runtime", levels["egypt20_1"]["generated"],
 check("mummy effective HP", zombies["mummy"]["hp"], 190)
 check("sky_dropship stays excluded", zombies["sky_dropship"]["excluded"], "immobile")
 check("gravestone_dark toughness", model["grave_hp"].get("gravestone_dark"), 700)
-check("`gravestone` resolves through GridItemTypes", model["grave_hp"].get("gravestone"), 700)
+# The plain `gravestone` went with shootingstarfruit1, its only user, in 0.16.1.
+check("`gravestone_egypt` resolves through GridItemTypes",
+      model["grave_hp"].get("gravestone_egypt"), 700)
 check("kongfu racks toughness", model["grave_hp"].get("kongfu_rack_blade"), 800)
 
 print(f"\n{failed} FAILURE(S)" if failed else "\nLEVEL MODEL OK")

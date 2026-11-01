@@ -28,6 +28,12 @@ STUBS = {"svSt", "toast", "log", "installStoreHook_stub",
          # conveyor_fn.js harness: sets the level's own haveWater flag, which
          # the real client reads off the game rather than declaring.
          "setLevelWater",
+         # conveyor_fn.js harness: the level's object list, which the real
+         # client reads off the game.
+         "conveyor_fn.js:_apLevelObjects",
+         # conveyor_fn.js harness: the level id, which the real client reads
+         # off LevelPlay.
+         "conveyor_fn.js:_apLevelKey",
          # connect_fn.js harness. setStatus/onPkt/findOrCreateAPSlot/svCfg ARE
          # real client functions, so these are qualified -- connect() only
          # needs something callable, and a copy of each would drag in most of

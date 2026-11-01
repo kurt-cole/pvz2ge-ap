@@ -34,6 +34,7 @@ import zlib
 from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 
 from . import level_model, zombie_roll
+from .constants import SKY_DEAD_PLANTS, is_sky_stage
 from .sim_data import SIM_DATA
 
 try:
@@ -83,13 +84,35 @@ def requirement_for(name: str, ratio: int) -> Requirement:
     if key in _REQ_CACHE:
         return _REQ_CACHE[key]
     row = _row(name)
+    # [user] On an Aerial Fortress lawn a loadout holding a plant that does
+    # nothing there (SKY_DEAD_PLANTS) does not pass, unless that leaves none.
+    dead = _sky_dead() if _on_sky(name) else frozenset()
+    if dead and not any(v for i, v in enumerate(row) if i not in dead):
+        dead = frozenset()
     need = bisect.bisect_left(_T.SCALES, ratio) + 1
-    best = max(row) if row else 0
+    best = max((v for i, v in enumerate(row) if i not in dead), default=0)
     if best < need:
         need = best
-    out = frozenset(i for i, v in enumerate(row) if v >= need and v > 0)
+    out = frozenset(i for i, v in enumerate(row) if v >= need and v > 0 and i not in dead)
     _REQ_CACHE[key] = out
     return out
+
+
+def _on_sky(name: str) -> bool:
+    level = level_model.load()["levels"].get(name)
+    return bool(level) and is_sky_stage(level["stage"])
+
+
+_SKY_DEAD: Optional[FrozenSet[int]] = None
+
+
+def _sky_dead() -> FrozenSet[int]:
+    """Every packed loadout holding a plant in SKY_DEAD_PLANTS."""
+    global _SKY_DEAD
+    if _SKY_DEAD is None:
+        dead = frozenset(SKY_DEAD_PLANTS)
+        _SKY_DEAD = frozenset(i for i, s in enumerate(_plant_sets()) if s & dead)
+    return _SKY_DEAD
 
 
 def _plant_sets() -> List[FrozenSet[str]]:

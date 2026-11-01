@@ -8,8 +8,9 @@ const AP_BESPOKE_MODULES = /Minigame|Beghouled|Rhythm/;
 
 // [user] Level ids never rolled or shuffled although no module above marks
 // them. By id, so every other level rolls exactly as before. eighties9 is
-// Neon Mixtape Tour 9. Mirrors NEVER_ROLLED in zombie_roll.py.
-const AP_NEVER_ROLLED = ['eighties9'];
+// Neon Mixtape Tour 9; egypt34, plantern3 and ghostpepper3 are puzzles whose
+// waves are part of them. Mirrors NEVER_ROLLED in zombie_roll.py.
+const AP_NEVER_ROLLED = ['eighties9', 'egypt34', 'plantern3', 'ghostpepper3'];
 const _AP_RTID = /^RTID\(([^@()]+)@([^()]*)\)$/;
 
 // Harness stubs. _apLevelKey reads the game's LevelPlay statics in the client;
@@ -70,6 +71,8 @@ const APB = {
   // [user] Level ids never rolled although neither bespoke nor generated.
   // See AP_NEVER_ROLLED.
   NEVER_ROLLED: AP_NEVER_ROLLED,
+  // [user] Levels whose wave 1 keeps what it shipped. Mirrors VANILLA_WAVE_ONE.
+  VANILLA_WAVE_ONE: ['sky5'],
   // [user] A rocket imp reaches the house before the player can plant, so it
   // never opens a level. Wave 1 only. Mirrors FIRST_WAVE_BANNED.
   FIRST_WAVE_BANNED: ['kongfu_rocket_imp'],
@@ -413,6 +416,9 @@ function _apbDinosAllowed(level) {
   // [user] A dino eats or throws plants, and a lost-plants star challenge
   // (cowboy23: lose at most 1) counts every one against the player.
   if (level.plants_lost) return false;
+  // [user] An Aerial Fortress lawn is sky past column 3, and a dino that
+  // walks onto a sky tile falls off it. sky_legacy: see the budget hook.
+  if (!level.sky_legacy && level.stage.indexOf('Sky') === 0) return false;
   if (level.stage.indexOf('Beach') >= 0) return APB.DINO_TEST_BEACH;
   if (level.stage.indexOf('Pirate') >= 0) return APB.DINO_TEST_PIRATE && level.planks.length > 0;
   return true;
@@ -602,6 +608,21 @@ function _apbAttempt(t, seed, levelId, level, attempt, scale, vanilla, pools,
   return { rng: rng, groups: groups, mapping: mapping };
 }
 
+// _keep_wave_one(), as the Python: a VANILLA_WAVE_ONE level's wave-1 groups
+// put back as shipped, after the attempt is chosen and with no draws.
+function _apbKeepWaveOne(levelId, level, plan) {
+  if (APB.VANILLA_WAVE_ONE.indexOf(levelId) < 0) return plan;
+  const shipped = {};
+  for (const g of level.groups) if (g.w === 1) shipped[g.id] = g;
+  plan.groups = plan.groups.map(function (g) {
+    if (!shipped[g.id]) return g;
+    const out = Object.assign({}, g, { z: shipped[g.id].z.map(function (e) { return e.slice(); }) });
+    if ('p' in out && out.z.length) out.p = out.z[0][0];
+    return out;
+  });
+  return plan;
+}
+
 // roll_level(), as the Python. null for a level the roll never touches.
 function _apbRoll(t, seed, levelId, level, dinos, goal) {
   if (!level || level.bespoke || level.generated ||
@@ -675,12 +696,12 @@ function _apbRoll(t, seed, levelId, level, dinos, goal) {
     if (share > knee && a.rng.below(1000) >= _apbAccept(share - knee)) continue;
     const plan = { attempt: attempt, vanilla: false, budget: budget, ratio: ratio,
                    groups: a.groups, dynamic: a.mapping, dinos: added.slice() };
-    if (ratio >= APB.LEVEL_OK[0] && ratio <= APB.LEVEL_OK[1]) return plan;
+    if (ratio >= APB.LEVEL_OK[0] && ratio <= APB.LEVEL_OK[1]) return _apbKeepWaveOne(levelId, level, plan);
     if (best === null || Math.abs(ratio - 1000) < Math.abs(best.ratio - 1000)) best = plan;
   }
   if (best !== null) {
-    if (!level.own_plants && best.ratio >= APB.LEVEL_OK[0] && best.ratio <= APB.LEVEL_OK[1]) return best;
-    else if (level.own_plants && best.ratio >= APB.LEVEL_HARD[0] && best.ratio <= APB.LEVEL_HARD[1]) return best;
+    if (!level.own_plants && best.ratio >= APB.LEVEL_OK[0] && best.ratio <= APB.LEVEL_OK[1]) return _apbKeepWaveOne(levelId, level, best);
+    else if (level.own_plants && best.ratio >= APB.LEVEL_HARD[0] && best.ratio <= APB.LEVEL_HARD[1]) return _apbKeepWaveOne(levelId, level, best);
   }
   return { attempt: -1, vanilla: true, budget: budget, ratio: 1000,
                 groups: level.groups, dynamic: {}, dinos: [] };
@@ -818,6 +839,8 @@ function _apbPrepareLevel(lc) {
   // A seed rolled before the lost-plants rule had dinos there, and its
   // generation planned for them: roll it the way it was rolled.
   if (!cfg.data.plants_lost_rule) model.plants_lost = false;
+  // Likewise dinos on Aerial Fortress lawns, before sky_dino_rule.
+  if (!cfg.data.sky_dino_rule) model.sky_legacy = true;
   const plan = _apbRoll(_apbTableCache, cfg.seed, levelId, model, cfg.dinos, cfg.goal);
   const shape = ' key=' + JSON.stringify(levelId) + ' seed=' + cfg.seed +
       ' own=' + (model.own_plants ? 1 : 0) + ' waves=' + model.waves +

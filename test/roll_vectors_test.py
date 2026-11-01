@@ -36,6 +36,7 @@ tables = {
     "grave_hp": dict(sorted(t.model["grave_hp"].items())),
     "field_names": {k: sorted(v) for k, v in t.field_names.items()},
     "plants_lost_rule": 1,
+    "sky_dino_rule": 1,
     "dino_permille": list(R.DINO_LEVEL_PERMILLE_BY_GOAL),
 }
 if normal(tables) != vectors["tables"]:

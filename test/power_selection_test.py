@@ -109,5 +109,32 @@ if len(set(selections)) < 2:
 else:
     ok(f"seeds differ: {len(set(selections))} distinct selections over 3 seeds")
 
+# [user] An Aerial Fortress lawn never passes on a plant that does nothing there
+# (SKY_DEAD_PLANTS), and no other lawn loses one.
+from pvz2gardendless.constants import SKY_DEAD_PLANTS  # noqa: E402
+sets = PL._plant_sets()
+dead = set(SKY_DEAD_PLANTS)
+sky_bad, ground_lost, sky_levels = [], [], []
+for name in sorted(PL._T.TABLE):
+    for ratio in (900, 1000, 1200):
+        req = PL.requirement_for(name, ratio)
+        named = set().union(*(sets[i] for i in req)) if req else set()
+        if PL._on_sky(name):
+            if not req:
+                sky_bad.append(f"{name}@{ratio}: no loadout left")
+            elif named & dead:
+                sky_bad.append(f"{name}@{ratio}: {sorted(named & dead)}")
+        elif ratio == 1000 and named & dead:
+            ground_lost.append(name)
+    if PL._on_sky(name):
+        sky_levels.append(name)
+if sky_bad:
+    fail(f"sky levels pass on sky-dead plants: {sky_bad[:3]}")
+elif not sky_levels or not ground_lost:
+    fail("no sky level, or no other level naming a sky-dead plant; the check proves nothing")
+else:
+    ok(f"{len(sky_levels)} sky levels pass on no sky-dead plant; "
+       f"{len(ground_lost)} other levels still name them")
+
 print(f"\n{failed} FAILURE(S)" if failed else "\nPOWER SELECTION OK")
 sys.exit(1 if failed else 0)

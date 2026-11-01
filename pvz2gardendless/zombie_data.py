@@ -98,7 +98,7 @@ ships one still gets it, and no other level can ever gain one:
 
   skycity   `SkyCityShipDetectXOffset` -- Sky City zombies act on the
             airship. In any other world there is no ship to act on.
-            14 types.
+            15 types.
 
   unpriced  no `WavePointCost`, so the game gives no answer to "how hard
             is this" and there is nothing to trade on.
@@ -109,8 +109,8 @@ than being handled here: the camel matching games, the cannon levels,
 Beghouled, bowling, Last Stand and the other set pieces. See
 AP_BESPOKE_MODULES in build_pvzge_ap.py.
 
-262 zombies over 77 tiers, 230 of them (87%) with somebody to trade with.
-Worst intra-tier HP ratio 1.33. 62 codenames excluded.
+262 zombies over 77 tiers, 229 of them (87%) with somebody to trade with.
+Worst intra-tier HP ratio 1.33. 63 codenames excluded.
 """
 
 from collections import Counter
@@ -278,8 +278,8 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
         'pharaoh', 'pharaoh_weak', 'west_bull', 'zoybean_armor2',
     ],  # 11
     't3-land-h25': [
-        'beach_fem_armor4', 'dino_armor3',
-    ],  # 2
+        'dino_armor3',
+    ],  # 1
     't3-land-iceblock-h21': [
         'birthday_troglobite_1block', 'iceage_troglobite_1block',
     ],  # 2
@@ -334,11 +334,11 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
         'west_bull_veteran_plantern_5',
     ],  # 3
     't4-land-h25': [
-        'abbot_chi', 'beach_armor4', 'cowboy_armor4', 'dark_armor4',
-        'dino_armor4', 'easter_armor4', 'eighties_armor4', 'future_armor4',
-        'iceage_armor4', 'monk_armor4', 'mummy_armor4', 'pirate_armor4',
-        'tutorial_armor4', 'valentines_armor4',
-    ],  # 14
+        'abbot_chi', 'beach_armor4', 'beach_fem_armor4', 'cowboy_armor4',
+        'dark_armor4', 'dino_armor4', 'easter_armor4', 'eighties_armor4',
+        'future_armor4', 'iceage_armor4', 'monk_armor4', 'mummy_armor4',
+        'pirate_armor4', 'tutorial_armor4', 'valentines_armor4',
+    ],  # 15
     't4-land-h26': [
         'abbot_armor4', 'dino_bully_veteran',
     ],  # 2
@@ -681,9 +681,10 @@ ZOMBIE_EXCLUSIONS: Dict[str, List[str]] = {
     'skycity': [
         'sky', 'sky_arbiterx', 'sky_armor1', 'sky_armor2', 'sky_battleplane',
         'sky_electric', 'sky_flag', 'sky_gargantuar',
-        'sky_gargantuar_armor2_thrower', 'sky_twin', 'sky_twin_upper',
-        'sky_unarmed', 'sky_unarmed_armor1', 'sky_unarmed_armor2',
-    ],  # 14
+        'sky_gargantuar_armor2_thrower', 'sky_twin', 'sky_twin_lower',
+        'sky_twin_upper', 'sky_unarmed', 'sky_unarmed_armor1',
+        'sky_unarmed_armor2',
+    ],  # 15
     'unpriced': [
         'chicken_ge', 'lawn', 'lawn_armor1', 'lawn_armor2', 'lawn_armor3',
         'lawn_armor4', 'lawn_gargantuar', 'lawn_imp', 'sky_dronemaker_alt',
