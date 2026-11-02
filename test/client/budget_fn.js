@@ -870,15 +870,35 @@ function _apbPrepareLevel(lc) {
       ', ' + plan.dinos.length + ' dino events,' + shape);
 }
 
+// [user] No Zomboss letter before World Key levels. Every level that awards
+// a world key (FirstRewardParam "worldkey": the 13 WORLD_KEY_LOCS, checked
+// against 0.16.1) opens with a Zomboss narrative -- EGYPT_INTRO_GARGANTUAR,
+// SKYCITY_16_INTRO and so on. module_SetLevelDefinition picks IntroNarrative
+// from the definition it is handed, and plenty of levels have none, so
+// deleting the two intro fields is the game's own "no intro" path. The
+// definition lives in readLevelJson's deep copy, so the authored data is
+// untouched. Outros are left alone: none of the key-level outros has Zomboss.
+function _apStripKeyLevelIntro(def) {
+  if (!def || def.FirstRewardParam !== 'worldkey') return;
+  if (def.FirstIntroNarrative || def.ReplayIntroNarrative) {
+    _apLog('[AP] skipped Zomboss intro on world key level: ' + def.FirstIntroNarrative);
+  }
+  delete def.FirstIntroNarrative;
+  delete def.ReplayIntroNarrative;
+}
+
 // Fails OPEN to vanilla: if anything here throws, the level plays as
 // authored, which is never harder than logic assumed for its hazards.
 function installBudgetHook(LC) {
   if (!LC || LC._ap_hooked_budget || !LC.prototype ||
       typeof LC.prototype.module_SetLevelDefinition !== 'function') return;
   const _origSetLevelDefinition = LC.prototype.module_SetLevelDefinition;
-  LC.prototype.module_SetLevelDefinition = function () {
+  LC.prototype.module_SetLevelDefinition = function (def) {
     try { _apbPrepareLevel(this); } catch (e) {
       try { _apLog('[AP] zombie budget roll skipped: ' + e); } catch (e2) { /* unreachable */ }
+    }
+    try { _apStripKeyLevelIntro(def); } catch (e) {
+      try { _apLog('[AP] key level intro strip skipped: ' + e); } catch (e2) { /* unreachable */ }
     }
     return _origSetLevelDefinition.apply(this, arguments);
   };
@@ -898,4 +918,5 @@ function syncBudgetConfig() {
 module.exports = {
   window, st, logs, APB, setLevelKey,
   _apbModel, _apbTables, _apbRoll, _apbApply, installBudgetHook, syncBudgetConfig,
+  _apStripKeyLevelIntro,
 };

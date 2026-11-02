@@ -37,10 +37,13 @@ for level in sorted(BR.BELTS):
     for k, seed in enumerate(SEEDS):
         threats = list(THREAT_SETS[(k + len(vectors)) % len(THREAT_SETS)])
         attempt = ATTEMPTS[k]
-        belt = BR.roll(seed, level, attempt, threats)
+        # conveyor_damage_rule: on for new seeds; off on the first seed so
+        # older seeds' belts stay held to the client too.
+        rule = k != 0
+        belt = BR.roll(seed, level, attempt, threats, damage_rule=rule)
         want = {"initial": [e["PlantType"] for e in belt.entries()],
                 "adds": [[e["Type"] for e in adds if e.get("Type")] for _, adds, _ in belt.mods()]}
-        vectors.append({"level": level, "seed": seed, "attempt": attempt,
+        vectors.append({"level": level, "seed": seed, "attempt": attempt, "rule": rule,
                         "threats": threats, "water": b["water"],
                         "sky": b["sky"], "initial": b["initial"],
                         "puzzle": level in CT.PUZZLE_BELTS or attempt < 0,

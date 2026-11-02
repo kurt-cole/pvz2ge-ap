@@ -367,5 +367,38 @@ const tables = B._apbTables(V.tables);
   }
 }
 
+// ── no Zomboss intro on World Key levels ────────────────────────────────────
+// [user] The hook drops the intro narrative from any level that awards a world
+// key, whatever the budget roll is doing, and the game's own call still gets
+// the (now intro-less) definition. Other levels and key-level outros keep theirs.
+{
+  let seen = null;
+  function LC4() {}
+  LC4.prototype.module_SetLevelDefinition = function (def) { seen = def; return 'orig'; };
+  B.installBudgetHook(LC4);
+  B.st.zombieBudgetRoll = false;
+  B.syncBudgetConfig();
+  B.setLevelKey('egypt8');
+  const key = { FirstRewardParam: 'worldkey', FirstRewardType: 'worldtrophy',
+                FirstIntroNarrative: 'EGYPT_INTRO_GARGANTUAR',
+                ReplayIntroNarrative: 'EGYPT_INTRO_GARGANTUAR',
+                FirstOutroNarrative: 'EGYPT_OUTRO_GARGANTUAR' };
+  const lc = new LC4();
+  lc.currentLevelObjects = [{ objclass: 'LevelDefinition', objdata: key }];
+  const r = lc.module_SetLevelDefinition(key);
+  if (r !== 'orig' || seen !== key) fail('key level: the game call did not get the definition');
+  else if ('FirstIntroNarrative' in key || 'ReplayIntroNarrative' in key) fail('key level still has its Zomboss intro');
+  else if (key.FirstOutroNarrative !== 'EGYPT_OUTRO_GARGANTUAR') fail('key level lost its outro');
+  else ok('World Key level loses its Zomboss intro, keeps its outro');
+
+  B.setLevelKey('egypt25');
+  const boss = { FirstRewardParam: 'egypt_zomboss', FirstIntroNarrative: 'EGYPT_INTRO_ZOMBOSS' };
+  new LC4().module_SetLevelDefinition(boss);
+  if (boss.FirstIntroNarrative !== 'EGYPT_INTRO_ZOMBOSS') fail('non-key level lost its intro');
+  else ok('levels that award no world key keep their intro');
+  new LC4().module_SetLevelDefinition(undefined);
+  ok('a missing definition does not throw');
+}
+
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nBUDGET ROLL CLIENT OK');
 process.exit(failed ? 1 : 0);

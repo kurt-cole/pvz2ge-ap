@@ -23,6 +23,7 @@ _NAMES = (
     "CONVEYOR_KILLING_INSTANTS", "CONVEYOR_EXCAVATOR_ANSWERS", "CONVEYOR_TORCH_ANSWERS",
     "CONVEYOR_COLD_ANSWERS", "CONVEYOR_JESTER_ANSWERS", "CONVEYOR_PARASOL_ANSWERS",
     "CONVEYOR_EXCLUDE", "CONVEYOR_WATER_ONLY", "CONVEYOR_TILE_LOCKED", "CONVEYOR_SKY_DEAD",
+    "CONVEYOR_LEGACY_GROUPED", "CONVEYOR_NO_DAMAGE",
 )
 
 
@@ -129,12 +130,23 @@ T: Dict[str, Any] = _read(_client_source())
 POOL: List[str] = [T["ID_TO_CN"][k] for k in sorted(T["ID_TO_CN"])
                    if T["ID_TO_CN"][k] not in T["CONVEYOR_EXCLUDE"]]
 KNOWN = frozenset(POOL)
-SWAPS: Dict[str, List[str]] = {}
-for _key, _group in T["CONVEYOR_GROUPS"].items():
-    _members = [c for c in _group if c not in T["CONVEYOR_EXCLUDE"]]
-    if len(_members) >= 2:
-        for _c in _members:
-            SWAPS[_c] = _members
+
+
+def build_swaps(damage_rule: bool) -> Dict[str, List[str]]:
+    """_apBuildConveyorSwaps: under conveyor_damage_rule the legacy-grouped
+    plants (Torchwood) leave their group."""
+    swaps: Dict[str, List[str]] = {}
+    for key, group in T["CONVEYOR_GROUPS"].items():
+        members = [c for c in group if c not in T["CONVEYOR_EXCLUDE"] and
+                   not (damage_rule and c in T["CONVEYOR_LEGACY_GROUPED"])]
+        if len(members) >= 2:
+            for c in members:
+                swaps[c] = members
+    return swaps
+
+
+SWAPS: Dict[str, List[str]] = build_swaps(False)          # seeds before the rule
+SWAPS_DAMAGE: Dict[str, List[str]] = build_swaps(True)    # conveyor_damage_rule
 FAMILY: Dict[str, str] = {}
 for _fam, _group in T["CONVEYOR_FAMILIES"].items():
     for _c in _group:
@@ -148,6 +160,12 @@ SHADOW: List[str] = list(T["CONVEYOR_SHADOW"])
 BELT_LOCKED = frozenset(T["CONVEYOR_BELT_LOCKED"])
 TERRAIN_LOCKED = frozenset(T["CONVEYOR_WATER_ONLY"] | T["CONVEYOR_TILE_LOCKED"])
 KILLING = frozenset(T["CONVEYOR_KILLING_INSTANTS"])
+NO_DAMAGE = frozenset(T["CONVEYOR_NO_DAMAGE"])
+
+
+def deals_damage(cn) -> bool:
+    """_apDealsDamage: an attacker-group plant with damage of its own."""
+    return ROLE.get(cn) == "attacker" and cn not in NO_DAMAGE
 THREAT_ANSWERS = {
     "excavator": frozenset(T["CONVEYOR_EXCAVATOR_ANSWERS"]),
     "torch": frozenset(T["CONVEYOR_TORCH_ANSWERS"]),

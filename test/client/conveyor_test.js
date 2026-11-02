@@ -121,7 +121,11 @@ window._AP_conveyorPool = noPool;
 // ── swaps stay inside the plant's own power band ─────────────────────────────
 const { CONVEYOR_GROUPS } = require('./conveyor_fn.js');
 const GROUP_OF = {};
-for (const k of Object.keys(CONVEYOR_GROUPS)) for (const cn of CONVEYOR_GROUPS[k]) GROUP_OF[cn] = k;
+// Only plants the live swap table trades: under conveyor_damage_rule Torchwood
+// is in no group, so a level that ships it keeps it like any ungrouped plant.
+for (const k of Object.keys(CONVEYOR_GROUPS)) for (const cn of CONVEYOR_GROUPS[k]) {
+  if (window._AP_conveyorSwaps[cn]) GROUP_OF[cn] = k;
+}
 // Sun costs, read from the game's own PlantProperties export used to build the
 // groups. Literal here on purpose: deriving them from CONVEYOR_GROUPS would be
 // checking the table against itself.
@@ -961,6 +965,176 @@ setLevelWater(false);
   else ok('ghostpepper3 (puzzle) keeps its belt and wave adds as shipped');
   if (!elsewhere) fail('the same belt on another level never swapped, so the check proves nothing');
   else ok(`the same belt elsewhere still swaps (${elsewhere}/40 seeds)`);
+}
+
+// ── Ampereum is never swapped off a belt ─────────────────────────────────────
+// [user, 2026-11-01] sky10 (Ampereum's intro, file 9e9fe41f) must always deal
+// its Ampereum. Ampereum (codename anthurium) is the answer to the thunder
+// charges and the charge-gun zombie's bolts, so every belt that names it, in
+// the opening list or a wave add, has to hand it out as Ampereum.
+{
+  const MODS = JSON.parse(fs.readFileSync(path.join(__dirname, 'conveyor_mod_levels.json'), 'utf8'));
+  let dealt = [];
+  function LC5() {}
+  LC5.prototype.module_SetConveyor = function (props) { dealt.push(props); };
+  LC5.prototype.readWave_ModifyConveyorWaveAction = function (props) { dealt.push(props); };
+  installConveyorHook(LC5);
+  const lc5 = new LC5();
+  const bare = t => { const m = /^RTID\(([^@()]+)@/.exec(t || ''); return m ? m[1] : t; };
+  const sky = [{ objclass: 'LevelDefinition', objdata: { StageModule: 'RTID(SkyStage@LevelModules)' } }];
+  const belts = LEVELS.map(l => ({ _file: l._file, InitialPlantList: l.InitialPlantList, mods: [] }))
+    .concat(MODS)
+    .filter(l => JSON.stringify(l).includes('anthurium'));
+  const bad = [];
+  if (!MODS.some(l => l._file.startsWith('9e9fe41f'))) bad.push('sky10 fixture (9e9fe41f) missing');
+  // The drift test compares functions, not constant tables, so read the real
+  // CONVEYOR_GROUPS out of the build file too: Ampereum must be in no group.
+  const BUILD = fs.readFileSync(path.join(__dirname, '..', '..', 'pvz2gardendless', 'build_pvzge_ap.py'), 'utf8');
+  const groupsSrc = (/const CONVEYOR_GROUPS = \{[\s\S]*?\n  \};/.exec(BUILD) || [''])[0];
+  if (!groupsSrc) bad.push('CONVEYOR_GROUPS not found in build_pvzge_ap.py');
+  else if (groupsSrc.includes("'anthurium'")) bad.push('build_pvzge_ap.py puts anthurium in a CONVEYOR_GROUPS swap group');
+  window._AP_randomizeConveyor = true;
+  let checked = 0;
+  for (let seed = 1; seed <= 200; seed++) {
+    window._AP_conveyorSeed = seed;
+    for (const l of belts) {
+      window._testLevelObjects = sky.concat([{ level: l._file + '|' + seed }]);
+      dealt = [];
+      const hasBelt = l.InitialPlantList.length > 0;
+      if (hasBelt) lc5.module_SetConveyor(clone({ InitialPlantList: l.InitialPlantList }));
+      for (const m of l.mods) lc5.readWave_ModifyConveyorWaveAction(clone(m));
+      const outMods = hasBelt ? dealt.slice(1) : dealt;
+      if (hasBelt) {
+        const want = l.InitialPlantList.filter(e => e.PlantType === 'anthurium').length;
+        const got = dealt[0].InitialPlantList.filter(e => e.PlantType === 'anthurium').length;
+        checked += want;
+        if (got < want) bad.push(`${l._file}@${seed}: opening Ampereum swapped`);
+      }
+      l.mods.forEach((m, i) => (m.Add || []).forEach((e, j) => {
+        if (bare(e.Type) !== 'anthurium') return;
+        checked++;
+        const out = ((outMods[i] || {}).Add || [])[j];
+        if (!out || bare(out.Type) !== 'anthurium') bad.push(`${l._file}@${seed}: wave ${i} Ampereum became ${out && bare(out.Type)}`);
+      }));
+    }
+  }
+  window._testLevelObjects = undefined;
+  window._AP_conveyorSeed = 123456789;
+  if (bad.length) fail('Ampereum: ' + bad.slice(0, 5).join('; '));
+  else ok(`Ampereum kept on all ${belts.length} belts that deal it, sky10 included (${checked} cards over 200 seeds)`);
+}
+
+// ── conveyor_damage_rule ─────────────────────────────────────────────────────
+// [user, 2026-11-01] sky16 opens on one Skyshooter card until wave 3, and the
+// swap made it Torchwood in 11% of seeds: nothing on the belt could hurt a
+// zombie. Under the rule (slot_data conveyor_damage_rule) Torchwood is in no
+// swap group, and a slot that shipped a damage dealer only takes another, on
+// the opening belt and in every wave add. Without the flag (older seeds) the
+// tables are exactly as before.
+{
+  const { _apBuildConveyorSwaps, _apDealsDamage, CONVEYOR_NO_DAMAGE } = require('./conveyor_fn.js');
+  const MODS = JSON.parse(fs.readFileSync(path.join(__dirname, 'conveyor_mod_levels.json'), 'utf8'));
+  let dealt = [];
+  function LC6() {}
+  LC6.prototype.module_SetConveyor = function (props) { dealt.push(props); };
+  LC6.prototype.readWave_ModifyConveyorWaveAction = function (props) { dealt.push(props); };
+  installConveyorHook(LC6);
+  const lc6 = new LC6();
+  const bare = t => { const m = /^RTID\(([^@()]+)@/.exec(t || ''); return m ? m[1] : t; };
+  const stageObjs = (st, key) => [{ objclass: 'LevelDefinition',
+    objdata: { StageModule: 'RTID(' + st + '@LevelModules)' } }, { level: key }];
+  const belts = LEVELS.map(l => ({ _file: l._file, InitialPlantList: l.InitialPlantList, mods: [] }))
+    .concat(MODS);
+  // Every (original, dealt) pair a belt produces, opening slots then wave adds.
+  const pairs = (l, st, seed) => {
+    window._AP_conveyorSeed = seed;
+    window._testLevelObjects = stageObjs(st, l._file + '|' + seed);
+    dealt = [];
+    const hasBelt = l.InitialPlantList.length > 0;
+    if (hasBelt) lc6.module_SetConveyor(clone({ InitialPlantList: l.InitialPlantList }));
+    for (const m of l.mods) lc6.readWave_ModifyConveyorWaveAction(clone(m));
+    const out = [];
+    if (hasBelt) l.InitialPlantList.forEach((e, i) => out.push([e.PlantType, (dealt[0].InitialPlantList[i] || {}).PlantType]));
+    const waves = hasBelt ? dealt.slice(1) : dealt;
+    l.mods.forEach((m, i) => (m.Add || []).forEach((e, j) =>
+      out.push([bare(e.Type), bare((((waves[i] || {}).Add || [])[j] || {}).Type)])));
+    return out;
+  };
+  const setRule = on => {
+    window._AP_conveyorDamageRule = on;
+    window._AP_conveyorSwaps = _apBuildConveyorSwaps(on);
+  };
+  const bad = [];
+  window._AP_randomizeConveyor = true;
+
+  // The classification itself: the four named plants deal none, a plain
+  // attacker does, a support plant does not.
+  for (const cn of CONVEYOR_NO_DAMAGE) if (_apDealsDamage(cn)) bad.push(`${cn} counted as dealing damage`);
+  if (!_apDealsDamage('skyshooter') || !_apDealsDamage('peashooter')) bad.push('a plain attacker counted as harmless');
+  if (_apDealsDamage('moonbean') || _apDealsDamage('wallnut')) bad.push('a non-attacker counted as dealing damage');
+
+  // Old seeds: Torchwood is still an attacker:mid member, and gets dealt.
+  setRule(false);
+  if (!(window._AP_conveyorSwaps.torchwood || []).includes('skyshooter')) bad.push('legacy tables lost Torchwood');
+  let legacyTorch = 0;
+  for (let seed = 1; seed <= 20; seed++) for (const l of belts) {
+    for (const [a, b] of pairs(l, 'SkyStage', seed)) if (b === 'torchwood' && a !== 'torchwood') legacyTorch++;
+  }
+  if (!legacyTorch) bad.push('legacy path never dealt Torchwood, so the gate proves nothing');
+
+  // New seeds.
+  setRule(true);
+  if (window._AP_conveyorSwaps.torchwood) bad.push('Torchwood still has a swap group');
+  if (Object.values(window._AP_conveyorSwaps).some(g => g.includes('torchwood'))) bad.push('Torchwood still a swap candidate');
+  let checked = 0, lostDamage = 0, newTorch = 0;
+  const lostEx = [];
+  for (const st of ['SkyStage', 'ModernStage']) for (const threats of [[], ['jester', 'cold']]) {
+    window._testThreats = threats;
+    for (let seed = 1; seed <= 15; seed++) for (const l of belts) {
+      const got = pairs(l, st, seed);
+      // A shadow deck's Moonflower may take an attacker slot, but never the
+      // belt's last one: there the belt as a whole must still hurt zombies.
+      const openN = l.InitialPlantList.length;
+      const openStillHurts = got.slice(0, openN).some(([, b]) => _apDealsDamage(b));
+      for (const [k, [a, b]] of got.entries()) {
+        if (b === 'torchwood' && a !== 'torchwood') newTorch++;
+        if (!_apDealsDamage(a)) continue;
+        checked++;
+        // A wave that re-caps an opening card deals what that card became.
+        const openMoon = got.slice(0, openN).some(([x, y]) => x === a && y === 'moonflower');
+        const ok = _apDealsDamage(b) ||
+          (b === 'moonflower' && window._AP_conveyorLastShadow && openStillHurts &&
+           (k < openN || openMoon));
+        if (!ok) { lostDamage++; if (lostEx.length < 3) lostEx.push(`${l._file.slice(0, 8)} ${a}->${b}`); }
+      }
+    }
+  }
+  window._testThreats = [];
+  if (newTorch) bad.push(`Torchwood dealt in place of another plant ${newTorch} times`);
+  if (lostDamage) bad.push(`${lostDamage}/${checked} damage slots lost their damage: ${lostEx.join(', ')}`);
+
+  // sky16 (e2f0a745): its one opening card always hurts zombies.
+  const sky16 = MODS.find(l => l._file.startsWith('e2f0a745'));
+  if (!sky16) bad.push('sky16 fixture (e2f0a745) missing');
+  else {
+    let harmless = 0, torch16 = 0;
+    for (let seed = 1; seed <= 500; seed++) {
+      const open = pairs(sky16, 'SkyStage', seed)[0][1];
+      if (!_apDealsDamage(open)) harmless++;
+      if (open === 'torchwood') torch16++;
+    }
+    if (harmless) bad.push(`sky16 opened on a harmless plant in ${harmless}/500 seeds`);
+    setRule(false);
+    for (let seed = 1; seed <= 500; seed++) if (pairs(sky16, 'SkyStage', seed)[0][1] === 'torchwood') torch16++;
+    if (!torch16) bad.push('sky16 never opened on Torchwood under the legacy tables, so the check proves nothing');
+  }
+  setRule(true);
+  window._testLevelObjects = undefined;
+  window._AP_conveyorSeed = 123456789;
+  if (bad.length) fail('damage rule: ' + bad.join('; '));
+  else ok(`damage rule: ${checked} damage slots kept damage on ${belts.length} belts (sky + lawn, with and ` +
+          `without threats), no Torchwood dealt, sky16 always opens on an attacker; legacy keeps ` +
+          `Torchwood (${legacyTorch} deals)`);
 }
 
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nCONVEYOR HOOK OK');

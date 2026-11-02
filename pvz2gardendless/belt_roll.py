@@ -113,9 +113,11 @@ class Belt:
                 "map": dict(sorted(self.wave_map.items()))}
 
 
-def _fits(orig: str, cn: str) -> bool:
+def _fits(orig: str, cn: str, damage_rule: bool = False) -> bool:
     inst = CT.ROLE.get(cn) == "instant"
-    return inst == (CT.ROLE.get(orig) == "instant") and (orig not in CT.KILLING or cn in CT.KILLING)
+    return inst == (CT.ROLE.get(orig) == "instant") and \
+        (orig not in CT.KILLING or cn in CT.KILLING) and \
+        (not damage_rule or not CT.deals_damage(orig) or CT.deals_damage(cn))
 
 
 def _missing(threats: List[str], plants: List[str]) -> List[str]:
@@ -130,11 +132,16 @@ def _js_round(x: float) -> int:
 
 
 def roll(seed: int, level_id: str, attempt: int = 0, threats: Iterable[str] = (),
-         randomize: bool = True) -> Belt:
+         randomize: bool = True, damage_rule: bool = True) -> Belt:
     """The belt the client would deal for `attempt` (0 = the client's own;
-    -1 = the belt as shipped, the guard's fallback)."""
+    -1 = the belt as shipped, the guard's fallback). `damage_rule` is slot_data
+    conveyor_damage_rule, on for every seed generation makes now."""
     if attempt < 0:
         randomize = False
+    swaps = CT.SWAPS_DAMAGE if damage_rule else CT.SWAPS
+
+    def fits(o, c):
+        return _fits(o, c, damage_rule)
     belt = BELTS[level_id]
     out = Belt(level_id, attempt)
     src = belt["initial"]
@@ -150,7 +157,7 @@ def roll(seed: int, level_id: str, attempt: int = 0, threats: Iterable[str] = ()
         rnd = Rng(ap_hash(f"{seed}{tag}|" + "|".join(c or "" for c in orig)))
         has_water = bool(belt["water"]) or any(
             c in CT.TERRAIN_LOCKED and c != "goldleaf" for c in orig)
-        swappable = [bool(c and c in CT.KNOWN and c in CT.SWAPS and c not in CT.BELT_LOCKED
+        swappable = [bool(c and c in CT.KNOWN and c in swaps and c not in CT.BELT_LOCKED
                           and c not in CT.TERRAIN_LOCKED) for c in orig]
         slots = sum(swappable)
 
@@ -166,7 +173,7 @@ def roll(seed: int, level_id: str, attempt: int = 0, threats: Iterable[str] = ()
                         alone = [a for a in answer_sets if a is not answers and held[i] in a
                                  and not any(j != i and c and c in a for j, c in enumerate(held))]
                         frm = [c for c in usable_at(i, wide)
-                               if c in answers and _fits(orig[i], c) and all(c in a for a in alone)]
+                               if c in answers and fits(orig[i], c) and all(c in a for a in alone)]
                         if not frm:
                             continue
                         held[i] = _pick(rnd, frm)
@@ -190,12 +197,15 @@ def roll(seed: int, level_id: str, attempt: int = 0, threats: Iterable[str] = ()
                         picks.append(None)
                         continue
                     want = CT.ROLE.get(c)
-                    pool = [x for x in usable_sh if CT.ROLE.get(x) == want and _fits(c, x)]
+                    pool = [x for x in usable_sh if CT.ROLE.get(x) == want and fits(c, x)]
                     if not pool:
                         if want == "instant":
                             picks.append(None)
                             continue
-                        pool = usable_sh
+                        pool = [x for x in usable_sh if fits(c, x)] if damage_rule else usable_sh
+                        if not pool:
+                            picks.append(None)
+                            continue
                     pick = _pick(rnd, pool)
                     tries = 0
                     while tries < 8 and pick in taken:
@@ -203,16 +213,24 @@ def roll(seed: int, level_id: str, attempt: int = 0, threats: Iterable[str] = ()
                         tries += 1
                     taken.add(pick)
                     picks.append(pick)
+                def last_hurter(i):
+                    # Under the damage rule Moonflower never takes the belt's
+                    # last damage dealer.
+                    return damage_rule and CT.deals_damage(orig[i]) and not any(
+                        j != i and CT.deals_damage(picks[j] or o) for j, o in enumerate(orig))
                 if "moonflower" not in picks:
                     for i in range(len(orig) - 1, -1, -1):
-                        if picks[i] and CT.ROLE.get(orig[i]) != "instant":
+                        if picks[i] and CT.ROLE.get(orig[i]) != "instant" and not last_hurter(i):
                             picks[i] = "moonflower"
                             break
-                held = [p or orig[i] for i, p in enumerate(picks)]
-                keep_answer(held, lambda i, wide: usable_sh, True)
-                picks = [held[i] if p else None for i, p in enumerate(picks)]
-                picked = [p or orig[i] for i, p in enumerate(picks)]
-                out.shadow = shadow_done = True
+                # No slot for Moonflower: no shadow deck, the ordinary swap
+                # below runs on the same stream.
+                if "moonflower" in picks:
+                    held = [p or orig[i] for i, p in enumerate(picks)]
+                    keep_answer(held, lambda i, wide: usable_sh, True)
+                    picks = [held[i] if p else None for i, p in enumerate(picks)]
+                    picked = [p or orig[i] for i, p in enumerate(picks)]
+                    out.shadow = shadow_done = True
 
         if not shadow_done:
             used: Set[str] = set()
@@ -221,7 +239,7 @@ def roll(seed: int, level_id: str, attempt: int = 0, threats: Iterable[str] = ()
                 if not c or c not in CT.KNOWN:
                     new.append(c)
                     continue
-                cands = CT.SWAPS.get(c)
+                cands = swaps.get(c)
                 if not cands or c in CT.TERRAIN_LOCKED or c in CT.BELT_LOCKED:
                     new.append(c)
                     continue
@@ -245,6 +263,11 @@ def roll(seed: int, level_id: str, attempt: int = 0, threats: Iterable[str] = ()
                     if len(usable) < 2:
                         new.append(c)
                         continue
+                if damage_rule and CT.deals_damage(c):
+                    usable = [x for x in usable if CT.deals_damage(x)]
+                    if len(usable) < 2:
+                        new.append(c)
+                        continue
                 kin = [x for x in usable if CT.FAMILY.get(x) == CT.FAMILY.get(c)]
                 prefer = rnd() < 0.75 and len(kin) >= 2
                 frm = kin if prefer else usable
@@ -265,7 +288,7 @@ def roll(seed: int, level_id: str, attempt: int = 0, threats: Iterable[str] = ()
             held = list(new)
 
             def usable_at(i, wide):
-                base = sorted(CT.SWAPS) if wide else (CT.SWAPS.get(orig[i]) or [])
+                base = sorted(swaps) if wide else (swaps.get(orig[i]) or [])
                 return [x for x in base if CT.plantable(x, has_water, on_sky)]
             keep_answer(held, usable_at, False)
             picked = held
@@ -298,7 +321,7 @@ def roll(seed: int, level_id: str, attempt: int = 0, threats: Iterable[str] = ()
                 if not cn or cn in wave_map:
                     continue
                 pick = cn
-                cands = CT.SWAPS.get(cn)
+                cands = swaps.get(cn)
                 if cn in CT.KNOWN and cands and cn not in CT.BELT_LOCKED and \
                         cn not in CT.TERRAIN_LOCKED:
                     has_water = bool(belt["water"]) or any(
@@ -309,6 +332,8 @@ def roll(seed: int, level_id: str, attempt: int = 0, threats: Iterable[str] = ()
                             usable = [x for x in usable if x in answers]
                     if cn in CT.KILLING:
                         usable = [x for x in usable if x in CT.KILLING]
+                    if damage_rule and CT.deals_damage(cn):
+                        usable = [x for x in usable if CT.deals_damage(x)]
                     if len(usable) >= 2:
                         rnd = Rng(ap_hash(f"{seed}{tag}|wave|{key}|{cn}"))
                         kin = [x for x in usable if CT.FAMILY.get(x) == CT.FAMILY.get(cn)]

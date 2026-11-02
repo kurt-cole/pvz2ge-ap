@@ -799,6 +799,7 @@ window.electron = electron;
       }
       const killSet = window._AP_conveyorKillingInstants;
       if (killSet && killSet.has(cn)) usable = usable.filter(c => killSet.has(c));
+      if (window._AP_conveyorDamageRule && _apDealsDamage(cn)) usable = usable.filter(_apDealsDamage);
       if (usable.length >= 2) {
         const rnd = _apRng(_apHash(String(window._AP_conveyorSeed || 0) + _apBeltTag() + '|wave|' +
                                    st.key + '|' + cn));
@@ -844,6 +845,16 @@ window.electron = electron;
         : e);
     }
     return patched;
+  }
+
+  // [user, 2026-11-01] Does this plant hurt zombies by itself? An attacker
+  // group member, less the few that deal no damage of their own (see
+  // CONVEYOR_NO_DAMAGE). Under conveyor_damage_rule a belt slot that shipped
+  // one only ever trades for another, so a belt never loses the damage the
+  // level gave it (sky16 opened on Torchwood alone in 11% of seeds).
+  function _apDealsDamage(cn) {
+    return (window._AP_conveyorRole || {})[cn] === 'attacker' &&
+           !(window._AP_conveyorNoDamage && window._AP_conveyorNoDamage.has(cn));
   }
 
   function installConveyorHook(LC) {
@@ -904,8 +915,12 @@ window.electron = electron;
           // [user] ...and one that kills only becomes another that kills.
           const killSet = window._AP_conveyorKillingInstants;
           const kills = cn => !!(killSet && killSet.has(cn));
+          // [user] ...and, under conveyor_damage_rule, one that deals damage
+          // only becomes another that does.
+          const damageRule = !!window._AP_conveyorDamageRule;
           const fits = (orig, cn) => isInstant(cn) === isInstant(orig) &&
-                                     (!kills(orig) || kills(cn));
+                                     (!kills(orig) || kills(cn)) &&
+                                     (!damageRule || !_apDealsDamage(orig) || _apDealsDamage(cn));
           // Put an answer back for each threat the swap left unanswered: the
           // first slot whose own group has one, else the first slot, from all
           // answers. A slot that alone answers another threat only takes a
@@ -967,7 +982,9 @@ window.electron = electron;
                                                      fits(list[i].PlantType, cn));
                 if (!pool.length) {
                   if (want === 'instant') { picks.push(null); continue; }
-                  pool = usableShadow;
+                  pool = damageRule ? usableShadow.filter(cn => fits(list[i].PlantType, cn))
+                                    : usableShadow;
+                  if (!pool.length) { picks.push(null); continue; }
                 }
                 let pick = pool[Math.floor(rnd() * pool.length)];
                 for (let tries = 0; tries < 8 && takenShadow.has(pick); tries++) {
@@ -979,13 +996,19 @@ window.electron = electron;
               // Guarantee Moonflower. Overwrite the last real slot that did not
               // ship an instant, rather than a random one: it is the latest arrival on the belt, so the deck
               // still opens with an attacker.
+              // Under conveyor_damage_rule it never takes the belt's last damage
+              // dealer, and a belt with no other slot for it is no shadow deck:
+              // it falls through to the ordinary swap below.
+              const lastHurter = i => damageRule && _apDealsDamage(list[i].PlantType) &&
+                !list.some((e, j) => j !== i && _apDealsDamage(picks[j] || (e && e.PlantType)));
               if (picks.indexOf('moonflower') === -1) {
                 for (let i = list.length - 1; i >= 0; i--) {
-                  if (picks[i] && !isInstant(list[i].PlantType)) {
+                  if (picks[i] && !isInstant(list[i].PlantType) && !lastHurter(i)) {
                     picks[i] = 'moonflower'; break;
                   }
                 }
               }
+              if (picks.indexOf('moonflower') !== -1) {
               const shadowHeld = picks.map((cn, i) => cn || (list[i] && list[i].PlantType));
               keepAnswer(shadowHeld, (i, wide) => usableShadow, true);
               for (let i = 0; i < list.length; i++) if (picks[i]) picks[i] = shadowHeld[i];
@@ -998,6 +1021,7 @@ window.electron = electron;
               const args0 = Array.prototype.slice.call(arguments);
               args0[0] = patched;
               return _origSetConveyor.apply(this, args0);
+              }
             }
           }
 
@@ -1038,6 +1062,11 @@ window.electron = electron;
             // A killing instant only trades for another killing instant.
             if (kills(entry.PlantType)) {
               usable = usable.filter(kills);
+              if (usable.length < 2) return entry;
+            }
+            // [user] Under conveyor_damage_rule, damage only for damage.
+            if (damageRule && _apDealsDamage(entry.PlantType)) {
+              usable = usable.filter(_apDealsDamage);
               if (usable.length < 2) return entry;
             }
             // Step two of the three: inside the role-and-power group, prefer a
@@ -2372,15 +2401,35 @@ window.electron = electron;
         ', ' + plan.dinos.length + ' dino events,' + shape);
   }
 
+  // [user] No Zomboss letter before World Key levels. Every level that awards
+  // a world key (FirstRewardParam "worldkey": the 13 WORLD_KEY_LOCS, checked
+  // against 0.16.1) opens with a Zomboss narrative -- EGYPT_INTRO_GARGANTUAR,
+  // SKYCITY_16_INTRO and so on. module_SetLevelDefinition picks IntroNarrative
+  // from the definition it is handed, and plenty of levels have none, so
+  // deleting the two intro fields is the game's own "no intro" path. The
+  // definition lives in readLevelJson's deep copy, so the authored data is
+  // untouched. Outros are left alone: none of the key-level outros has Zomboss.
+  function _apStripKeyLevelIntro(def) {
+    if (!def || def.FirstRewardParam !== 'worldkey') return;
+    if (def.FirstIntroNarrative || def.ReplayIntroNarrative) {
+      _apLog('[AP] skipped Zomboss intro on world key level: ' + def.FirstIntroNarrative);
+    }
+    delete def.FirstIntroNarrative;
+    delete def.ReplayIntroNarrative;
+  }
+
   // Fails OPEN to vanilla: if anything here throws, the level plays as
   // authored, which is never harder than logic assumed for its hazards.
   function installBudgetHook(LC) {
     if (!LC || LC._ap_hooked_budget || !LC.prototype ||
         typeof LC.prototype.module_SetLevelDefinition !== 'function') return;
     const _origSetLevelDefinition = LC.prototype.module_SetLevelDefinition;
-    LC.prototype.module_SetLevelDefinition = function () {
+    LC.prototype.module_SetLevelDefinition = function (def) {
       try { _apbPrepareLevel(this); } catch (e) {
         try { _apLog('[AP] zombie budget roll skipped: ' + e); } catch (e2) { /* unreachable */ }
+      }
+      try { _apStripKeyLevelIntro(def); } catch (e) {
+        try { _apLog('[AP] key level intro strip skipped: ' + e); } catch (e2) { /* unreachable */ }
       }
       return _origSetLevelDefinition.apply(this, arguments);
     };
@@ -2942,12 +2991,33 @@ window.electron = electron;
   // entirely, which the hook reads as "do not swap this one" -- swapping a
   // plant for itself is churn, and there is nothing else in its power band to
   // reach for. That is currently toadstool, the only mid-cost sun producer.
-  window._AP_conveyorSwaps = {};
-  for (const key of Object.keys(CONVEYOR_GROUPS)) {
-    const members = CONVEYOR_GROUPS[key].filter(cn => !CONVEYOR_EXCLUDE.has(cn));
-    if (members.length < 2) continue;
-    for (const cn of members) window._AP_conveyorSwaps[cn] = members;
+  //
+  // [user, 2026-11-01] conveyor_damage_rule (slot_data; absent on older seeds,
+  // which keep their exact rolls): Torchwood leaves the attacker group. It
+  // deals no damage of its own -- it lights peas that pass through it, and on
+  // an Aerial Fortress lawn its fire skips the sky tiles -- so a belt that
+  // traded its only attacker for it had nothing to fight with (sky16 opens on
+  // one card until wave 3). It is no longer swapped in or out; a level that
+  // ships it keeps it.
+  const CONVEYOR_LEGACY_GROUPED = new Set(['torchwood']);
+  // Attacker-group plants that deal no damage of their own: Chard Guard
+  // knocks back, Sap-fling slows, Explode-O-Nut only bursts when eaten (the
+  // same three the Parasol answers leave out), and Torchwood.
+  const CONVEYOR_NO_DAMAGE = new Set(['chardguard', 'explodeonut', 'sapfling', 'torchwood']);
+  window._AP_conveyorNoDamage = CONVEYOR_NO_DAMAGE;
+  function _apBuildConveyorSwaps(damageRule) {
+    const swaps = {};
+    for (const key of Object.keys(CONVEYOR_GROUPS)) {
+      const members = CONVEYOR_GROUPS[key].filter(cn => !CONVEYOR_EXCLUDE.has(cn) &&
+        !(damageRule && CONVEYOR_LEGACY_GROUPED.has(cn)));
+      if (members.length < 2) continue;
+      for (const cn of members) swaps[cn] = members;
+    }
+    return swaps;
   }
+  // New seeds by default; syncConveyorConfig() settles it from slot_data.
+  window._AP_conveyorDamageRule = true;
+  window._AP_conveyorSwaps = _apBuildConveyorSwaps(true);
 
   // codename -> Family, inverted once so the hook can prefer a like-for-like
   // trade without scanning the family lists on every belt entry.
@@ -2977,6 +3047,8 @@ window.electron = electron;
     window._AP_randomizeConveyor = !!st.randomizeConveyor;
     window._AP_conveyorSeed      = st.conveyorSeed || 0;
     window._AP_beltAttempts      = st.beltAttempts || {};
+    window._AP_conveyorDamageRule = !!st.conveyorDamageRule;
+    window._AP_conveyorSwaps     = _apBuildConveyorSwaps(window._AP_conveyorDamageRule);
   }
 
   // Same idea for the zombie shuffle. The tiers come from slot_data rather
@@ -4932,6 +5004,8 @@ window.electron = electron;
           // The belt guard's pick per level; absent on older seeds, read as
           // attempt 0 everywhere (see _apBeltAttempt).
           st.beltAttempts      = pkt.slot_data.belt_attempts || {};
+          // Absent on seeds before 2026-11-01, which keep their exact belts.
+          st.conveyorDamageRule = !!pkt.slot_data.conveyor_damage_rule;
           syncConveyorConfig();
           // Absent on seeds predating the option, which reads as off. The
           // tiers are persisted on st alongside the flag so a page reload can
@@ -6145,8 +6219,6 @@ window.electron = electron;
       #ap-panel button:hover{background:#047857}
       #ap-disc{background:#1c1917!important;color:#f87171!important;border-color:#dc2626!important;margin-left:6px}
       #ap-disc:hover{background:#292524!important}
-      #ap-reset{background:#1e1b4b!important;color:#a5b4fc!important;border-color:#6366f1!important;margin-left:6px}
-      #ap-reset:hover{background:#312e81!important}
       #ap-status{margin-top:10px;font-weight:bold;font-size:12px}
       #ap-goal{margin-top:8px;padding:6px 8px;background:#020617;border-radius:5px;
         border:1px solid #1e293b;font-size:12px;color:#e2e8f0;display:none}
@@ -6204,7 +6276,7 @@ window.electron = electron;
       <label>Slot Name<br><input id=ap-slt placeholder="Player"></label>
       <label>Password<br><input id=ap-pwd type=password placeholder="(optional)"></label>
       <label class=ap-check><input id=ap-dl type=checkbox>DeathLink</label>
-      <button id=ap-go>Connect</button><button id=ap-disc>Disconnect</button><button id=ap-reset>Reset</button>
+      <button id=ap-go>Connect</button><button id=ap-disc>Disconnect</button>
       <div id=ap-status style="color:#64748b">Not connected</div>
       <div id=ap-goal></div>
       <div id=ap-log></div>
@@ -6249,17 +6321,10 @@ window.electron = electron;
       conn=false;sessionActive=false;goalSent=false;setStatus('Disconnected','#f44');
       if(wasActive) returnToMenu(false);
     };
-    document.getElementById('ap-reset').onclick=()=>{
-      if(!confirm('Reset all AP progress for this slot? This clears checked locations, received items, and run state.')) return;
-      st={checked:[],lastIdx:0,receivedKeys:[],receivedItems:[],upgradeCounts:{},worldUnlocks:{},goalItems:0,costumes:{},wornCostume:{},pendingCostumes:0,runKey:''};
-      // The victory location is no longer checked, so clearing goalSent lets
-      // re-earning it send the goal again.
-      goalSent=false;
-      svSt();
-      window._AP_grantedPlantIds=new Set();
-      window._AP_grantedUpgrades=new Set();
-      log('State reset.');toast('AP state cleared','#a5b4fc');
-    };
+    // [user] No Reset button (removed 11/01). A new seed or slot already
+    // clears local state on Connected (the runKey check), and the server's
+    // checked_locations + item replay rebuild everything else. A manual wipe
+    // could only lose checks made offline that had not been sent yet.
 
     const t=document.createElement('div');t.id='ap-toast';
     document.body.appendChild(t);
@@ -6276,7 +6341,7 @@ window.electron = electron;
   }
 
   // Panel-only message, no transient toast. This was being called from
-  // findOrCreateAPSlot(), connect() and the reset button without ever having
+  // findOrCreateAPSlot(), connect() and the old reset button without ever having
   // been defined, so each of those threw a ReferenceError instead: the slot
   // creation path never reached its reload, and the catch in
   // findOrCreateAPSlot() threw again before it could return -1.
