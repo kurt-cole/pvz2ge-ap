@@ -31,6 +31,8 @@ PY_SUITES = [
     ("budget",     "budget_logic_test.py", "generation logic built from the budget roll"),
     ("powersel",   "power_selection_test.py", "the plant-power selection keeps logic small"),
     ("shipsim",    "ship_sim_test.py", "Aerial Fortress ship guard and ship fight"),
+    ("beltroll",   "belt_roll_test.py", "generation's belt swap matches the client's"),
+    ("beltguard",  "belt_guard_test.py", "the conveyor belt guard and its table"),
     ("rollvectors","roll_vectors_test.py", "the budget roll's parity vectors are current"),
     ("tracker",    "tracker_test.py", "Universal Tracker rebuilds the same seed"),
     ("plantorder", "plant_order_test.py", "weak useful plants in earlier spheres than strong ones"),

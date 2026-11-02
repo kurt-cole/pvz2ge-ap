@@ -17,6 +17,17 @@ Design: POWER_SIM.md. Three tables, each read from the game's own data:
   SHIPS    per Aerial Fortress level with a SkyCityShip module, conveyor and
            preset ones included: the ship's hit points, its edge, the deck
            width and the wave timer inputs (ship_sim.py, POWER_SIM.md).
+  BELTS    per conveyor level: the opening belt as authored (InitialPlantList
+           entries, their numeric fields only), the drop delay conditions, each
+           wave's ModifyConveyor Add/Remove, the terrain the belt swap reads
+           (water, sky) and the wave timer inputs (belt_roll.py, belt_sim.py).
+           `preset` lists the plants the level starts with on the lawn as
+           [column, row, codename, flags] (flags: "ice" when ice-cubed until a
+           Hot Potato thaws it, "protect" for a plant to protect). `boss` is a
+           Zomboss battle: per stage its HitPoints, mean idle time and weighted
+           actions [name, weight, mean repeats, [summon pointMin, pointMax],
+           zombie list], plus the mech's reserved columns and spawn row.
+  CODENAMES  plant codename -> item name, for the belt's codenames.
 
 Record fields (absent means 0 / none):
   k   class: shooter short contact burst instant chomp sunburn producer
@@ -32,6 +43,7 @@ Record fields (absent means 0 / none):
   hp  toughness as a wall (utility)
   ch  chill seconds per hit   fz  seconds a hit stops the zombie (expected)
   kb  tiles of knockback per hit
+  rd  damage dealt back per point of toughness eaten (Lychee)
   sb  sun spent per shot (sunburn)
   tags: ice, instant, backward, ranged
 
@@ -93,8 +105,12 @@ def f(value, default=0.0):
 
 
 def iv(p, key, default=0.0):
-    """An interval with its random Additional part at its expected value."""
-    if not isinstance(p.get(key), (int, float)):
+    """An interval with its random Additional part at its expected value; a
+    {Min, Max} range (Pea Commando's AttackInterval) at its midpoint."""
+    v = p.get(key)
+    if isinstance(v, dict) and isinstance(v.get("Min"), (int, float)):
+        return (f(v["Min"]) + f(v.get("Max"), f(v["Min"]))) / 2
+    if not isinstance(v, (int, float)):
         return default
     return f(p[key]) + f(p.get(key + "Additional")) / 2
 
@@ -103,8 +119,25 @@ class Plants:
     def __init__(self, game):
         self.g = game
 
-    def proj(self, name):
-        return self.g.proj_props.get(name) or {}
+    def proj(self, name, seen=None):
+        """A projectile's props, following ProjectileTypes' Props and
+        ProjectileBasedOn when it has none of its own (Pea-nut's `peanut`
+        fires `pea`'s props)."""
+        props = self.g.proj_props.get(name)
+        if props:
+            return props
+        seen = seen or set()
+        types = self.g.proj_types.get(name) if isinstance(name, str) else None
+        if not types or name in seen:
+            return {}
+        seen.add(name)
+        for key in ("Props", "ProjectileBasedOn"):
+            based = GLM.rt(types.get(key))
+            if isinstance(based, str) and based != name:
+                found = self.proj(based, seen)
+                if found:
+                    return found
+        return {}
 
     def hit(self, name):
         """(damage, splash damage, chill s, stop s) of one projectile."""
@@ -187,7 +220,7 @@ SPECS = {
     # Damage falls with distance: DamageScale 1 near, 0.33 mid, 0.2 far [data];
     # averaged over the lane [guess].
     "Red Stinger": fixed(k="shooter", d=15.0, t=1, i=1.875, r=0, b=0, l=1),
-    "Pea Commando": shooter(count=2, interval="ShootInterval"),
+    "Pea Commando": shooter(count=2, interval="AttackInterval"),
     "Shadow Peashooter": shooter(),
     "Cactus": shooter(t=3),
     "Bloomerang": shooter("BoomerangType", t=3, count=2),
@@ -227,7 +260,9 @@ SPECS = {
     "Cold Snapdragon": fixed(k="short", d=30.0, t=3, i=1.925, r=2, b=0, l=1, ch=10.0,
                              tags=["ice"]),
     "Celery Stalker": fixed(k="short", d=25.0, t=1, i=1.0, r=1, b=1, l=1, tags=["backward"]),
-    "Snap Pea": shooter(),
+    # Shoots a pea that swallows one zombie, then chews 20 s (ChewTimePerZombie,
+    # HeadDamage 400) [data].
+    "Snap Pea": fixed(k="chomp", i=20.0, r=0, x=400.0, tags=["instant"]),
     "Holly Knight": fixed(k="short", d=20.0, t=1, i=1.0, r=2, b=0, l=1),
     "Gloom-shroom": fixed(k="short", d=100.0, t=3, i=1.0, r=1, b=1, l=1, tags=["backward"]),
     "Gloom Vine": fixed(k="short", d=45.0, t=3, i=2.775, r=1, b=1, l=1, tags=["backward"]),
@@ -295,8 +330,14 @@ SPECS = {
     "Resistant Radish": lambda p, P: wall(p),
     "Infi-nut": lambda p, P: wall(p),
     "Murkadamia Nut": lambda p, P: wall(p),
-    "Endurian": lambda p, P: wall(p),
-    "Lychee": lambda p, P: wall(p),
+    # Stabs whoever eats it, StabDamage per StabInterval [data]: per point eaten
+    # at the default eat rate.
+    "Endurian": lambda p, P: dict(wall(p), rd=f(p.get("StabDamage")) / max(
+        f(p.get("StabInterval"), 0.5), 0.05) / DEFAULT_EAT),
+    # A wall that hits back: DamagePerHit for every HealthBetweenHits eaten
+    # off it [data]. `rd` is that damage per point of toughness eaten.
+    "Lychee": lambda p, P: dict(wall(p), rd=f(p.get("DamagePerHit")) /
+                                max(f(p.get("HealthBetweenHits"), 100.0), 1.0)),
     "Mirror-nut": lambda p, P: wall(p),
     "Explode-O-Nut": lambda p, P: wall(p),
     "Bamboozle": lambda p, P: wall(p),
@@ -454,6 +495,121 @@ def level_sim(level, modules):
     }
 
 
+# ConveyorPlant / ModifyConveyor numeric fields the game reads off an entry.
+BELT_FIELDS = ("Weight", "MinCount", "MinWeightFactor", "MaxCount", "MaxWeightFactor",
+               "CooldownSeconds", "MaxCountCooldownSeconds", "MinCountCooldownSeconds",
+               "MaxDelivered")
+# module_SetConveyor sets defaultZombieCountdownFirstWaveSecs to 4 [data].
+BELT_FIRST_WAVE = 4.0
+
+
+def _belt_entry(e, key):
+    # Kept as authored, RTID included (reinforce0's citron): the client's belt
+    # roll hashes the raw string, and belt_sim strips it for the record.
+    out = {"PlantType": e.get(key)} if key == "PlantType" else {"Type": GLM.rt(e.get("Type")),
+                                                                 "ToolType": e.get("ToolType")}
+    for k in BELT_FIELDS:
+        v = e.get(k)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            out[k] = v
+    return {k: v for k, v in out.items() if v is not None}
+
+
+def level_presets(level):
+    """[column, row, codename, flags] of every plant the level starts with."""
+    out = []
+    for o in level.of_class("InitialPlantProperties"):
+        for e in (o.get("objdata") or {}).get("InitialPlantPlacements") or []:
+            if isinstance(e, dict) and GLM.rt(e.get("TypeName")):
+                out.append([int(f(e.get("GridX"))), int(f(e.get("GridY"))), GLM.rt(e.get("TypeName")),
+                            "ice" if e.get("Condition") == "icecubed" else ""])
+    for o in level.of_class("ProtectThePlantChallengeProperties"):
+        for e in (o.get("objdata") or {}).get("Plants") or []:
+            if isinstance(e, dict) and GLM.rt(e.get("PlantType")):
+                out.append([int(f(e.get("GridX"))), int(f(e.get("GridY"))), GLM.rt(e.get("PlantType")),
+                            "protect"])
+    return out
+
+
+def level_boss(level, zsrc):
+    """The Zomboss of a ZombossBattle level, else None [data, ZombieProps]."""
+    mods = level.of_class("ZombossBattleModuleProperties")
+    if not mods or zsrc is None:
+        return None
+    d = mods[0].get("objdata") or {}
+    prop = zsrc.prop(GLM.rt(d.get("ZombossMechType")) or "")
+    stages = []
+    for st in prop.get("ZombossStages") or []:
+        acts = []
+        for a in st.get("Actions") or []:
+            sp = a.get("summonProps") or {}
+            acts.append([a.get("actionName"), f(a.get("weight")),
+                         (f(a.get("repeatMin"), 1) + f(a.get("repeatMax"), 1)) / 2,
+                         [f(sp.get("pointMin"), 1000), f(sp.get("pointMax"), 2000)],
+                         [GLM.rt(z) for z in sp.get("zombieList") or [] if GLM.rt(z)]])
+        stages.append({"hp": f(st.get("HitPoints")),
+                       "idle": (f(st.get("MinIdleTime")) + f(st.get("MaxIdleTime"))) / 2,
+                       "actions": acts})
+    if not stages:
+        return None
+    pos = d.get("ZombossSpawnGridPosition") or {}
+    reserved = int(f(d.get("ReservedColumnCount"), 3))
+    # IdleColumn: the column the mech stands in and summons from; the class
+    # default is the first reserved column (ZombossMechZombie 7, Sky 6) [data].
+    return {"mech": GLM.rt(d.get("ZombossMechType")), "stages": stages,
+            "reserved": reserved,
+            "column": int(f(prop.get("IdleColumn"), 9 - reserved)),
+            "row": int(f(pos.get("mY"), 2))}
+
+
+def level_belt(level, lv, zsrc=None):
+    """The belt record of a conveyor level, else None."""
+    conv = level.of_class("ConveyorSeedBankProperties")
+    if not conv:
+        return None
+    data = conv[0].get("objdata") or {}
+    manager = level.manager()
+    waves = manager.get("Waves") or []
+    mods = []
+    for w, refs in enumerate(waves, start=1):
+        for ref in refs or []:
+            obj = level.by_alias.get(GLM.rt(ref))
+            if not obj or obj.get("objclass") != "ModifyConveyorWaveActionProps":
+                continue
+            d = obj.get("objdata") or {}
+            mods.append([w, [_belt_entry(e, "Type") for e in d.get("Add") or [] if isinstance(e, dict)],
+                         [_belt_entry(e, "Type") for e in d.get("Remove") or [] if isinstance(e, dict)]])
+    grid_water = any(
+        str(GLM.rt((o.get("objdata") or {}).get("TypeName")) or "").lower() in
+        ("potholepool", "potholepuddle", "shallowpuddle")
+        for o in level.objects if o.get("objclass") == "InitialGridItemProperties")
+    flag = manager.get("FlagWaveInterval")
+    flag = min(len(waves), int(flag)) if isinstance(flag, (int, float)) and flag else \
+        DEFAULT_FLAG_INTERVAL
+    lo = f(manager.get("MinNextWaveHealthPercentage"), DEFAULT_NEXT_HP[0])
+    hi = f(manager.get("MaxNextWaveHealthPercentage"), DEFAULT_NEXT_HP[1])
+    return {
+        "initial": [_belt_entry(e, "PlantType") for e in data.get("InitialPlantList") or []
+                    if isinstance(e, dict)],
+        "drop": [[f(c.get("MaxPackets"), 100.0), f(c.get("Delay"))]
+                 for c in data.get("DropDelayConditions") or [] if isinstance(c, dict)],
+        "mods": mods,
+        "water": bool(lv.get("tides")) or grid_water,
+        # A *Mowers module (EgyptMowers, ModernMowers...) puts a mower on each lane.
+        "mowers": any("Mowers" in (GLM.rt(m) or "") for m in
+                      (level.data("LevelDefinition").get("Modules") or [])),
+        # Plant food the waves hand out: carriers per wave (the groups' pf).
+        "pf": [sum(g.get("pf", 0) for g in lv["groups"] if g["w"] == w)
+               for w in range(1, max(1, lv["waves"]) + 1)],
+        "sky": lv["stage"].startswith("Sky"),
+        "first": f(manager.get("ZombieCountdownFirstWaveSecs"), BELT_FIRST_WAVE),
+        "flag": flag,
+        "next": round((lo + hi) / 2, 3),
+        "preset": level_presets(level),
+        "boss": level_boss(level, zsrc),
+    }
+
+
 # SkyCityShipProperties class defaults [data, index.js]: Toughness 2e4,
 # ToughnessShield 1e4, ForceShielded false, EdgeX 2.5 (tiles from the left).
 SHIP_DEFAULTS = {"Toughness": 20000.0, "ToughnessShield": 10000.0, "EdgeX": 2.5}
@@ -560,15 +716,25 @@ def main() -> int:
         if ship:
             ships[level_id] = ship
 
+    belts = {}
+    for level_id, lv in sorted(model["levels"].items()):
+        if lv.get("own_plants") or lv.get("bespoke") or lv.get("generated"):
+            continue
+        objects = GLM.level_objects(bundle, packed, level_id)
+        belt = level_belt(GLM.Level(level_id, objects), lv, zombies_src) if objects else None
+        if belt:
+            belts[level_id] = belt
+    codenames = {cn: name for name, cn in sorted(bridge.items())}
+
     blob = {"game": model.get("game"), "plants": plants, "zombies": zombies,
-            "levels": levels, "ships": ships}
+            "levels": levels, "ships": ships, "belts": belts, "codenames": codenames}
     kinds = {}
     for rec in plants.values():
         kinds[rec["k"]] = kinds.get(rec["k"], 0) + 1
     no_sky = sum(1 for lv in levels.values() if not lv["drop"])
     summary = (f"{len(plants)} plants ({', '.join(f'{k} {n}' for k, n in sorted(kinds.items()))}); "
                f"{len(zombies)} zombies, nullifiers {family_hits}; "
-               f"{len(levels)} levels, {no_sky} without sky sun; {len(ships)} ship levels.")
+               f"{len(levels)} levels, {no_sky} without sky sun; {len(ships)} ship levels; {len(belts)} belts.")
     print(summary)
     if args.dry_run:
         return 0

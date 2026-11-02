@@ -126,6 +126,42 @@ The guard is generation-only. Generation sends the attempt it chose as
 rolls that attempt directly (`_apbRoll`'s `forced`). Without the key (older
 seeds, or an older client ignoring it) the client rolls unguarded, as before.
 
+## Conveyor levels (`belt_roll.py`, `belt_sim.py`, `belt_guard.py`)
+
+The conveyor rando swaps belt cards on the client. Generation now checks that
+the belt it will deal can still beat the level as this slot rolls its zombies.
+
+- **Roll.** `belt_roll.roll(seed, level, attempt, threats)` is a bit-exact port
+  of the client's swap (tables read out of `TMPPATCH_CONTENT` by
+  `conveyor_tables.py`); attempt `n > 0` folds `#n` into both hashes, `-1` is
+  the belt as shipped. `test/belt_roll_test.py` holds it to the client over
+  attempts 0, 1, 3 and -1.
+- **Fight.** `belt_sim.passes(level, belt, plan, hp_scale)` replays the belt's
+  delivery (the game's weighted pick, drop delays, wave adds and removes) and
+  fights it lane by lane on power_sim's per-copy rates. It reads the level's
+  preset and ice-cubed plants (a delivered Hot Potato thaws one), mowers, plant
+  food, the Aerial Fortress ship, and the plants with an effect beyond their
+  record: area and lingering instants, Sweet Potato, Garlic, Pumpkin,
+  Mirror-nut, Explode-o-nut, Endurian, Lychee.
+- **Zomboss** (35 levels). Generic, from each mech's `ZombossStages`: per stage
+  its HP and weighted actions. The mech acts every 6 s (4-8 s [user]). summon
+  jumps, then spends a budget rising from pointMin to pointMax as the stage
+  drains, one zombie per 0.5 s [data]; rush destroys the plants of 2 lanes
+  [user]; shoot destroys the 2 newest plants; jump moves the summon row. The
+  mech takes the damage its lanes leave free, 3 lanes' worth [guess].
+- **Score.** `belt_sim.score` is the highest zombie-HP scale a belt beats.
+  `tools/gen_belt_table.py` writes each level's vanilla score (shipped belt,
+  vanilla zombies) to `belt_table.py`, with a hash of its inputs that
+  `test/belt_guard_test.py` checks.
+- **Guard.** Relative to vanilla, so what the simulation gets wrong about a
+  level cancels: `belt_guard.choose` keeps the first of 8 attempts that passes
+  at the vanilla score / 1.15 against the slot's zombies (the budget roll's
+  plan, else the vanilla roster, which the tier shuffle keeps in HP band and
+  threat tag). None holds: -1. Levels scoring 0 (16 today: belts built around
+  an effect the simulation cannot judge) are skipped and roll attempt 0 [user].
+  slot_data `belt_attempts` carries only the levels whose pick is not 0; a
+  client or seed without it rolls attempt 0, as before.
+
 ## Plant behaviour (`tools/gen_sim_data.py` -> `pvz2gardendless/sim_data.py`)
 
 Each plant gets a behaviour class with its numbers read from its own props, plus a

@@ -76,8 +76,8 @@ def utilities() -> List[str]:
 # ── roster ───────────────────────────────────────────────────────────────────
 
 def roster(level_id: str, plan: Optional[Dict[str, Any]] = None) -> Tuple[List[List[Tuple]], int]:
-    """([wave -> [(hp, walk, eat, row or -1, noswallow, ship dps, ship crash)]],
-    lanes) for a level.
+    """([wave -> [(hp, walk, eat, row or -1, noswallow, ship dps, ship crash,
+    gargantuar)]], lanes) for a level.
 
     `plan` is a budget-roll plan (zombie_roll.roll_level); None is the vanilla
     roster. Dynamic spawn points are spent at the expected HP and count of their
@@ -101,7 +101,8 @@ def roster(level_id: str, plan: Optional[Dict[str, Any]] = None) -> Tuple[List[L
                 for j in range(n):
                     row = rows[(i + j) % len(rows)] - 1 if rows else -1
                     waves[w].append((z["hp"], z["walk"], z["eat"], row,
-                                     "noswallow" in z.get("tags", ()), sdps, crash))
+                                     "noswallow" in z.get("tags", ()), sdps, crash,
+                                     "garg" in z.get("tags", ())))
     costs_of = level_model.load()["zombies"]
     for entry in level["dynamic"]:
         pool, ships = [], []
@@ -123,7 +124,7 @@ def roster(level_id: str, plan: Optional[Dict[str, Any]] = None) -> Tuple[List[L
                 continue
             n, hp, walk, eat = _spend(tuple(sorted(pool)), int(points))
             for _ in range(int(round(n))):
-                waves[w].append((hp, walk, eat, -1, False, sdps, crash))
+                waves[w].append((hp, walk, eat, -1, False, sdps, crash, False))
     return waves[1:], level.get("lanes", 5)
 
 
@@ -638,7 +639,7 @@ def fight(level_id: str, tl: Timeline, attacker: str, utility: Optional[str], wa
     for w, zombies in enumerate(waves):
         dealt = []
         here = [0.0] * lanes
-        for hp, walk, eat, row, noswallow, sdps, crash in sorted(zombies, key=lambda z: -z[0]):
+        for hp, walk, eat, row, noswallow, sdps, crash, _ in sorted(zombies, key=lambda z: -z[0]):
             lane = row if 0 <= row < lanes else min(range(lanes),
                                                      key=lambda x: (here[x], load[x]))
             here[lane] += hp

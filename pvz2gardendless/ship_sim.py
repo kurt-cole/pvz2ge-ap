@@ -69,7 +69,7 @@ def damage(level_id: str, plan: Optional[Dict[str, Any]] = None, dps: float = 0.
     for w, zombies in enumerate(waves):
         here = [0.0] * lanes
         kills = []
-        for hp, walk, _, row, _, sdps, crash in sorted(zombies, key=lambda z: -z[0]):
+        for hp, walk, _, row, _, sdps, crash, _ in sorted(zombies, key=lambda z: -z[0]):
             lane = row if 0 <= row < lanes else min(range(lanes),
                                                      key=lambda x: (here[x], load[x]))
             here[lane] += hp

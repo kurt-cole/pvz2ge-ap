@@ -800,7 +800,7 @@ window.electron = electron;
       const killSet = window._AP_conveyorKillingInstants;
       if (killSet && killSet.has(cn)) usable = usable.filter(c => killSet.has(c));
       if (usable.length >= 2) {
-        const rnd = _apRng(_apHash(String(window._AP_conveyorSeed || 0) + '|wave|' +
+        const rnd = _apRng(_apHash(String(window._AP_conveyorSeed || 0) + _apBeltTag() + '|wave|' +
                                    st.key + '|' + cn));
         const familyOf = window._AP_conveyorFamily || {};
         const kin = usable.filter(c => familyOf[c] === familyOf[cn]);
@@ -862,7 +862,7 @@ window.electron = electron;
           // stable: the same level always produces the same belt, and a retry
           // is not a reroll. That only holds because nothing below writes back
           // to props -- the entries are copied, see the map() further down.
-          const rnd = _apRng(_apHash(String(window._AP_conveyorSeed || 0) + '|' +
+          const rnd = _apRng(_apHash(String(window._AP_conveyorSeed || 0) + _apBeltTag() + '|' +
                                      list.map(e => (e && e.PlantType) || '').join('|')));
           // Does this lawn have deep water? Two signals, because the grid may
           // not be built yet when the conveyor is set: the game's own flag, and
@@ -1193,8 +1193,21 @@ window.electron = electron;
   // thaw against its frost winds is the Hot Potato wave 5 deals, and nothing
   // in Hot Potato's swap group thaws.
   const AP_PUZZLE_BELTS = ['ghostpepper3'];
+  // The belt guard's pick (slot_data belt_attempts): which roll of the level's
+  // belt generation checked against the level, or -1 when none held and the
+  // belt plays as shipped. A seed or level without an entry rolls attempt 0,
+  // the client's own roll, which is what every seed before the guard did.
+  function _apBeltAttempt() {
+    const a = (window._AP_beltAttempts || {})[_apLevelKey()];
+    return typeof a === 'number' ? a : 0;
+  }
+  // Folded into both belt hashes after the seed, as belt_roll.roll does.
+  function _apBeltTag() {
+    const a = _apBeltAttempt();
+    return a > 0 ? '#' + a : '';
+  }
   function _apPuzzleBelt() {
-    return AP_PUZZLE_BELTS.indexOf(_apLevelKey()) >= 0;
+    return AP_PUZZLE_BELTS.indexOf(_apLevelKey()) >= 0 || _apBeltAttempt() < 0;
   }
 
   // Where a level names a zombie. Only a Zombies[].Type entry is a spawn -- one
@@ -2963,6 +2976,7 @@ window.electron = electron;
   function syncConveyorConfig() {
     window._AP_randomizeConveyor = !!st.randomizeConveyor;
     window._AP_conveyorSeed      = st.conveyorSeed || 0;
+    window._AP_beltAttempts      = st.beltAttempts || {};
   }
 
   // Same idea for the zombie shuffle. The tiers come from slot_data rather
@@ -4915,6 +4929,9 @@ window.electron = electron;
           syncGrantedUpgrades();
           st.randomizeConveyor = !!pkt.slot_data.randomize_conveyor;
           st.conveyorSeed      = pkt.slot_data.conveyor_seed || 0;
+          // The belt guard's pick per level; absent on older seeds, read as
+          // attempt 0 everywhere (see _apBeltAttempt).
+          st.beltAttempts      = pkt.slot_data.belt_attempts || {};
           syncConveyorConfig();
           // Absent on seeds predating the option, which reads as off. The
           // tiers are persisted on st alongside the flag so a page reload can

@@ -41,7 +41,7 @@ from .locations import (
 from .regions import create_regions as build_regions
 from .rules import set_rules as apply_rules
 from .zombie_data import ZOMBIE_TIERS, ZOMBIE_HP
-from . import budget_logic, plant_order, power_logic
+from . import belt_guard, budget_logic, plant_order, power_logic
 
 # ── Launcher ──────────────────────────────────────────────────────────────────
 
@@ -821,7 +821,7 @@ class PvZ2GardendlessWorld(World):
         # the run to a stricter (unreachable) threshold than the
         # generation-time rule actually requires.
         req = min(self.options.worlds_required.value, len(goal_locs))
-        return {
+        slot = {
             "death_link":      bool(self.options.death_link),
             "game_version":    "0.8.x",
             "goal_type":       self.options.goal_type.current_key,
@@ -962,3 +962,11 @@ class PvZ2GardendlessWorld(World):
             "include_danger_rooms":     bool(self.options.include_danger_rooms),
             "include_levels_past_goal": bool(self.options.include_levels_past_goal),
         }
+        # The belt guard's pick per conveyor level: which reroll of the belt
+        # (belt_roll) the client deals, -1 for the belt as shipped. Computed
+        # after conveyor_seed is drawn above and consumes no RNG. A client
+        # without this key, or a level without an entry, rolls attempt 0, the
+        # client's own roll, which is what every seed before the guard did.
+        if slot["randomize_conveyor"]:
+            slot["belt_attempts"] = belt_guard.attempts(self, slot["conveyor_seed"])
+        return slot
