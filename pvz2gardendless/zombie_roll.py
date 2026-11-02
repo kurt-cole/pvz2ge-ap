@@ -590,8 +590,17 @@ def _keep_wave_one(level_id: str, level, plan: Dict[str, Any]) -> Dict[str, Any]
 
 
 def roll_level(seed: int, level_id: str, dinos: bool = False,
-               goal_type: int = 2) -> Optional[Dict[str, Any]]:
-    """The plan for one level, or None when the level is never rolled."""
+               goal_type: int = 2, accept=None,
+               forced: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    """The plan for one level, or None when the level is never rolled.
+
+    `accept(plan) -> bool` is an extra guard generation may put on top of the
+    ratio bound (the Aerial Fortress ship guard, ship_sim.accepts): an attempt
+    it rejects is never chosen, and a level none passes ships vanilla. The
+    client cannot run it, so generation sends the attempt it chose and the
+    client rolls with `forced`: that attempt as is (-1: vanilla), no guard.
+    With neither, the roll is exactly the spec above.
+    """
     t = tables()
     level = t.model["levels"].get(level_id)
     if level is None or level_id in NEVER_ROLLED or not eligible(level):
@@ -648,21 +657,31 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
         added = _dino_events(dino_rng, level, budget)
     scale = 1000 - DINO_BUDGET_PERMILLE if added else 1000
 
+    if forced is not None and forced < 0:
+        return {"level": level_id, "attempt": -1, "vanilla": True, "budget": budget,
+                "ratio": 1000, "groups": [dict(g) for g in level["groups"]],
+                "dynamic": {}, "dinos": []}
     best = None
     for attempt in range(TRIES):
+        if forced is not None and attempt != forced:
+            continue
         rng, groups, mapping = _attempt(t, seed, level_id, level, attempt, scale,
                                         vanilla, pools, pools_first)
         total = _groups_hp(t, groups) + _dynamic_hp(t, level, mapping) + graves
         if added:
             total = total * 1000 // (1000 - DINO_BUDGET_PERMILLE)
         ratio = total * 1000 // budget if budget else 1000
+        plan = {"level": level_id, "attempt": attempt, "vanilla": False,
+                "budget": budget, "ratio": ratio, "groups": groups,
+                "dynamic": mapping, "dinos": sorted(added)}
+        if forced is not None:
+            return _keep_wave_one(level_id, level, plan)
         top, count = _max_share(groups)
         share = top * 1000 // count if count else 0
         if share > knee and rng.below(1000) >= _accept_permille(share - knee):
             continue
-        plan = {"level": level_id, "attempt": attempt, "vanilla": False,
-                "budget": budget, "ratio": ratio, "groups": groups,
-                "dynamic": mapping, "dinos": sorted(added)}
+        if accept is not None and not accept(_keep_wave_one(level_id, level, dict(plan))):
+            continue
         if LEVEL_OK[0] <= ratio <= LEVEL_OK[1]:
             return _keep_wave_one(level_id, level, plan)
         if best is None or abs(ratio - 1000) < abs(best["ratio"] - 1000):

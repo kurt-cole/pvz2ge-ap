@@ -284,6 +284,7 @@ class PvZ2GardendlessWorld(World):
     budget_mode: bool = False
     budget_plans: dict = {}
     budget_hazards: dict = {}
+    ship_attempts: dict = {}
     logic_jester_power: tuple = ()
     logic_budget_power: tuple = ()
 

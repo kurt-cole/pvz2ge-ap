@@ -14,6 +14,9 @@ Design: POWER_SIM.md. Three tables, each read from the game's own data:
            speed, eat DPS and the nullifier tags counter rules read.
   LEVELS   per level the player brings plants to: starting sun, the sky-sun
            dropper it actually uses, the wave timer inputs, lanes.
+  SHIPS    per Aerial Fortress level with a SkyCityShip module, conveyor and
+           preset ones included: the ship's hit points, its edge, the deck
+           width and the wave timer inputs (ship_sim.py, POWER_SIM.md).
 
 Record fields (absent means 0 / none):
   k   class: shooter short contact burst instant chomp sunburn producer
@@ -31,6 +34,11 @@ Record fields (absent means 0 / none):
   kb  tiles of knockback per hit
   sb  sun spent per shot (sunburn)
   tags: ice, instant, backward, ranged
+
+Zombie field `ship` (only zombies whose props carry SkyCityShipDetectXOffset):
+  [ShipDPS, CrashDamageToShip], 0 where the props have none. A firing zombie
+  deals ShipDPS for as long as it stands at the ship's edge; a crashing one
+  deals CrashDamageToShip once and dies.
 """
 
 import argparse
@@ -446,6 +454,52 @@ def level_sim(level, modules):
     }
 
 
+# SkyCityShipProperties class defaults [data, index.js]: Toughness 2e4,
+# ToughnessShield 1e4, ForceShielded false, EdgeX 2.5 (tiles from the left).
+SHIP_DEFAULTS = {"Toughness": 20000.0, "ToughnessShield": 10000.0, "EdgeX": 2.5}
+
+
+def level_ship(level, modules):
+    """The ship record of a level with a SkyCityShip module, else None."""
+    definition = level.data("LevelDefinition")
+    ship = None
+    for mod in definition.get("Modules") or []:
+        m = RTID_FULL.match(mod) if isinstance(mod, str) else None
+        if not m:
+            continue
+        src = modules if m.group(2) == "LevelModules" else {
+            a: (o.get("objdata") or {}) for a, o in level.by_alias.items()}
+        obj = level.by_alias.get(m.group(1)) if m.group(2) != "LevelModules" else None
+        if (obj and obj.get("objclass") == "SkyCityShipProperties") or \
+                (obj is None and "SkyCityShip" in m.group(1)):
+            ship = dict(SHIP_DEFAULTS)
+            ship.update({k: v for k, v in (src.get(m.group(1)) or {}).items()
+                         if isinstance(v, (int, float, bool))})
+    if ship is None:
+        return None
+    hp = f(ship["Toughness"])
+    # [guess] the shield counts only when the level forces it on.
+    if ship.get("ForceShielded") is True:
+        hp += f(ship["ToughnessShield"])
+    manager = level.manager()
+    waves = manager.get("Waves") or []
+    flag = manager.get("FlagWaveInterval")
+    flag = min(len(waves), int(flag)) if isinstance(flag, (int, float)) and flag else \
+        DEFAULT_FLAG_INTERVAL
+    lo = f(manager.get("MinNextWaveHealthPercentage"), DEFAULT_NEXT_HP[0])
+    hi = f(manager.get("MaxNextWaveHealthPercentage"), DEFAULT_NEXT_HP[1])
+    edge = f(ship["EdgeX"], 2.5)
+    return {
+        "hp": hp,
+        "edge": edge,
+        # Deck columns: the tiles left of the edge (lawnSky.skyTiles: 4-9 are sky).
+        "deck": max(1, int(edge + 0.5)),
+        "first": f(manager.get("ZombieCountdownFirstWaveSecs"), DEFAULT_FIRST_WAVE),
+        "flag": flag,
+        "next": round((lo + hi) / 2, 3),
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--game-root", required=True)
@@ -479,6 +533,8 @@ def main() -> int:
                        "eat": f(p.get("EatDPS"), DEFAULT_EAT)}
         if tags:
             zombies[cn]["tags"] = tags
+        if "SkyCityShipDetectXOffset" in p:
+            zombies[cn]["ship"] = [f(p.get("ShipDPS")), f(p.get("CrashDamageToShip"))]
     # A family can match nothing when no tracked level spawns it (eighties_skunk
     # and sky_drone today); its rule then never fires. Reported, not fatal.
     empty = [k for k, n in family_hits.items() if not n]
@@ -495,16 +551,24 @@ def main() -> int:
         if not objects:
             continue
         levels[level_id] = level_sim(GLM.Level(level_id, objects), modules)
+    ships = {}
+    for level_id, lv in sorted(model["levels"].items()):
+        if lv.get("bespoke") or lv.get("generated") or not lv["stage"].startswith("Sky"):
+            continue
+        objects = GLM.level_objects(bundle, packed, level_id)
+        ship = level_ship(GLM.Level(level_id, objects), modules) if objects else None
+        if ship:
+            ships[level_id] = ship
 
     blob = {"game": model.get("game"), "plants": plants, "zombies": zombies,
-            "levels": levels}
+            "levels": levels, "ships": ships}
     kinds = {}
     for rec in plants.values():
         kinds[rec["k"]] = kinds.get(rec["k"], 0) + 1
     no_sky = sum(1 for lv in levels.values() if not lv["drop"])
     summary = (f"{len(plants)} plants ({', '.join(f'{k} {n}' for k, n in sorted(kinds.items()))}); "
                f"{len(zombies)} zombies, nullifiers {family_hits}; "
-               f"{len(levels)} levels, {no_sky} without sky sun.")
+               f"{len(levels)} levels, {no_sky} without sky sun; {len(ships)} ship levels.")
     print(summary)
     if args.dry_run:
         return 0

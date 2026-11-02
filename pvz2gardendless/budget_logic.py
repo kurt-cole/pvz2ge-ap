@@ -27,7 +27,7 @@ What changes under budget mode:
 
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from . import zombie_roll
+from . import ship_sim, zombie_roll
 from .constants import (EGYPT_SUN_CUT, FIRE_AURA_PLANTS, FIRE_DAMAGE_PLANTS,
                         JESTER_COUNTER_PLANTS, PARASOL_BOUNCED_PLANTS,
                         POWER_DRAW_COUNT, SIDE_PATH_CHAIN, SIDE_PATH_REGIONS,
@@ -203,6 +203,7 @@ def compute(world) -> None:
     """Roll every built level and record plans and hazards on the world."""
     world.budget_mode = enabled(world)
     world.budget_plans, world.budget_hazards = {}, {}
+    world.ship_attempts = {}
     world.parasol_levels = set()
     if not world.budget_mode:
         # Vanilla zombies: only the Parasol rule is per level in this mode.
@@ -220,7 +221,7 @@ def compute(world) -> None:
         level = levels.get(loc.name)
         if level is None:
             continue
-        plan = zombie_roll.roll_level(world.zombie_seed, loc.name, dinos, goal)
+        plan = _roll(world, loc.name, dinos, goal)
         if plan is not None:
             hazards = zombie_roll.hazards(plan)
         elif level["generated"]:
@@ -233,6 +234,26 @@ def compute(world) -> None:
         if level["own_plants"] and (plan is not None or not level["generated"]) and \
                 zombie_roll.fielded(plan or _vanilla_plan(loc.name)) & PARASOL_ZOMBIES:
             world.parasol_levels.add(loc.name)
+    # Ship levels outside the built set can still be played; the client rolls
+    # them too, so they get the guarded attempt as well.
+    for name in sorted(ship_sim.SHIPS):
+        if name in levels and name not in world.ship_attempts:
+            _roll(world, name, dinos, goal)
+
+
+def _roll(world, name: str, dinos: bool, goal: int):
+    """roll_level, with the Aerial Fortress ship guard on ship levels.
+
+    The guard is generation-only (ship_sim), so the attempt it chose is
+    recorded for slot_data (client_tables, ship_attempts).
+    """
+    if not ship_sim.is_ship_level(name):
+        return zombie_roll.roll_level(world.zombie_seed, name, dinos, goal)
+    plan = zombie_roll.roll_level(world.zombie_seed, name, dinos, goal,
+                                  accept=lambda p: ship_sim.accepts(name, p))
+    if plan is not None:
+        world.ship_attempts[name] = plan["attempt"]
+    return plan
 
 
 def level_required_dps(world, name: str) -> Optional[float]:
@@ -411,6 +432,12 @@ def client_tables(world) -> Dict[str, Any]:
         # Seeds rolled before 2026-10-26 put dinos on Aerial Fortress lawns,
         # where they fall off. The same fallback as plants_lost_rule.
         "sky_dino_rule": 1,
+        # {level: attempt} the Aerial Fortress ship guard chose (ship_sim; -1
+        # is vanilla). The client rolls a listed level at that attempt rather
+        # than running the guard it does not have. Absent (seeds before
+        # 2026-11-01, or an older client ignoring it): the unguarded roll, as
+        # before.
+        "ship_attempts": dict(sorted(getattr(world, "ship_attempts", {}).items())),
         # The dino chance per goal. Sent, not shared as a client constant, so a
         # re-derived chance cannot change the roll of a seed already played.
         "dino_permille": list(zombie_roll.DINO_LEVEL_PERMILLE_BY_GOAL),

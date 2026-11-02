@@ -30,6 +30,7 @@ PY_SUITES = [
     ("balancev2",  "balance_v2_test.py", "the budget zombie roll replayed over every level"),
     ("budget",     "budget_logic_test.py", "generation logic built from the budget roll"),
     ("powersel",   "power_selection_test.py", "the plant-power selection keeps logic small"),
+    ("shipsim",    "ship_sim_test.py", "Aerial Fortress ship guard and ship fight"),
     ("rollvectors","roll_vectors_test.py", "the budget roll's parity vectors are current"),
     ("tracker",    "tracker_test.py", "Universal Tracker rebuilds the same seed"),
     ("plantorder", "plant_order_test.py", "weak useful plants in earlier spheres than strong ones"),

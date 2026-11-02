@@ -82,6 +82,50 @@ Per level:
 A level passes when no lane fails. Mowers and plant food are not modelled, on
 purpose, as a safety margin.
 
+## Ship levels (Aerial Fortress)
+
+[data, game index.js and level data] On a lawn with a `SkyCityShip` module
+(28 tracked levels, conveyor and preset ones included; `SIM_DATA["ships"]`) a
+zombie never eats its way in. It stops at the ship's edge (`EdgeX` 2.5) and:
+
+- fires at the ship for `ShipDPS` per second while it lives (sky basics 100,
+  Sky Gargantuar 300), or
+- crashes for `CrashDamageToShip` once and dies (battleplane 1200, Twin and
+  ArbiterX 2000). A battleplane whose imp still lives flees instead; [guess]
+  modelled as crashing, which is the harsher reading.
+
+The ship has `Toughness` 20000 on every tracked level. Zombie ship fields come
+from their props (`sim_data` zombie field `ship`); a dynamic spawn uses its
+pool's mean [guess]. The per-zombie `SkyCityShipDetectXOffset` (under a tile)
+is ignored, and so are battleplane bullets and Sky Gargantuar imps.
+
+**Player-picked ship levels (power sim).** `fight` treats a zombie reaching the
+edge as ship damage instead of a lost lane: a firing zombie costs ShipDPS from
+arrival until it dies (copies bought while it fires are planted against it), a
+crasher costs its crash damage and leaves the lane's queue having taken only
+what it was dealt before arriving. [user] A loadout passes while the ship keeps
+`SHIP_MARGIN` (10%) of its HP. Only the deck columns (3) take plants, less the
+producer columns, unless the attacker floats (`SKY_FLOATING_ATTACKERS`): the
+world has no Flower Pot item, as the Aerial Fortress entry rule already
+assumes. Walls are never reached. Non-ship levels simulate exactly as before;
+their table rows are carried over (`gen_power_table.py --resim ships`).
+
+**The roll guard (`pvz2gardendless/ship_sim.py`).** An HP-balanced roll can
+trade a few tough zombies for a swarm (sky16 wave 8: six zombies to 18), which
+the HP ratio cannot see and which burns the ship. Generation does not know the
+belt (or the player's plants), so each ship level runs against a reference
+defence: the same DPS in every lane, calibrated per level as the weakest
+defence keeping the vanilla roster at or under half the ship's HP. [user] An
+attempt passes when its ship damage there is at most `TOLERANCE_PERMILLE`
+(1150) of vanilla's at the roll's HP ratio, and below the ship's HP; a level no
+attempt passes ships vanilla, as the ratio bound already does. This applies on
+top of the ratio bound, on every ship level.
+
+The guard is generation-only. Generation sends the attempt it chose as
+`zombie_budget.ship_attempts` (`{level: attempt}`, -1 vanilla) and the client
+rolls that attempt directly (`_apbRoll`'s `forced`). Without the key (older
+seeds, or an older client ignoring it) the client rolls unguarded, as before.
+
 ## Plant behaviour (`tools/gen_sim_data.py` -> `pvz2gardendless/sim_data.py`)
 
 Each plant gets a behaviour class with its numbers read from its own props, plus a

@@ -82,6 +82,27 @@ const tables = B._apbTables(V.tables);
   else ok(`all ${count} plans match Python bit for bit (${rolled} rolled, ${dinos} with dino events)`);
 }
 
+// ── a forced attempt (slot_data ship_attempts) ───────────────────────────────
+// Generation's ship guard sends the attempt it chose; the client must roll
+// exactly that attempt. Forcing the attempt the unguarded roll picked has to
+// give the same plan back, and -1 the vanilla one.
+{
+  const bad = [];
+  let count = 0;
+  for (const c of V.fixtures.concat(V.rolls)) {
+    const model = c.objects ? B._apbModel(clone(c.objects)) : c.model;
+    for (const p of c.plans) {
+      if (!p.plan) continue;
+      count++;
+      const js = view(B._apbRoll(tables, p.seed, c.level, model, p.dinos, p.goal,
+                                 p.plan.attempt));
+      if (!same(js, p.plan)) bad.push(`${c.level} seed ${p.seed} attempt ${p.plan.attempt}: ${firstDiff(js, p.plan)}`);
+    }
+  }
+  if (bad.length) fail(`${bad.length} of ${count} forced attempts differ from the chosen plan: ${bad[0]}`);
+  else ok(`all ${count} plans reproduce when their attempt is forced (-1 is vanilla)`);
+}
+
 // ── writing a plan back ──────────────────────────────────────────────────────
 {
   const bad = [];

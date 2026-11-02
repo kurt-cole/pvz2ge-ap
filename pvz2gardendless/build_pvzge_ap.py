@@ -2113,7 +2113,10 @@ window.electron = electron;
   }
 
   // roll_level(), as the Python. null for a level the roll never touches.
-  function _apbRoll(t, seed, levelId, level, dinos, goal) {
+  // `forced`: the attempt generation's Aerial Fortress ship guard chose
+  // (slot_data ship_attempts; -1 is vanilla), rolled as is. The guard itself is
+  // generation-only. Undefined or null: the unguarded roll, as before.
+  function _apbRoll(t, seed, levelId, level, dinos, goal, forced) {
     if (!level || level.bespoke || level.generated ||
       APB.NEVER_ROLLED.indexOf(levelId) >= 0) return null;
     const graves = _apbGravesHp(t, level);
@@ -2173,18 +2176,25 @@ window.electron = electron;
       added = _apbDinoEvents(dinoRng, level, budget);
     }
     const scale = added.length ? 1000 - APB.DINO_BUDGET_PERMILLE : 1000;
+    const isForced = forced !== undefined && forced !== null;
+    if (isForced && forced < 0) {
+      return { attempt: -1, vanilla: true, budget: budget, ratio: 1000,
+               groups: level.groups, dynamic: {}, dinos: [] };
+    }
     let best = null;
     for (let attempt = 0; attempt < APB.TRIES; attempt++) {
+      if (isForced && attempt !== forced) continue;
       const a = _apbAttempt(t, seed, levelId, level, attempt, scale, vanilla, pools,
                             cutFirst ? poolsFirst : pools);
       let total = _apbGroupsHp(t, a.groups) + _apbDynamicHp(t, level, a.mapping) + graves;
       if (added.length) total = Math.floor(total * 1000 / (1000 - APB.DINO_BUDGET_PERMILLE));
       const ratio = budget ? Math.floor(total * 1000 / budget) : 1000;
+      const plan = { attempt: attempt, vanilla: false, budget: budget, ratio: ratio,
+                     groups: a.groups, dynamic: a.mapping, dinos: added.slice() };
+      if (isForced) return _apbKeepWaveOne(levelId, level, plan);
       const sh = _apbMaxShare(a.groups);
       const share = sh[1] ? Math.floor(sh[0] * 1000 / sh[1]) : 0;
       if (share > knee && a.rng.below(1000) >= _apbAccept(share - knee)) continue;
-      const plan = { attempt: attempt, vanilla: false, budget: budget, ratio: ratio,
-                     groups: a.groups, dynamic: a.mapping, dinos: added.slice() };
       if (ratio >= APB.LEVEL_OK[0] && ratio <= APB.LEVEL_OK[1]) return _apbKeepWaveOne(levelId, level, plan);
       if (best === null || Math.abs(ratio - 1000) < Math.abs(best.ratio - 1000)) best = plan;
     }
@@ -2330,7 +2340,11 @@ window.electron = electron;
     if (!cfg.data.plants_lost_rule) model.plants_lost = false;
     // Likewise dinos on Aerial Fortress lawns, before sky_dino_rule.
     if (!cfg.data.sky_dino_rule) model.sky_legacy = true;
-    const plan = _apbRoll(_apbTableCache, cfg.seed, levelId, model, cfg.dinos, cfg.goal);
+    // The attempt the ship guard chose at generation, if this level has one.
+    const shipAttempts = cfg.data.ship_attempts || {};
+    const forced = Object.prototype.hasOwnProperty.call(shipAttempts, levelId)
+      ? shipAttempts[levelId] : null;
+    const plan = _apbRoll(_apbTableCache, cfg.seed, levelId, model, cfg.dinos, cfg.goal, forced);
     const shape = ' key=' + JSON.stringify(levelId) + ' seed=' + cfg.seed +
         ' own=' + (model.own_plants ? 1 : 0) + ' waves=' + model.waves +
         ' groups=' + model.groups.length + ' dyn=' + model.dynamic.length;

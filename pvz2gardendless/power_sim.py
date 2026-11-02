@@ -25,12 +25,20 @@ Two phases, so a break-even search over hp_scale re-runs only the second:
 Geometry [guess, calibrate]: zombies enter at x = SPAWN_X tiles; producers take
 the back columns, attackers stand in front of them, walls and contact plants in
 front of the attackers.
+
+Aerial Fortress ship levels (SIM_DATA["ships"]) are fought differently: a zombie
+stops at the ship's edge and damages the ship instead of eating plants, so a
+leak costs ship HP rather than the lane. A firing zombie deals its ShipDPS until
+it is killed; a crashing one deals its crash damage once and is gone. The level
+fails once the ship has taken more than (1 - SHIP_MARGIN) of its HP. Only the
+deck columns take plants, except the floating attackers. See POWER_SIM.md.
 """
 
 from typing import Any, Dict, List, Optional, Tuple
 
 from .sim_data import SIM_DATA
 from . import level_model
+from .constants import SKY_FLOATING_ATTACKERS
 
 LANE_TILES = 9
 SPAWN_X = 9.5
@@ -40,10 +48,15 @@ WAVE_TIMER = 27.5         # 25 + rand*5 [data]
 FLAG_EXTRA = 10.0         # after a flag wave [data]
 PLANT_BITE = 3.0          # seconds a zombie spends eating a 300-toughness plant
 END_PAD = 60.0
+# [user] A loadout passes a ship level while the ship keeps 10% of its HP.
+SHIP_MARGIN = 0.10
 
 PLANTS = SIM_DATA["plants"]
 ZOMBIES = SIM_DATA["zombies"]
 LEVELS = SIM_DATA["levels"]
+# Absent from a sim_data generated before ship levels were modelled.
+SHIPS = SIM_DATA.get("ships", {})
+SKY_FLOATING = frozenset(SKY_FLOATING_ATTACKERS)
 
 ATTACK_KINDS = ("shooter", "short", "contact", "burst", "instant", "chomp", "sunburn")
 
@@ -63,11 +76,13 @@ def utilities() -> List[str]:
 # ── roster ───────────────────────────────────────────────────────────────────
 
 def roster(level_id: str, plan: Optional[Dict[str, Any]] = None) -> Tuple[List[List[Tuple]], int]:
-    """([wave -> [(hp, walk, eat, row or -1)]], lanes) for a level.
+    """([wave -> [(hp, walk, eat, row or -1, noswallow, ship dps, ship crash)]],
+    lanes) for a level.
 
     `plan` is a budget-roll plan (zombie_roll.roll_level); None is the vanilla
     roster. Dynamic spawn points are spent at the expected HP and count of their
-    pool.
+    pool. The ship fields are 0 for a zombie that does not act on the Aerial
+    Fortress ship (sim_data zombie field `ship`).
     """
     level = level_model.load()["levels"][level_id]
     waves_n = max(1, level["waves"])
@@ -82,27 +97,33 @@ def roster(level_id: str, plan: Optional[Dict[str, Any]] = None) -> Tuple[List[L
                 z = ZOMBIES.get(cn)
                 if not z or z["hp"] <= 0:
                     continue
+                sdps, crash = z.get("ship", (0.0, 0.0))
                 for j in range(n):
                     row = rows[(i + j) % len(rows)] - 1 if rows else -1
                     waves[w].append((z["hp"], z["walk"], z["eat"], row,
-                                     "noswallow" in z.get("tags", ())))
+                                     "noswallow" in z.get("tags", ()), sdps, crash))
     costs_of = level_model.load()["zombies"]
     for entry in level["dynamic"]:
-        pool = []
+        pool, ships = [], []
         for c in entry["pool"]:
             z = ZOMBIES.get(mapping.get(c, c))
             cost = costs_of.get(c, {}).get("cost", 0)
             if z and z["hp"] > 0 and cost > 0:
                 pool.append((cost, z["hp"], z["walk"], z["eat"]))
+                ships.append(z.get("ship", (0.0, 0.0)))
         if not pool:
             continue
+        # [guess] a dynamic spawn acts on the ship at its pool's mean ShipDPS
+        # and crash damage; 0 off a ship lawn.
+        sdps = sum(x[0] for x in ships) / len(ships)
+        crash = sum(x[1] for x in ships) / len(ships)
         for w in range(max(1, entry["w"]), waves_n + 1):
             points = entry["p"] + entry["inc"] * (w - entry["w"])
             if points <= 0:
                 continue
             n, hp, walk, eat = _spend(tuple(sorted(pool)), int(points))
             for _ in range(int(round(n))):
-                waves[w].append((hp, walk, eat, -1, False))
+                waves[w].append((hp, walk, eat, -1, False, sdps, crash))
     return waves[1:], level.get("lanes", 5)
 
 
@@ -151,7 +172,7 @@ def _spend(pool, points):
 class Timeline:
     """What the loadout has on the lawn over time, per lane."""
     __slots__ = ("lanes", "rate", "walls", "front", "uses", "ut_uses", "stops", "chill",
-                 "placed", "burn", "pcols", "_d_rate", "_d_count")
+                 "placed", "burn", "pcols", "cap", "_d_rate", "_d_count")
 
     def __init__(self, lanes):
         self.lanes = lanes
@@ -173,6 +194,7 @@ class Timeline:
         # per lane: sunburn damage delivered at a moment, [(time, damage)]
         self.burn: List[List[Tuple[float, float]]] = [[] for _ in range(lanes)]
         self.pcols = 0
+        self.cap = 0
         # per lane: (time, change) of damage rate and attacker count, turned
         # into `rate` and `front` by finish()
         self._d_rate: List[List[Tuple[float, float]]] = [[] for _ in range(lanes)]
@@ -222,7 +244,7 @@ def lane_weights(waves, lanes: int) -> List[float]:
     """
     w = [0.0] * lanes
     for wave in waves:
-        for hp, _, _, row, _ in wave:
+        for hp, _, _, row, *_ in wave:
             if 0 <= row < lanes:
                 w[row] += hp
             else:
@@ -246,6 +268,17 @@ def _pick(counts, weights, cap):
 def lane_cap(pcols: int) -> int:
     """Attackers a lane holds: the tiles in front of the producers, less one for a wall."""
     return max(1, LANE_TILES - pcols - 1)
+
+
+def level_cap(level_id: str, attacker: str, pcols: int) -> int:
+    """lane_cap, except on a ship level: there only the deck columns take plants
+    (the rest is sky, plantable only on a Flower Pot, not modelled), unless the
+    attacker floats (SKY_FLOATING_ATTACKERS). No wall column: a ship zombie
+    never walks onto the deck."""
+    ship = SHIPS.get(level_id)
+    if ship is None or attacker in SKY_FLOATING:
+        return lane_cap(pcols)
+    return max(1, ship["deck"] - pcols)
 
 
 def economy(level_id: str, producer: Optional[str], count: int, attacker: str,
@@ -275,7 +308,7 @@ def economy(level_id: str, producer: Optional[str], count: int, attacker: str,
     lane_ut = [0] * lanes
     p_cols = (count + lanes - 1) // lanes if pr else 0
     tl.pcols = p_cols
-    cap = lane_cap(p_cols)
+    cap = tl.cap = level_cap(level_id, attacker, p_cols)
     atk_bank = atk["k"] == "instant"
     life = atk.get("life", 0.0)
     expiries: List[Tuple[float, int]] = []     # (time, lane) a placed attacker expires
@@ -430,6 +463,19 @@ def _time_to_deal(rate, start, hp):
     return float("inf")
 
 
+def _dealt(rate, start, end):
+    """Damage the segments in `rate` deliver between start and end."""
+    total = 0.0
+    n = len(rate)
+    for i in range(n):
+        seg_t, seg_r = rate[i]
+        seg_end = rate[i + 1][0] if i + 1 < n else float("inf")
+        a, b = max(seg_t, start), min(seg_end, end)
+        if b > a:
+            total += seg_r * (b - a)
+    return total
+
+
 def _burn_to_deal(burn, start, hp):
     """Earliest moment the sunburn shots delivered after `start` total hp."""
     need = hp
@@ -464,7 +510,7 @@ class _Lawn:
     def __init__(self, tl, atk, fixed):
         self.lanes = tl.lanes
         self.pcols = tl.pcols
-        self.cap = lane_cap(tl.pcols)
+        self.cap = tl.cap or lane_cap(tl.pcols)
         self.per_copy = _lane_rate(atk)
         self.life = atk.get("life", 0.0)
         self.spread = atk.get("l", 1) >= 3
@@ -545,6 +591,14 @@ def fight(level_id: str, tl: Timeline, attacker: str, utility: Optional[str], wa
     if ut and not ut.get("hp"):
         ut_stop = ut.get("fz", 0.0) + ut.get("kb", 0.0) / 0.185
     t_wave = lv["first"]
+    ship = SHIPS.get(level_id)
+    ship_left = [ship["hp"] * (1.0 - SHIP_MARGIN)] if ship else None
+
+    def to_ship(amount):
+        """Ship damage taken; False once the ship is past its margin."""
+        ship_left[0] -= amount
+        return ship_left[0] >= 0.0
+
     # HP dealt to each lane this wave, then so far this level: spawns spread
     # within a wave, and across waves one lane never takes every wave's heaviest.
     load = [0.0] * lanes
@@ -561,13 +615,21 @@ def fight(level_id: str, tl: Timeline, attacker: str, utility: Optional[str], wa
         stops = min(0.8, tl.stops[lane] + lawn.freeze * n)
         speed = max(walk * (0.5 if chill else 1.0) * (1.0 - stops), 1e-3)
         front = float(lawn.pcols + n) if n else 0.0
-        walk_in = max(0.0, SPAWN_X - front - 0.5) / speed
-        # The lane is lost once the zombie has eaten through every plant in
-        # it, a PLANT_BITE each; the ones behind keep firing meanwhile.
-        deadline = t_wave + walk_in + PLANT_BITE * max(1.0, front)
-        walls = sum(h for tw, h in tl.walls[lane] if tw <= deadline) - eaten[lane]
-        if walls > 0:
-            deadline += walls / max(eat, 1.0)
+        if ship:
+            # The zombie stops at the ship's edge and acts on the ship from
+            # there, so `deadline` is its arrival; walls on the deck are never
+            # reached.
+            walk_in = max(0.0, SPAWN_X - ship["edge"]) / speed
+            deadline = t_wave + walk_in
+            walls = 0.0
+        else:
+            walk_in = max(0.0, SPAWN_X - front - 0.5) / speed
+            # The lane is lost once the zombie has eaten through every plant in
+            # it, a PLANT_BITE each; the ones behind keep firing meanwhile.
+            deadline = t_wave + walk_in + PLANT_BITE * max(1.0, front)
+            walls = sum(h for tw, h in tl.walls[lane] if tw <= deadline) - eaten[lane]
+            if walls > 0:
+                deadline += walls / max(eat, 1.0)
         stopped = bool(ut_stop and ut_uses and ut_uses[0] <= deadline)
         if stopped:
             deadline += ut_stop
@@ -576,22 +638,29 @@ def fight(level_id: str, tl: Timeline, attacker: str, utility: Optional[str], wa
     for w, zombies in enumerate(waves):
         dealt = []
         here = [0.0] * lanes
-        for hp, walk, eat, row, noswallow in sorted(zombies, key=lambda z: -z[0]):
+        for hp, walk, eat, row, noswallow, sdps, crash in sorted(zombies, key=lambda z: -z[0]):
             lane = row if 0 <= row < lanes else min(range(lanes),
                                                      key=lambda x: (here[x], load[x]))
             here[lane] += hp
             load[lane] += hp
-            dealt.append((lane, hp * hp_scale, walk, eat, noswallow))
+            dealt.append((lane, hp * hp_scale, walk, eat, noswallow, sdps, crash))
         # An instant use covers every zombie of this wave in its lanes, up to its
         # target count: {lane: [use time, targets left]}.
         blast: Dict[int, List[float]] = {}
         kills = []
-        for lane, hp, walk, eat, noswallow in dealt:
+        for lane, hp, walk, eat, noswallow, sdps, crash in dealt:
+            if ship and not walk:
+                continue          # immobile (the dropship): never reaches the ship
             if kind == "instant":
                 front, speed, walk_in, deadline, walls, stopped = timing(lane, walk, eat)
                 if stopped:
                     ut_uses.pop(0)
                 if atk.get("d", 0.0) < hp:
+                    if ship and crash:
+                        if not to_ship(crash):
+                            return False
+                        kills.append((deadline, hp))
+                        continue
                     return False
                 held = blast.get(lane)
                 if held and held[1] > 0 and held[0] <= deadline:
@@ -600,6 +669,17 @@ def fight(level_id: str, tl: Timeline, attacker: str, utility: Optional[str], wa
                     continue
                 arm = atk.get("a", 0.0)
                 pick = next((i for i, u in enumerate(uses) if u + arm <= deadline), None)
+                if pick is None and ship:
+                    # It reaches the ship: a crasher is spent on it, a firing
+                    # zombie fires until the next use lands.
+                    if crash:
+                        if not to_ship(crash):
+                            return False
+                        kills.append((deadline, hp))
+                        continue
+                    pick = next((i for i, u in enumerate(uses) if u + arm > deadline), None)
+                    if pick is None or not to_ship(sdps * (uses[pick] + arm - deadline)):
+                        return False
                 if pick is None:
                     return False
                 used = max(t_wave, uses.pop(pick) + arm)
@@ -611,7 +691,12 @@ def fight(level_id: str, tl: Timeline, attacker: str, utility: Optional[str], wa
                 kills.append((used, hp))
                 continue
             if kind == "chomp" and noswallow:
-                # Only its ChompFailDamage lands; one attacker type cannot finish it.
+                # Only its ChompFailDamage lands; one attacker type cannot finish
+                # it. On a ship level a crasher still spends itself on the ship.
+                if ship and crash:
+                    if not to_ship(crash):
+                        return False
+                    continue
                 return False
             if kind == "chomp":
                 # Every chomper planted by the time the zombie reaches it bites
@@ -627,7 +712,15 @@ def fight(level_id: str, tl: Timeline, attacker: str, utility: Optional[str], wa
                     if done <= deadline or not lawn.plant(lane, deadline, t_wave):
                         break
                 if done > deadline:
-                    return False
+                    if not ship or done == float("inf"):
+                        return False
+                    if crash:
+                        if not to_ship(crash):
+                            return False
+                        kills.append((deadline, hp))
+                        continue
+                    if not to_ship(sdps * (done - deadline)):
+                        return False
                 if stopped:
                     ut_uses.pop(0)
                 i = min(range(len(slots)), key=lambda k: max(slots[k], arrive))
@@ -644,6 +737,11 @@ def fight(level_id: str, tl: Timeline, attacker: str, utility: Optional[str], wa
                     if copies * per_tile >= hp or not lawn.plant(lane, t_wave + walk_in, t_wave):
                         break
                 if copies * per_tile < hp:
+                    if ship and crash:
+                        if not to_ship(crash):
+                            return False
+                        kills.append((deadline, hp))
+                        continue
                     return False
                 if stopped:
                     ut_uses.pop(0)
@@ -661,16 +759,44 @@ def fight(level_id: str, tl: Timeline, attacker: str, utility: Optional[str], wa
                     copies = max(1.0, front - lawn.pcols)
                     need_hp = hp * copies / min(copies, int(reach) + 1)
                 if kind == "sunburn":
+                    prev = busy[lane]
                     done = _burn_to_deal(tl.burn[lane], max(start, busy[lane]), hp)
                 else:
                     rate = lawn.rate(lane)
                     done = busy[lane]
                     for s0, h0 in queue[lane]:
                         done = _time_to_deal(rate, max(done, s0), h0)
+                    prev = done
                     done = _time_to_deal(rate, max(done, start), need_hp)
                 if done <= deadline or not lawn.plant(lane, deadline, t_wave):
                     break
-            if done > deadline:
+            if done > deadline and ship and crash:
+                # It crashes into the ship on arrival: the lane spent on it only
+                # what it dealt until then, and the zombies behind it move up.
+                if not to_ship(crash):
+                    return False
+                if stopped:
+                    ut_uses.pop(0)
+                if kind == "sunburn":
+                    busy[lane] = max(prev, deadline)
+                else:
+                    queue[lane].append((start, _dealt(lawn.rate(lane), max(prev, start),
+                                                      deadline)))
+                kills.append((deadline, hp))
+                continue
+            if done > deadline and ship and kind != "sunburn":
+                # It fires at the ship from its arrival until it dies, so a
+                # copy bought while it fires is planted against it too.
+                while lawn.plant(lane, done, t_wave):
+                    rate = lawn.rate(lane)
+                    prev = busy[lane]
+                    for s0, h0 in queue[lane]:
+                        prev = _time_to_deal(rate, max(prev, s0), h0)
+                    done = _time_to_deal(rate, max(prev, start), need_hp)
+            if done > deadline and ship and done < float("inf"):
+                if not to_ship(sdps * (done - deadline)):
+                    return False
+            elif done > deadline:
                 return False
             if stopped:
                 ut_uses.pop(0)

@@ -19,6 +19,14 @@ worse than another on every stat is skipped wherever the better one scores 0.
 
 Per-level results are cached under build/power_cache/ (keyed by the simulator
 and data hashes), so an interrupted run resumes.
+
+    python tools/gen_power_table.py --resim sky1,sky2,...
+
+re-simulates only the named levels and carries every other level's row over
+from the current power_table.py, for a change that provably touches only those
+levels (the ship-level fight in power_sim, which runs only where
+SIM_DATA["ships"] has the level). `--resim ships` names every ship level in the
+table. The axes must be unchanged; the tool refuses otherwise.
 """
 
 import argparse
@@ -48,7 +56,7 @@ def _load_sim():
     pkg = types.ModuleType("pvz2gardendless")
     pkg.__path__ = [os.path.join(REPO, "pvz2gardendless")]
     sys.modules.setdefault("pvz2gardendless", pkg)
-    for name in ("sim_data", "level_model", "power_sim"):
+    for name in ("plant_data", "constants", "sim_data", "level_model", "power_sim"):
         full = f"pvz2gardendless.{name}"
         if full in sys.modules:
             continue
@@ -66,7 +74,36 @@ def fingerprint():
         with open(os.path.join(REPO, "pvz2gardendless", name), "rb") as fh:
             h.update(fh.read())
     h.update(repr(SCALES).encode())
+    # power_sim reads this list from constants.py, which is not hashed whole.
+    h.update(repr(sorted(_load_sim().SKY_FLOATING)).encode())
     return h.hexdigest()[:16]
+
+
+def _current_table():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_old_power_table", OUT_PY)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def carry_over(S, cache_dir, resim):
+    """Seed the cache with the current table's rows for levels not in `resim`."""
+    old = _current_table()
+    axes = (tuple([None] + S.producers()), tuple(S.attackers()),
+            tuple([None] + S.utilities()), SCALES)
+    if (old.PRODUCER_AXIS, old.ATTACKERS, old.UTILITY_AXIS, tuple(old.SCALES)) != axes:
+        raise SystemExit("--resim: the axes changed since power_table.py was written; "
+                         "run the full table")
+    n = 0
+    for lv, packed in old.TABLE.items():
+        path = os.path.join(cache_dir, lv + ".bin")
+        if lv in resim or lv not in S.LEVELS or os.path.exists(path):
+            continue
+        with open(path, "wb") as fh:
+            fh.write(zlib.decompress(base64.b64decode(packed)))
+        n += 1
+    return n
 
 
 def dominated_by(S, producers):
@@ -156,6 +193,9 @@ def main() -> int:
     ap.add_argument("--no-write", action="store_true", help="fill the cache only")
     ap.add_argument("--partial", action="store_true",
                     help="write the table from the levels already cached, simulate none")
+    ap.add_argument("--resim", default="",
+                    help="comma list (or 'ships'): simulate only these, carry the "
+                         "rest over from the current power_table.py")
     args = ap.parse_args()
 
     S = _load_sim()
@@ -165,6 +205,11 @@ def main() -> int:
     fp = fingerprint()
     cache_dir = os.path.join(CACHE, fp)
     os.makedirs(cache_dir, exist_ok=True)
+    if args.resim:
+        resim = set(S.SHIPS) & set(S.LEVELS) if args.resim == "ships" else \
+            {lv for lv in args.resim.split(",") if lv}
+        print(f"carried over {carry_over(S, cache_dir, resim)} rows; "
+              f"re-simulating {sorted(resim & set(levels))}")
     todo = [lv for lv in levels if not os.path.exists(os.path.join(cache_dir, lv + ".bin"))]
     if args.partial:
         levels = [lv for lv in levels if lv not in todo]
