@@ -422,6 +422,7 @@ _a, _sd_off = run("conveyor off", randomize_conveyor_plants=0)
 _b, _sd_on  = run("conveyor on",  randomize_conveyor_plants=1)
 assert _sd_off["randomize_conveyor"] is False and _sd_on["randomize_conveyor"] is True
 assert isinstance(_sd_on["conveyor_seed"], int) and 0 <= _sd_on["conveyor_seed"] < 2**32
+assert _sd_on["conveyor_damage_rule"] == 1 and _sd_off["conveyor_damage_rule"] == 1
 assert _sd_off["goal_locations"] == _sd_on["goal_locations"], "conveyor changed logic"
 
 # ── shuffle_zombies ─────────────────────────────────────────────────────────
@@ -489,7 +490,11 @@ assert set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES == \
      "logic_power_plants",
      # Added 2026-09-16: the plants the loadout rules may name. Absent means
      # every passing loadout, as seeds before it had.
-     "logic_power_selection"}, \
+     "logic_power_selection",
+     # Added 2026-11-01: Torchwood out of the conveyor swap groups and damage
+     # only trading for damage. Absent means the old tables, so older seeds
+     # keep their belts exactly.
+     "conveyor_damage_rule"}, \
     f"unexpected new slot_data keys: {sorted(set(_z_on) - _SLOT_DATA_BEFORE_ZOMBIES)}"
 
 # modern_day_keyed is additive for the same reason, and modern_day_victory

@@ -358,6 +358,7 @@ function _apBeltModSwap(lc, cn) {
     }
     const killSet = window._AP_conveyorKillingInstants;
     if (killSet && killSet.has(cn)) usable = usable.filter(c => killSet.has(c));
+    if (window._AP_conveyorDamageRule && _apDealsDamage(cn)) usable = usable.filter(_apDealsDamage);
     if (usable.length >= 2) {
       const rnd = _apRng(_apHash(String(window._AP_conveyorSeed || 0) + '|wave|' +
                                  st.key + '|' + cn));
@@ -404,6 +405,11 @@ function _apBeltModProps(lc, props) {
   }
   return patched;
 }
+function _apDealsDamage(cn) {
+  return (window._AP_conveyorRole || {})[cn] === 'attacker' &&
+         !(window._AP_conveyorNoDamage && window._AP_conveyorNoDamage.has(cn));
+}
+
 function installConveyorHook(LC) {
   if (!LC || LC._ap_hooked_conveyor || !LC.prototype || !LC.prototype.module_SetConveyor) return;
   const _origSetConveyor = LC.prototype.module_SetConveyor;
@@ -462,8 +468,12 @@ function installConveyorHook(LC) {
         // [user] ...and one that kills only becomes another that kills.
         const killSet = window._AP_conveyorKillingInstants;
         const kills = cn => !!(killSet && killSet.has(cn));
+        // [user] ...and, under conveyor_damage_rule, one that deals damage
+        // only becomes another that does.
+        const damageRule = !!window._AP_conveyorDamageRule;
         const fits = (orig, cn) => isInstant(cn) === isInstant(orig) &&
-                                   (!kills(orig) || kills(cn));
+                                   (!kills(orig) || kills(cn)) &&
+                                   (!damageRule || !_apDealsDamage(orig) || _apDealsDamage(cn));
         // Put an answer back for each threat the swap left unanswered: the
         // first slot whose own group has one, else the first slot, from all
         // answers. A slot that alone answers another threat only takes a
@@ -525,7 +535,9 @@ function installConveyorHook(LC) {
                                                    fits(list[i].PlantType, cn));
               if (!pool.length) {
                 if (want === 'instant') { picks.push(null); continue; }
-                pool = usableShadow;
+                pool = damageRule ? usableShadow.filter(cn => fits(list[i].PlantType, cn))
+                                  : usableShadow;
+                if (!pool.length) { picks.push(null); continue; }
               }
               let pick = pool[Math.floor(rnd() * pool.length)];
               for (let tries = 0; tries < 8 && takenShadow.has(pick); tries++) {
@@ -537,13 +549,19 @@ function installConveyorHook(LC) {
             // Guarantee Moonflower. Overwrite the last real slot that did not
             // ship an instant, rather than a random one: it is the latest arrival on the belt, so the deck
             // still opens with an attacker.
+            // Under conveyor_damage_rule it never takes the belt's last damage
+            // dealer, and a belt with no other slot for it is no shadow deck:
+            // it falls through to the ordinary swap below.
+            const lastHurter = i => damageRule && _apDealsDamage(list[i].PlantType) &&
+              !list.some((e, j) => j !== i && _apDealsDamage(picks[j] || (e && e.PlantType)));
             if (picks.indexOf('moonflower') === -1) {
               for (let i = list.length - 1; i >= 0; i--) {
-                if (picks[i] && !isInstant(list[i].PlantType)) {
+                if (picks[i] && !isInstant(list[i].PlantType) && !lastHurter(i)) {
                   picks[i] = 'moonflower'; break;
                 }
               }
             }
+            if (picks.indexOf('moonflower') !== -1) {
             const shadowHeld = picks.map((cn, i) => cn || (list[i] && list[i].PlantType));
             keepAnswer(shadowHeld, (i, wide) => usableShadow, true);
             for (let i = 0; i < list.length; i++) if (picks[i]) picks[i] = shadowHeld[i];
@@ -556,6 +574,7 @@ function installConveyorHook(LC) {
             const args0 = Array.prototype.slice.call(arguments);
             args0[0] = patched;
             return _origSetConveyor.apply(this, args0);
+            }
           }
         }
 
@@ -596,6 +615,11 @@ function installConveyorHook(LC) {
           // A killing instant only trades for another killing instant.
           if (kills(entry.PlantType)) {
             usable = usable.filter(kills);
+            if (usable.length < 2) return entry;
+          }
+          // [user] Under conveyor_damage_rule, damage only for damage.
+          if (damageRule && _apDealsDamage(entry.PlantType)) {
+            usable = usable.filter(_apDealsDamage);
             if (usable.length < 2) return entry;
           }
           // Step two of the three: inside the role-and-power group, prefer a
@@ -696,12 +720,22 @@ function installConveyorHook(LC) {
 const EX=new Set(['powerplant','holonut']);
 window._AP_conveyorPool=Object.values(ID_TO_CN).filter(c=>!EX.has(c));
 window._AP_conveyorKnown=new Set(window._AP_conveyorPool);
-window._AP_conveyorSwaps={};
-for(const k of Object.keys(CONVEYOR_GROUPS)){
-  const m=CONVEYOR_GROUPS[k].filter(c=>!EX.has(c));
-  if(m.length<2) continue;
-  for(const c of m) window._AP_conveyorSwaps[c]=m;
+const CONVEYOR_EXCLUDE=EX;
+const CONVEYOR_LEGACY_GROUPED = new Set(['torchwood']);
+const CONVEYOR_NO_DAMAGE = new Set(['chardguard', 'explodeonut', 'sapfling', 'torchwood']);
+window._AP_conveyorNoDamage = CONVEYOR_NO_DAMAGE;
+function _apBuildConveyorSwaps(damageRule) {
+  const swaps = {};
+  for (const key of Object.keys(CONVEYOR_GROUPS)) {
+    const members = CONVEYOR_GROUPS[key].filter(cn => !CONVEYOR_EXCLUDE.has(cn) &&
+      !(damageRule && CONVEYOR_LEGACY_GROUPED.has(cn)));
+    if (members.length < 2) continue;
+    for (const cn of members) swaps[cn] = members;
+  }
+  return swaps;
 }
+window._AP_conveyorDamageRule = true;
+window._AP_conveyorSwaps = _apBuildConveyorSwaps(true);
 window._AP_conveyorFamily={};
 for(const f of Object.keys(CONVEYOR_FAMILIES)){
   for(const c of CONVEYOR_FAMILIES[f]) window._AP_conveyorFamily[c]=f;
@@ -836,6 +870,6 @@ function setLevelWater(haveWater) {
   window._AP_LevelPlay = { component: { haveWater: haveWater } };
 }
 
-module.exports={installConveyorHook, _apBeltModProps, installSeedBankHook, AP_WARM_PLANT, window, CONVEYOR_GROUPS, CONVEYOR_FAMILIES, CONVEYOR_DPS,
+module.exports={installConveyorHook, _apBuildConveyorSwaps, _apDealsDamage, CONVEYOR_NO_DAMAGE, _apBeltModProps, installSeedBankHook, AP_WARM_PLANT, window, CONVEYOR_GROUPS, CONVEYOR_FAMILIES, CONVEYOR_DPS,
   CONVEYOR_SHADOW, CONVEYOR_SHADOW_CHANCE, setLevelWater,
   CONVEYOR_WATER_ONLY, CONVEYOR_TILE_LOCKED, CONVEYOR_BELT_LOCKED, CONVEYOR_SKY_DEAD};

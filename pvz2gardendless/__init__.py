@@ -872,6 +872,10 @@ class PvZ2GardendlessWorld(World):
             # plants. The client folds the level's own plant list into it, so
             # each level rolls differently and a retry is not a reroll.
             "conveyor_seed":     self.random.getrandbits(32),
+            # [user, 2026-11-01] Torchwood out of the attacker swap group, and a
+            # belt slot that deals damage only trades for one that does. The
+            # client reads a missing key as off, so older seeds keep their belts.
+            "conveyor_damage_rule": 1,
             "shuffle_zombies":   bool(self.options.shuffle_zombies),
             # The swap tiers, sent rather than duplicated in the client so the
             # two cannot drift. Each tier is a set of zombies the game itself

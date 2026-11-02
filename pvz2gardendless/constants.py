@@ -809,7 +809,10 @@ WORLD_ENTRY_PLANTS = {
     # [user] Spinapple AND a floating attacker. Past column 3 an Aerial Fortress
     # lawn is sky, and without a Flower Pot only plants the game tags "fly" go
     # there (LnC.flyable, no sky check; see SKY_DEAD_PLANTS).
-    "Aerial Fortress": [["Spinapple"], SKY_FLOATING_ATTACKERS],
+    # [user, 2026-11-01] AND Ampereum: it absorbs the thunder charges
+    # (ThunderChargeWaveAction) and the charge-gun zombie's bolts that jam or
+    # chill plants across the world (sky10 is its intro, sky_electric from sky11).
+    "Aerial Fortress": [["Spinapple"], SKY_FLOATING_ATTACKERS, ["Ampereum"]],
 }
 
 # Every plant named by an access rule anywhere in rules.py. items.py forces
