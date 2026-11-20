@@ -53,5 +53,14 @@ function syncFeatureFlags(cp) {
   return opened;
 }
 
-module.exports = { syncFeatureFlags, FEATURE_UNLOCK_LEVELS,
+function markWorldIntrosSeen(cp, worldIds) {
+  if (!cp) return;
+  const worlds = cp.worldProps || (cp.worldProps = {});
+  for (const wid of worldIds) {
+    if (!worlds[wid]) worlds[wid] = {};
+    worlds[wid].viewed = true;
+  }
+}
+
+module.exports = { syncFeatureFlags, markWorldIntrosSeen, FEATURE_UNLOCK_LEVELS,
                    FEATURE_PROMPT_FLAGS, PROGRESS_FINISHED };

@@ -31,7 +31,8 @@ tables = {
     "zombies": {c: [z["hp"], z["cost"], z["tier"], z["excluded"] or "",
                     1 if z.get("carry", True) else 0,
                     1 if z.get("multilane") else 0,
-                    1 if c in t.nullifier_names else 0]
+                    1 if c in t.nullifier_names else 0,
+                    1 if c in t.sky_only_names else 0]
                 for c, z in sorted(t.zombies.items())},
     "grave_hp": dict(sorted(t.model["grave_hp"].items())),
     "field_names": {k: sorted(v) for k, v in t.field_names.items()},

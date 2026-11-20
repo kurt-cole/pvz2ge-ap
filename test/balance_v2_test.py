@@ -369,5 +369,29 @@ elif not without:
 else:
     ok(f"{len(sky)} Aerial Fortress levels never gain dinos ({without} rolls would without the rule)")
 
+# [user] sky20 is a Spinapple puzzle (see NEVER_ROLLED); listed there, but say so.
+if "sky20" not in R.NEVER_ROLLED:
+    fail("sky20 (Spinapple vs Battleplanes puzzle) is rolled again")
+
+# [user] Sky-lawn-only zombies (SKY_STAGE_ONLY) never roll onto an ordinary
+# lawn, even on the side paths that ship sky zombies there; on a sky lawn they
+# still can (umbrellaleaf6 is a side path on the sky stage).
+off_sky = ("mirrornut1", "mirrornut2", "poisonpeashooter3", "seashooter3")
+stray, on_sky = [], 0
+for seed in range(60):
+    for lid in off_sky:
+        plan = R.roll_level(seed, lid)
+        if plan and any(c in R.SKY_STAGE_ONLY for g in plan["groups"] for c, _ in g["z"]):
+            stray.append((lid, seed))
+    plan = R.roll_level(seed, "umbrellaleaf6")
+    if plan and any(c in R.SKY_STAGE_ONLY for g in plan["groups"] for c, _ in g["z"]):
+        on_sky += 1
+if stray:
+    fail(f"a sky-lawn-only zombie rolled onto an ordinary lawn: {stray[:4]}")
+elif not on_sky:
+    fail("umbrellaleaf6 (sky stage) never rolled a Dronemaker: the rule cuts too wide")
+else:
+    ok(f"Dronemaker stays on sky lawns ({', '.join(off_sky)} never; umbrellaleaf6 {on_sky}/60)")
+
 print(f"\n{failed} FAILURE(S)" if failed else "\nBUDGET ROLL OK")
 sys.exit(1 if failed else 0)

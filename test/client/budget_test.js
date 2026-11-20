@@ -358,13 +358,45 @@ const tables = B._apbTables(V.tables);
   const level = { bespoke: false, generated: false, groups: [], dynamic: [], lanes: 5,
                   waves: 8, own_plants: false, dinos: [], stage: 'EgyptStage',
                   graves: { initial: {}, random_initial: 0, spawned: [] } };
-  for (const id of ['egypt34', 'plantern3', 'ghostpepper3']) {
+  for (const id of ['egypt34', 'plantern3', 'ghostpepper3', 'sky20']) {
     let rolled = 0;
     for (let seed = 0; seed < 50; seed++)
       if (B._apbRoll(tables, seed, id, level, true, 2) !== null) rolled++;
     if (rolled) fail(`${id} was rolled ${rolled} times`);
     else ok(`${id} (puzzle) is never rolled`);
   }
+}
+
+// ── sky-lawn-only zombies ────────────────────────────────────────────────────
+// [user] A Dronemaker (sky_only flag, zombie_roll.SKY_STAGE_ONLY) never rolls
+// onto an ordinary lawn, even one fielding sky zombies; on a sky lawn it can.
+// A seed whose table predates the flag (7-field entries) rolls as it did.
+{
+  if (!(V.tables.zombies.sky_dronemaker && V.tables.zombies.sky_dronemaker[7] === 1))
+    fail('the roll vectors table does not flag sky_dronemaker sky_only');
+  const legacy = JSON.parse(JSON.stringify(V.tables));
+  for (const c of Object.keys(legacy.zombies)) legacy.zombies[c] = legacy.zombies[c].slice(0, 7);
+  const tNew = B._apbTables(V.tables), tOld = B._apbTables(legacy);
+  const lawn = (stage) => ({ bespoke: false, generated: false, lanes: 5, waves: 8, flag: 4,
+    own_plants: true, dinos: [], stage, planks: [], plants_lost: false, dynamic: [],
+    graves: { initial: {}, random_initial: 0, spawned: [] },
+    groups: [1, 2, 3, 4, 5, 6, 7, 8].map(w => ({ k: 'jittered', id: 'Wave' + w, w,
+      z: [['sky_twin', 2], ['sky_armor2', 2]] })) });
+  const count = (t, stage) => {
+    let n = 0;
+    for (let seed = 0; seed < 80; seed++) {
+      const p = B._apbRoll(t, seed, 'skyonly_probe', lawn(stage), false, 2, null);
+      if (p && !p.vanilla) for (const g of p.groups) for (const e of g.z)
+        if (e[0] === 'sky_dronemaker') n += e[1];
+    }
+    return n;
+  };
+  const off = count(tNew, 'FrontLawnStage'), on = count(tNew, 'SkyStage'),
+        old = count(tOld, 'FrontLawnStage');
+  if (off) fail(`Dronemaker rolled onto an ordinary lawn ${off} times`);
+  else if (!on) fail('Dronemaker never rolled on a sky lawn: the rule cuts too wide');
+  else if (!old) fail('a pre-flag seed lost its off-sky Dronemakers (old rolls changed)');
+  else ok(`Dronemaker: lawn 0, sky ${on}, pre-flag seed on a lawn ${old} (unchanged)`);
 }
 
 // ── no Zomboss intro on World Key levels ────────────────────────────────────

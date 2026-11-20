@@ -8,9 +8,10 @@ const AP_BESPOKE_MODULES = /Minigame|Beghouled|Rhythm/;
 
 // [user] Level ids never rolled or shuffled although no module above marks
 // them. By id, so every other level rolls exactly as before. eighties9 is
-// Neon Mixtape Tour 9; egypt34, plantern3 and ghostpepper3 are puzzles whose
-// waves are part of them. Mirrors NEVER_ROLLED in zombie_roll.py.
-const AP_NEVER_ROLLED = ['eighties9', 'egypt34', 'plantern3', 'ghostpepper3'];
+// Neon Mixtape Tour 9; egypt34, plantern3, ghostpepper3 and sky20 are
+// puzzles whose waves are part of them (sky20: Spinapple bounces the
+// Battleplanes' fire). Mirrors NEVER_ROLLED in zombie_roll.py.
+const AP_NEVER_ROLLED = ['eighties9', 'egypt34', 'plantern3', 'ghostpepper3', 'sky20'];
 const _AP_RTID = /^RTID\(([^@()]+)@([^()]*)\)$/;
 
 // Harness stubs. _apLevelKey reads the game's LevelPlay statics in the client;
@@ -323,7 +324,7 @@ function _apbTables(data) {
               carry: Object.create(null), multilane: Object.create(null),
               dinoPermille: (data && Array.isArray(data.dino_permille))
                 ? data.dino_permille : APB.DINO_LEVEL_PERMILLE_BY_GOAL,
-              nullifier: Object.create(null) };
+              nullifier: Object.create(null), skyOnly: Object.create(null) };
   for (const c of names) {
     const z = zombies[c];
     t.hp[c] = z[0]; t.cost[c] = z[1]; t.tier[c] = z[2] || ''; t.excluded[c] = z[3] || '';
@@ -335,6 +336,9 @@ function _apbTables(data) {
     // [user] Absent (a seed rolled before the flag) reads as no nullifiers,
     // which is what that roll kept out of the opening levels: nothing extra.
     t.nullifier[c] = z.length > 6 ? !!z[6] : false;
+    // [user] Sky-lawn-only zombies (zombie_roll.SKY_STAGE_ONLY). Absent: an
+    // older seed, whose roll kept nothing to sky lawns.
+    t.skyOnly[c] = z.length > 7 ? !!z[7] : false;
   }
   for (const b of APB.BUCKETS) t.pools[b] = [];
   for (const c of names) {
@@ -653,11 +657,13 @@ function _apbRoll(t, seed, levelId, level, dinos, goal, forced) {
     for (const c of Object.keys(vanilla)) ceiling = Math.max(ceiling, t.hp[c] || 0);
     ceiling = Math.floor(ceiling * APB.CEILING_PERMILLE / 1000);
   }
-  if (!bring || narrow || ceiling) {
+  const offSky = String(level.stage || '').indexOf('Sky') !== 0;
+  if (!bring || narrow || ceiling || offSky) {
     for (const b of APB.BUCKETS) {
       const names = t.pools[b].filter(function (c) {
         return vanilla[c] || ((bring || !t.hazard[c])
                               && (!opening || !t.nullifier[c])
+                              && (!offSky || !t.skyOnly[c])
                               && (!narrow || !t.multilane[c])
                               && (!ceiling || t.hp[c] <= ceiling));
       });

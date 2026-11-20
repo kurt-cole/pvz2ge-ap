@@ -272,6 +272,15 @@ class Zombies:
         """
         prop = self.prop(codename)
         total = prop.get("Toughness") or 0
+        if prop.get("DrinkHealthPct") and prop.get("DrunkDamageMult"):
+            # [user 2026-11-04] The drinking monks (monk_drink, its veteran,
+            # kongfu_drink) drink at DrinkHealthPct of their toughness and from
+            # then on take DrunkDamageMult of every hit (extraDamageScale in
+            # index.js 0.16.1), so the health left takes 1 / mult the damage to
+            # remove: 600 at 0.5 and 0.5 is 300 + 300 / 0.5 = 900. The short
+            # drinking pause (DrinkingDamageMult) is left out.
+            pct = float(prop["DrinkHealthPct"])
+            total = total * (1 - pct) + total * pct / float(prop["DrunkDamageMult"])
         for armor in prop.get("StartingArmors") or []:
             total += self.armors.get(armor, {}).get("Toughness") or 0
         return int(total)
@@ -291,6 +300,13 @@ class Zombies:
             BarrelType      a roller always pushes its barrel
             PartnerType, SkunkType, JetpackType, ChiType, ZombiesToSpawn,
             ZombiesToSummon  one body each (SummonCount when it states one)
+
+            ChickenTypeName, WeaselTypeName  [user 2026-11-04] the chicken
+                            farmer, gobbler king and weasel hoarder's thrown
+                            bodies (ChickenThrower). Strictly these
+                            are released when the thrower drops to 80% health,
+                            but that happens to every one the player kills, so
+                            they count like the rest: see _thrown_count.
 
         `ZombieTypesToSummonBecomingFlag` (kongfu, monk, abbot) is deliberately
         absent: transIntoZombie only calls flagSummon when that zombie becomes
@@ -315,6 +331,10 @@ class Zombies:
                     "ChiType", "BarrelType"):
             if prop.get(key):
                 out.append(([prop[key]], 1))
+        for prefix in ("Chicken", "Weasel"):
+            thrown = prop.get(prefix + "TypeName")
+            if thrown:
+                out.append(([thrown], self._thrown_count(prop, prefix)))
         if prop.get("BobsledType"):
             # [guess] the riders are spawn points on the sled's prefab, which is
             # not in the data tables. Four is what the sled shows.
@@ -332,6 +352,20 @@ class Zombies:
                 count = count.get("Max") or count.get("Min") or 1
             out.append((names, int(count or 1)))
         return [(names, n) for names, n in out if n > 0]
+
+    @staticmethod
+    def _thrown_count(prop: dict, prefix: str) -> int:
+        """Expected bodies one ChickenThrower releases (index.js 0.16.1).
+
+        dealChickening spawns one at once (its cooldown starts at 0), then one
+        per interval until the duration runs out. The variances are symmetric,
+        so the means stand in for them: 1 + duration / interval. The farmer and
+        gobbler king state Chickening* (0.2 s for 2 s: 11), the weasel hoarder
+        Weaseling* (0.3 s for 2 s: 8).
+        """
+        duration = float(prop.get(prefix + "ingDuration") or 2)
+        interval = float(prop.get(prefix + "ingInterval") or 0.2)
+        return 1 + int(round(duration / interval))
 
     @staticmethod
     def _is_barrel(prop: dict) -> bool:
@@ -421,6 +455,14 @@ class Zombies:
         if "SkyCityShipDetectXOffset" in prop:
             # Sky City zombies act on the airship. In any other world there is
             # no ship for them to act on.
+            return "skycity"
+        if prop.get("ValidDroneTargets"):
+            # sky_dronemaker never touches the ship, so it has no detect
+            # offset, but it is just as bound to Sky City: it sits in column 9
+            # sending drones that armour only the sky pilots it lists. Tiered
+            # as a generic water zombie it rolled into Zombonis and ducky
+            # tubes that fall off the sky tiles, and onto lawns everywhere as
+            # a 2000 HP lump with nothing to arm. [user]
             return "skycity"
         return None
 
@@ -682,8 +724,9 @@ EXCLUSION_DOC = {
                         "            refuses to wave-spawn, because they are meant to arrive from\n"
                         "            a carrier. Fielding one directly is a thing the game never\n"
                         "            does.",
-    "skycity": "`SkyCityShipDetectXOffset` -- Sky City zombies act on the\n"
-               "            airship. In any other world there is no ship to act on.",
+    "skycity": "`SkyCityShipDetectXOffset` or `ValidDroneTargets` -- Sky City\n"
+               "            zombies act on the airship or arm its pilots. In any other\n"
+               "            world there is no ship to act on.",
     "unpriced": "no `WavePointCost`, so the game gives no answer to \"how hard\n"
                 "            is this\" and there is nothing to trade on.",
 }

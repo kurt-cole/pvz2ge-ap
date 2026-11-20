@@ -15234,7 +15234,7 @@
   },
   "foodfight_gobbler_king": {
    "cost": 350,
-   "hp": 190
+   "hp": 201
   },
   "football_mech": {
    "cost": 1000,
@@ -15386,7 +15386,7 @@
   },
   "iceage_weaselhoarder": {
    "cost": 350,
-   "hp": 190
+   "hp": 510
   },
   "kongfu": {
    "cost": 100,
@@ -15406,11 +15406,11 @@
   },
   "kongfu_bronze_chi": {
    "cost": 1500,
-   "hp": 6239
+   "hp": 6539
   },
   "kongfu_bronze_chi_without_torch": {
    "cost": 1500,
-   "hp": 6455
+   "hp": 6842
   },
   "kongfu_bronze_hook": {
    "cost": 1500,
@@ -15426,7 +15426,7 @@
   },
   "kongfu_drink": {
    "cost": 400,
-   "hp": 600
+   "hp": 900
   },
   "kongfu_gong": {
    "cost": 350,
@@ -15618,11 +15618,11 @@
   },
   "monk_drink": {
    "cost": 500,
-   "hp": 600
+   "hp": 900
   },
   "monk_drink_veteran": {
    "cost": 700,
-   "hp": 600
+   "hp": 900
   },
   "monk_imp": {
    "cost": 300,

@@ -11,7 +11,7 @@
 // egypt1, tutorial1-4 and eleven Modern Day levels checked still had all nine
 // false -- so under AP they never turn on by themselves. This is what repairs
 // that, and these cases pin it to the game's own conditions.
-const { syncFeatureFlags, FEATURE_UNLOCK_LEVELS, FEATURE_PROMPT_FLAGS,
+const { syncFeatureFlags, markWorldIntrosSeen, FEATURE_UNLOCK_LEVELS, FEATURE_PROMPT_FLAGS,
         PROGRESS_FINISHED } = require('./feature_fn.js');
 
 let failed = 0;
@@ -180,6 +180,31 @@ is(sorted(Object.keys(cp.tutorial || {})), ['almanac_intro', 'almanac_open'],
 is(Object.keys(FEATURE_PROMPT_FLAGS).sort(),
    ['feature_almanac', 'feature_store', 'feature_zengarden'],
    'exactly the three prompted features');
+
+console.log('\n  world map intros (the taco line) are marked seen');
+
+// WorldMap.judgeNarrative plays a map's INTRO flow only while
+// worldProps[id].viewed is false, and getWorldProgressByID creates a missing
+// entry with viewed false -- so every world needs an entry, locked or not.
+cp = { worldProps: { 1: { unlocked: true, wmx: -640 } } };
+markWorldIntrosSeen(cp, [1, 2, 3, 26]);
+is(cp.worldProps[1], { unlocked: true, wmx: -640, viewed: true },
+   'an existing Egypt entry is marked viewed and keeps its unlock and map scroll');
+is([2, 3, 26].map(w => cp.worldProps[w]), [{ viewed: true }, { viewed: true }, { viewed: true }],
+   'worlds with no entry yet (locked) get one that is already viewed');
+
+cp = {};
+markWorldIntrosSeen(cp, [1]);
+is(cp.worldProps, { 1: { viewed: true } }, 'a save with no worldProps at all gets one');
+
+// rebuildAPSave has to call it for every world the client knows about.
+{
+  const src = require('fs').readFileSync(require('path').join(
+    __dirname, '..', '..', 'pvz2gardendless', 'build_pvzge_ap.py'), 'utf8');
+  const rebuild = src.slice(src.indexOf('function rebuildAPSave('));
+  is(/markWorldIntrosSeen\(cp, Object\.values\(W\)\)/.test(rebuild), true,
+     'rebuildAPSave marks every world in W');
+}
 
 if (failed) {
   console.log(`\n${failed} FAILURE(S)`);

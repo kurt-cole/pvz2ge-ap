@@ -42,6 +42,7 @@ FIXTURES = [
     "dark10",       # graves, grave spawner, dynamic pool
     "future14",     # spider rain
     "sky11",        # dropship (fixed), Sky City stage-bound zombies
+    "poisonpeashooter3",  # sky zombies on a lawn: no Dronemaker (sky_only)
     "iceage10",     # storm spawner
     "aloe1",        # parachute rain
     "appease2_0",   # one object referenced from several waves
@@ -99,7 +100,8 @@ def main() -> int:
         "zombies": {c: [z["hp"], z["cost"], z["tier"], z["excluded"] or "",
                         1 if z.get("carry", True) else 0,
                         1 if z.get("multilane") else 0,
-                        1 if c in t.nullifier_names else 0]
+                        1 if c in t.nullifier_names else 0,
+                        1 if c in t.sky_only_names else 0]
                     for c, z in sorted(t.zombies.items())},
         "grave_hp": dict(sorted(t.model["grave_hp"].items())),
         "field_names": {k: sorted(v) for k, v in t.field_names.items()},

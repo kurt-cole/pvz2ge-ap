@@ -152,7 +152,9 @@ else:
 for reason, expect in (("camel", "camel_onehump"),
                        ("immobile", "sky_dropship"),
                        ("ignored_in_waves", "egypt_imp"),
-                       ("skycity", "sky_arbiterx")):
+                       ("skycity", "sky_arbiterx"),
+                       # [user] no ship offset, but its drones arm only sky pilots
+                       ("skycity", "sky_dronemaker")):
     names = ZOMBIE_EXCLUSIONS.get(reason, [])
     if expect not in names:
         fail(f"{expect} is no longer excluded as {reason} -- it can now be "
@@ -189,6 +191,23 @@ if mismatch:
          f"e.g. {mismatch[:3]}")
 else:
     ok(f"every tiered zombie weighs the same in both files")
+
+# [user 2026-11-04] A ChickenThrower's bodies are part of its HP: the weasel
+# hoarder releases ~8 weasels (40 HP each) once it drops to 80%, which priced
+# at its 190 body let the roll field it as a basic zombie.
+if ZOMBIE_HP.get("iceage_weaselhoarder", 0) < 190 + 5 * 40:
+    fail(f"weasel hoarder weighs {ZOMBIE_HP.get('iceage_weaselhoarder')}: its "
+         f"weasels are not counted (gen_zombie_tiers _brings / _thrown_count)")
+else:
+    ok(f"weasel hoarder weighs {ZOMBIE_HP['iceage_weaselhoarder']}, weasels included")
+
+# [user 2026-11-04] The drinking monks take half damage once drunk (at 50%
+# health), so 600 toughness costs 900 to chew through.
+_drunk = {c: ZOMBIE_HP.get(c) for c in ("monk_drink", "monk_drink_veteran", "kongfu_drink")}
+if any((hp or 0) < 900 for hp in _drunk.values()):
+    fail(f"drinking monks priced {_drunk}: the drunk half-damage phase is not counted")
+else:
+    ok(f"drinking monks priced with their drunk phase: {_drunk}")
 
 print(f"\n{failed} FAILURE(S)" if failed else "\nZOMBIE TIERS OK")
 sys.exit(1 if failed else 0)

@@ -151,9 +151,21 @@ OPENING_LEVELS = frozenset({
 # egypt34 is a puzzle (preset bank, lawn of graves, 1800 sun cap) whose
 # waves are part of the puzzle; so are plantern3 (plant food on Planterns
 # hides the plants around them) and ghostpepper3 (a Ghost Pepper belt under
-# frost winds).
+# frost winds). [user] sky20 too: its preset bank (Primal Sunflower, Heavenly
+# Peach, 2 Spinapple, 2 Loquanado) has no damage plant, so the level's damage
+# is Battleplane fire bounced back by Spinapple. The roll left a median of one
+# Battleplane (none in nearly half the rolls) plus unarmed pilots that walk the
+# deck, which nothing in that bank can kill.
 # Mirrors APB.NEVER_ROLLED and the tier shuffle's check in the client.
-NEVER_ROLLED = frozenset({"eighties9", "egypt34", "plantern3", "ghostpepper3"})
+NEVER_ROLLED = frozenset({"eighties9", "egypt34", "plantern3", "ghostpepper3", "sky20"})
+
+# [user] Zombies the roll fields only on an Aerial Fortress lawn (stage Sky*).
+# Sky City zombies trade only with each other, but a few side paths (mirrornut1
+# and 2, poisonpeashooter3, seashooter3) ship sky zombies on ordinary lawns.
+# sky_dronemaker sits in column 9 sending drones that armour sky pilots, so on
+# those lawns it is a stationary target with nothing to arm. Sent to the client
+# as the zombie table's sky_only flag.
+SKY_STAGE_ONLY = frozenset({"sky_dronemaker"})
 
 # [user] Levels whose wave 1 keeps the zombies it shipped with. sky5's belt
 # deals one Pineapple, capped at one, until wave 2, and its 1000 HP Battleplane
@@ -236,6 +248,7 @@ class _Tables:
         self.nullifier_names = {c for c in self.zombies
                                 if set(SIM_DATA["zombies"].get(c, {}).get("tags", ()))
                                 - {"noswallow"}}
+        self.sky_only_names = set(SKY_STAGE_ONLY) & set(self.zombies)
         self.multilane_names = {c for c, z in self.zombies.items()
                                 if z.get("multilane")}
         self.first_wave_banned = (set(FIRST_WAVE_BANNED) | self.multilane_names
@@ -627,6 +640,10 @@ def roll_level(seed: int, level_id: str, dinos: bool = False,
         ceiling = max((t.hp[c] for c in vanilla), default=0) * CEILING_PERMILLE // 1000
         if ceiling:
             drop |= {c for c in t.hp if t.hp[c] > ceiling} - vanilla
+    if not level["stage"].startswith("Sky"):
+        # [user] Off a sky lawn a Dronemaker is a 2000 HP lump in column 9:
+        # its drones only arm sky pilots. A level that ships one keeps it.
+        drop |= t.sky_only_names - vanilla
     if level.get("lanes", 5) < 5:
         # A narrower lawn than the game's five lanes, which only the tutorial
         # levels have. A chicken thrower or a barrel puts bodies into the lanes

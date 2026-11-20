@@ -96,9 +96,10 @@ ships one still gets it, and no other level can ever gain one:
             does.
             20 types.
 
-  skycity   `SkyCityShipDetectXOffset` -- Sky City zombies act on the
-            airship. In any other world there is no ship to act on.
-            15 types.
+  skycity   `SkyCityShipDetectXOffset` or `ValidDroneTargets` -- Sky City
+            zombies act on the airship or arm its pilots. In any other
+            world there is no ship to act on.
+            16 types.
 
   unpriced  no `WavePointCost`, so the game gives no answer to "how hard
             is this" and there is nothing to trade on.
@@ -109,8 +110,8 @@ than being handled here: the camel matching games, the cannon levels,
 Beghouled, bowling, Last Stand and the other set pieces. See
 AP_BESPOKE_MODULES in build_pvzge_ap.py.
 
-262 zombies over 77 tiers, 229 of them (87%) with somebody to trade with.
-Worst intra-tier HP ratio 1.33. 63 codenames excluded.
+261 zombies over 77 tiers, 226 of them (86%) with somebody to trade with.
+Worst intra-tier HP ratio 1.33. 64 codenames excluded.
 """
 
 from collections import Counter
@@ -181,9 +182,8 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
         'eighties_boombox',
     ],  # 1
     't2-land-h17': [
-        'chicken_farmer', 'foodfight_gobbler_king', 'iceage_weaselhoarder',
-        'prospector',
-    ],  # 4
+        'chicken_farmer', 'foodfight_gobbler_king', 'prospector',
+    ],  # 3
     't2-land-h18': [
         'eighties_breakdancer', 'eighties_mc', 'eighties_punk', 'explorer',
         'kongfu_torch', 'lunar_superfanimp', 'modern_superfanimp',
@@ -193,8 +193,8 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
         'kongfu_chi', 'lostcity_excavator', 'lostcity_jane', 'tomb_raiser',
     ],  # 4
     't2-land-h20': [
-        'abbot_torch', 'eighties_glitter',
-    ],  # 2
+        'abbot_torch', 'eighties_glitter', 'iceage_weaselhoarder',
+    ],  # 3
     't2-land-h21': [
         'abbot_armor1', 'abbot_fan', 'beach_armor1', 'beach_fem_armor1',
         'birthday_armor1', 'cowboy_armor1', 'dark_armor1', 'dino_armor1',
@@ -258,11 +258,11 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
         'kongfu_bomb', 'pirate_captain',
     ],  # 2
     't3-land-h21': [
-        'iceage_hunter', 'kongfu_drink', 'monk_drink',
-    ],  # 3
+        'iceage_hunter',
+    ],  # 1
     't3-land-h22': [
-        'feastivus_piano', 'piano',
-    ],  # 2
+        'feastivus_piano', 'kongfu_drink', 'monk_drink', 'piano',
+    ],  # 4
     't3-land-h23': [
         'beach_armor2', 'beach_fem_armor2', 'birthday_armor2',
         'cowboy_armor2', 'dark_armor2', 'dino_armor2', 'dino_bully',
@@ -324,8 +324,11 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
         'sportzball_wizard',
     ],  # 4
     't4-land-h21': [
-        'explorer_veteran', 'monk_drink_veteran',
-    ],  # 2
+        'explorer_veteran',
+    ],  # 1
+    't4-land-h22': [
+        'monk_drink_veteran',
+    ],  # 1
     't4-land-h23': [
         'dark_king', 'iceage_hunter_veteran',
     ],  # 2
@@ -381,9 +384,6 @@ ZOMBIE_TIERS: Dict[str, List[str]] = {
     't5-water-garg-summon-h29': [
         'kongfu_bronze_chi', 'kongfu_bronze_chi_without_torch',
     ],  # 2
-    't5-water-h25': [
-        'sky_dronemaker',
-    ],  # 1
 }
 
 # codename -> effective HP (Toughness plus every StartingArmors entry). Sent to
@@ -507,7 +507,7 @@ ZOMBIE_HP: Dict[str, int] = {
     'foodfight_armor2': 1290,
     'foodfight_chefster': 420,
     'foodfight_flag': 190,
-    'foodfight_gobbler_king': 190,
+    'foodfight_gobbler_king': 201,
     'football_mech': 2000,
     'future': 190,
     'future_armor1': 560,
@@ -541,17 +541,17 @@ ZOMBIE_HP: Dict[str, int] = {
     'iceage_troglobite_2block': 850,
     'iceage_troglobite_veteran': 3400,
     'iceage_weasel': 40,
-    'iceage_weaselhoarder': 190,
+    'iceage_weaselhoarder': 510,
     'kongfu': 190,
     'kongfu_armor1': 560,
     'kongfu_armor2': 1290,
     'kongfu_bomb': 500,
-    'kongfu_bronze_chi': 6239,
-    'kongfu_bronze_chi_without_torch': 6455,
+    'kongfu_bronze_chi': 6539,
+    'kongfu_bronze_chi_without_torch': 6842,
     'kongfu_bronze_hook': 5500,
     'kongfu_bronze_strong': 6000,
     'kongfu_chi': 300,
-    'kongfu_drink': 600,
+    'kongfu_drink': 900,
     'kongfu_gong': 1750,
     'kongfu_hammer': 600,
     'kongfu_rocket_imp': 190,
@@ -587,8 +587,8 @@ ZOMBIE_HP: Dict[str, int] = {
     'monk_armor3': 1790,
     'monk_armor4': 2390,
     'monk_blade': 600,
-    'monk_drink': 600,
-    'monk_drink_veteran': 600,
+    'monk_drink': 900,
+    'monk_drink_veteran': 900,
     'monk_imp': 300,
     'monk_nunchaku': 600,
     'monk_torch': 270,
@@ -616,7 +616,6 @@ ZOMBIE_HP: Dict[str, int] = {
     'prospector': 190,
     'ra': 190,
     'seagull': 270,
-    'sky_dronemaker': 2000,
     'sportzball': 190,
     'sportzball_armor1': 560,
     'sportzball_armor2': 1290,
@@ -680,11 +679,11 @@ ZOMBIE_EXCLUSIONS: Dict[str, List[str]] = {
     ],  # 1
     'skycity': [
         'sky', 'sky_arbiterx', 'sky_armor1', 'sky_armor2', 'sky_battleplane',
-        'sky_electric', 'sky_flag', 'sky_gargantuar',
+        'sky_dronemaker', 'sky_electric', 'sky_flag', 'sky_gargantuar',
         'sky_gargantuar_armor2_thrower', 'sky_twin', 'sky_twin_lower',
         'sky_twin_upper', 'sky_unarmed', 'sky_unarmed_armor1',
         'sky_unarmed_armor2',
-    ],  # 15
+    ],  # 16
     'unpriced': [
         'chicken_ge', 'lawn', 'lawn_armor1', 'lawn_armor2', 'lawn_armor3',
         'lawn_armor4', 'lawn_gargantuar', 'lawn_imp', 'sky_dronemaker_alt',

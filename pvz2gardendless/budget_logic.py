@@ -408,18 +408,20 @@ def client_tables(world) -> Dict[str, Any]:
     The client re-derives each level's model from the live level objects, but
     the per-zombie table and the count-field names come from every level in the
     game, so they are sent (data the client needs is sent, not duplicated).
-    Zombies as [hp, cost, tier, excluded, carry, multilane, nullifier]; see the
-    client's _apbTables. A client reading a seed rolled before one of the
-    trailing flags existed sees a shorter entry and falls back to what that roll
-    assumed: every zombie able to carry plant food, none of them multi-lane, and
-    none of them kept out of the opening levels as a nullifier.
+    Zombies as [hp, cost, tier, excluded, carry, multilane, nullifier, sky_only];
+    see the client's _apbTables. A client reading a seed rolled before one of
+    the trailing flags existed sees a shorter entry and falls back to what that roll
+    assumed: every zombie able to carry plant food, none of them multi-lane,
+    none of them kept out of the opening levels as a nullifier, and none of
+    them kept to sky lawns.
     """
     t = zombie_roll.tables()
     return {
         "zombies": {c: [z["hp"], z["cost"], z["tier"], z["excluded"] or "",
                         1 if z.get("carry", True) else 0,
                         1 if z.get("multilane") else 0,
-                        1 if c in t.nullifier_names else 0]
+                        1 if c in t.nullifier_names else 0,
+                        1 if c in t.sky_only_names else 0]
                     for c, z in sorted(t.zombies.items())},
         "grave_hp": dict(sorted(t.model["grave_hp"].items())),
         "field_names": {k: sorted(v) for k, v in t.field_names.items()},
